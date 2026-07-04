@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>筋トレメニュー</title>
+<meta name="theme-color" content="#14171c">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header class="app-header">
+    <h1>筋トレメニュー</h1>
+  </header>
+
+  <main id="main">
+    <!-- ===== 設定画面 ===== -->
+    <section id="screen-setup" class="screen active">
+      <h2>今日のメニューを作る</h2>
+
+      <fieldset class="field-group">
+        <legend>鍛えたい部位</legend>
+        <div class="chip-group" id="part-group">
+          <label class="chip"><input type="checkbox" value="fullbody" data-part="fullbody"> 全身</label>
+          <label class="chip"><input type="checkbox" value="chest" data-part="chest"> 胸</label>
+          <label class="chip"><input type="checkbox" value="back" data-part="back"> 背中</label>
+          <label class="chip"><input type="checkbox" value="shoulders" data-part="shoulders"> 肩</label>
+          <label class="chip"><input type="checkbox" value="arms" data-part="arms"> 腕</label>
+          <label class="chip"><input type="checkbox" value="legs" data-part="legs"> 脚</label>
+          <label class="chip"><input type="checkbox" value="core" data-part="core"> 体幹・腹筋</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>使える器具</legend>
+        <div class="chip-group" id="equipment-group">
+          <label class="chip"><input type="checkbox" value="bodyweight" checked> 自重のみ</label>
+          <label class="chip"><input type="checkbox" value="dumbbell"> ダンベル</label>
+          <label class="chip"><input type="checkbox" value="barbell"> バーベル</label>
+          <label class="chip"><input type="checkbox" value="machine"> マシン・ケーブル</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>今日使える時間</legend>
+        <select id="minutes-select">
+          <option value="15">15分</option>
+          <option value="30" selected>30分</option>
+          <option value="45">45分</option>
+          <option value="60">60分</option>
+          <option value="90">90分以上</option>
+        </select>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>レベル</legend>
+        <select id="level-select">
+          <option value="beginner">初心者</option>
+          <option value="intermediate" selected>中級者</option>
+          <option value="advanced">上級者</option>
+        </select>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>目的</legend>
+        <select id="goal-select">
+          <option value="hypertrophy" selected>筋肥大（大きくしたい）</option>
+          <option value="strength">筋力アップ（重いものを扱いたい）</option>
+          <option value="endurance">引き締め・持久力</option>
+        </select>
+      </fieldset>
+
+      <p class="error-text" id="setup-error"></p>
+      <button class="primary-btn" id="generate-btn">メニューを作る</button>
+    </section>
+
+    <!-- ===== 生成されたメニュー画面 ===== -->
+    <section id="screen-menu" class="screen">
+      <h2>今日のメニュー</h2>
+      <div id="menu-content"></div>
+      <div class="button-row">
+        <button class="secondary-btn" id="regenerate-btn">条件を変える</button>
+        <button class="primary-btn" id="start-workout-btn">このメニューで開始</button>
+      </div>
+    </section>
+
+    <!-- ===== トレーニング記録画面 ===== -->
+    <section id="screen-log" class="screen">
+      <h2>トレーニング記録</h2>
+      <div id="log-content"></div>
+      <button class="primary-btn" id="finish-workout-btn">記録して終了</button>
+    </section>
+
+    <!-- ===== 履歴画面 ===== -->
+    <section id="screen-history" class="screen">
+      <h2>これまでの記録</h2>
+      <div id="history-content"></div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-nav="setup">メニュー作成</button>
+    <button class="nav-btn" data-nav="history">記録一覧</button>
+  </nav>
+</div>
+
+<script src="js/exercises-data.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/menu-generator.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/workout-log.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
