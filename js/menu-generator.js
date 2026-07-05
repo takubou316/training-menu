@@ -49,6 +49,7 @@ function buildSetPlan(exercise, level, goal) {
     warmupSets: exercise.category === 'compound' ? levelInfo.warmupSets : 0,
     note: exercise.note || '',
     description: exercise.description || '',
+    demoMedia: exercise.demoMedia || null,
   };
 }
 

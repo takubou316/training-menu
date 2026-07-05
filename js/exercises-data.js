@@ -23,7 +23,8 @@ const PATTERN_ORDER = ['squat', 'hinge', 'push_horizontal', 'push_vertical', 'pu
 const EXERCISES = [
   // ===== 胸 =====
   { id: 'pushup', name: 'プッシュアップ（腕立て伏せ）', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false,
-    description: '手は肩幅よりやや広め。体は頭からかかとまで一直線を保ち、お尻が上下しないように。胸が床に近づくまで下ろす。' },
+    description: '手は肩幅よりやや広め。体は頭からかかとまで一直線を保ち、お尻が上下しないように。胸が床に近づくまで下ろす。',
+    demoMedia: 'media/exercises/pushup.mp4' },
   { id: 'incline_pushup', name: 'インクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, note: '初心者向け・負荷を下げたい時',
     description: '台や椅子に手をついて行う腕立て伏せ。角度が急なほど負荷が下がるので、通常のプッシュアップがきつい人はここから。' },
   { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, note: '上級者向け・負荷を上げたい時',

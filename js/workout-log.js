@@ -47,6 +47,7 @@ function createSessionFromMenu(menu) {
         repsMin: item.repsMin,
         repsMax: item.repsMax,
         description: item.description,
+        demoMedia: item.demoMedia,
         suggestion,
         sets: Array.from({ length: item.sets }, () => ({
           weight: suggestion.weight != null ? String(suggestion.weight) : '',

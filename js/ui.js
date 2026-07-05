@@ -12,6 +12,35 @@ function goalLabel(goalKey) {
   return GOALS[goalKey] ? GOALS[goalKey].label : goalKey;
 }
 
+function toggleInfoPanel(button) {
+  const panel = button.closest('.menu-block, .exercise-card').querySelector('.ex-info-panel');
+  if (!panel) return;
+  const isHidden = panel.hasAttribute('hidden');
+  if (isHidden) {
+    panel.removeAttribute('hidden');
+  } else {
+    panel.setAttribute('hidden', '');
+  }
+  button.classList.toggle('active', isHidden);
+}
+
+function openDemoModal(url) {
+  const modal = document.getElementById('demo-modal');
+  const video = document.getElementById('demo-video');
+  video.src = url;
+  video.play().catch(() => {});
+  modal.classList.add('open');
+}
+
+function closeDemoModal() {
+  const modal = document.getElementById('demo-modal');
+  const video = document.getElementById('demo-video');
+  modal.classList.remove('open');
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+}
+
 function renderMenu(menu) {
   const container = document.getElementById('menu-content');
   const warmupHtml = `
@@ -27,10 +56,16 @@ function renderMenu(menu) {
   const mainHtml = menu.main
     .map((item, i) => `
     <div class="menu-block">
-      <div class="ex-name">${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
+      <div class="ex-header">
+        <div class="ex-name">${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
+        <div class="ex-icons">
+          ${item.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
+          ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
+        </div>
+      </div>
       <div class="ex-meta">${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
-      ${item.description ? `<details class="ex-info"><summary>ⓘ フォームのポイント</summary><p>${item.description}</p></details>` : ''}
+      ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
     .join('');
 
@@ -60,9 +95,15 @@ function renderLog(session) {
   container.innerHTML = session.exercises
     .map((ex, exIndex) => `
     <div class="exercise-card">
-      <div class="ex-name">${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+      <div class="ex-header">
+        <div class="ex-name">${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+        <div class="ex-icons">
+          ${ex.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
+          ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
+        </div>
+      </div>
       <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}回　休憩${ex.restSec}秒</div>
-      ${ex.description ? `<details class="ex-info"><summary>ⓘ フォームのポイント</summary><p>${ex.description}</p></details>` : ''}
+      ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       <div class="set-header">
         <span></span><span>重量(kg)</span><span>回数</span><span>RPE</span><span>完了</span>

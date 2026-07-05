@@ -117,6 +117,22 @@ function init() {
   document.getElementById('log-content').addEventListener('change', handleLogInput);
   document.getElementById('finish-workout-btn').addEventListener('click', handleFinishWorkout);
 
+  document.getElementById('main').addEventListener('click', (e) => {
+    const demoTrigger = e.target.closest('[data-demo]');
+    if (demoTrigger) {
+      openDemoModal(demoTrigger.dataset.demo);
+      return;
+    }
+    const infoTrigger = e.target.closest('[data-info-toggle]');
+    if (infoTrigger) toggleInfoPanel(infoTrigger);
+  });
+  document.getElementById('demo-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-demo-close]')) closeDemoModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeDemoModal();
+  });
+
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
