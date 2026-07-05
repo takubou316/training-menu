@@ -30,6 +30,7 @@ function renderMenu(menu) {
       <div class="ex-name">${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
       <div class="ex-meta">${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
+      ${item.description ? `<details class="ex-info"><summary>ⓘ フォームのポイント</summary><p>${item.description}</p></details>` : ''}
     </div>`)
     .join('');
 
@@ -61,6 +62,7 @@ function renderLog(session) {
     <div class="exercise-card">
       <div class="ex-name">${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
       <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}回　休憩${ex.restSec}秒</div>
+      ${ex.description ? `<details class="ex-info"><summary>ⓘ フォームのポイント</summary><p>${ex.description}</p></details>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       <div class="set-header">
         <span></span><span>重量(kg)</span><span>回数</span><span>RPE</span><span>完了</span>

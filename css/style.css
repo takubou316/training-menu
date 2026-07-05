@@ -161,6 +161,34 @@ select {
 .exercise-card .ex-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 .exercise-card .ex-note { font-size: 12px; color: var(--accent); margin-bottom: 8px; }
 
+.ex-info {
+  margin: 4px 0 8px;
+}
+.ex-info summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  list-style: none;
+  display: inline-block;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.ex-info summary::-webkit-details-marker { display: none; }
+.ex-info[open] summary {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ex-info p {
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
 .set-row {
   display: grid;
   grid-template-columns: 28px 1fr 1fr 1fr 32px;

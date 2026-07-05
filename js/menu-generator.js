@@ -48,6 +48,7 @@ function buildSetPlan(exercise, level, goal) {
     restSec,
     warmupSets: exercise.category === 'compound' ? levelInfo.warmupSets : 0,
     note: exercise.note || '',
+    description: exercise.description || '',
   };
 }
 
