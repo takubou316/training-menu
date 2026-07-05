@@ -21,6 +21,12 @@ function getSelectedEquipment() {
   return Array.from(document.querySelectorAll('#equipment-group input:checked')).map((el) => el.value);
 }
 
+function getSelectedPainAreas() {
+  return Array.from(document.querySelectorAll('#pain-group input:checked'))
+    .map((el) => el.dataset.pain)
+    .filter((v) => v !== 'none');
+}
+
 function wirePartExclusivity() {
   document.querySelectorAll('#part-group input').forEach((input) => {
     input.addEventListener('change', () => {
@@ -31,6 +37,24 @@ function wirePartExclusivity() {
       } else if (input.checked) {
         const fullbodyInput = document.querySelector('#part-group input[data-part="fullbody"]');
         if (fullbodyInput) fullbodyInput.checked = false;
+      }
+    });
+  });
+}
+
+function wirePainExclusivity() {
+  document.querySelectorAll('#pain-group input').forEach((input) => {
+    input.addEventListener('change', () => {
+      if (input.dataset.pain === 'none' && input.checked) {
+        document.querySelectorAll('#pain-group input').forEach((other) => {
+          if (other !== input) other.checked = false;
+        });
+      } else if (input.checked) {
+        const noneInput = document.querySelector('#pain-group input[data-pain="none"]');
+        if (noneInput) noneInput.checked = false;
+      } else if (getSelectedPainAreas().length === 0) {
+        const noneInput = document.querySelector('#pain-group input[data-pain="none"]');
+        if (noneInput) noneInput.checked = true;
       }
     });
   });
@@ -55,10 +79,11 @@ function handleGenerate() {
   const minutes = Number(document.getElementById('minutes-select').value);
   const level = document.getElementById('level-select').value;
   const goal = document.getElementById('goal-select').value;
+  const painAreas = getSelectedPainAreas();
 
-  saveSettings({ parts, equipment, minutes, level, goal });
+  saveSettings({ parts, equipment, minutes, level, goal, painAreas });
 
-  currentMenu = generateMenu({ parts: muscleGroups, equipment, minutes, level, goal });
+  currentMenu = generateMenu({ parts: muscleGroups, equipment, minutes, level, goal, painAreas });
   if (currentMenu.main.length === 0) {
     errorEl.textContent = '選んだ条件に合う種目が見つかりませんでした。器具や部位を見直してください。';
     return;
@@ -101,6 +126,10 @@ function restoreLastSettings() {
   document.querySelectorAll('#equipment-group input').forEach((el) => {
     el.checked = settings.equipment.includes(el.value);
   });
+  const painAreas = settings.painAreas || [];
+  document.querySelectorAll('#pain-group input').forEach((el) => {
+    el.checked = el.dataset.pain === 'none' ? painAreas.length === 0 : painAreas.includes(el.dataset.pain);
+  });
   document.getElementById('minutes-select').value = settings.minutes;
   document.getElementById('level-select').value = settings.level;
   document.getElementById('goal-select').value = settings.goal;
@@ -108,6 +137,7 @@ function restoreLastSettings() {
 
 function init() {
   wirePartExclusivity();
+  wirePainExclusivity();
   restoreLastSettings();
 
   document.getElementById('generate-btn').addEventListener('click', handleGenerate);

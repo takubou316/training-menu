@@ -22,6 +22,18 @@
       <h2>今日のメニューを作る</h2>
 
       <fieldset class="field-group">
+        <legend>気になるところ・痛みがある部位（あれば）</legend>
+        <div class="chip-group" id="pain-group">
+          <label class="chip"><input type="checkbox" value="none" data-pain="none" checked> 特になし</label>
+          <label class="chip"><input type="checkbox" value="肩" data-pain="肩"> 肩</label>
+          <label class="chip"><input type="checkbox" value="腰" data-pain="腰"> 腰</label>
+          <label class="chip"><input type="checkbox" value="膝" data-pain="膝"> 膝</label>
+          <label class="chip"><input type="checkbox" value="手首" data-pain="手首"> 手首</label>
+        </div>
+        <p class="hint-text">選んだ部位に負担がかかりやすい種目は自動的に除外します。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</p>
+      </fieldset>
+
+      <fieldset class="field-group">
         <legend>鍛えたい部位</legend>
         <div class="chip-group" id="part-group">
           <label class="chip"><input type="checkbox" value="fullbody" data-part="fullbody"> 全身</label>

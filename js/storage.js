@@ -38,8 +38,11 @@ function findLastPerformance(exerciseId) {
   const history = loadHistory();
   for (const session of history) {
     const found = session.exercises.find((e) => e.exerciseId === exerciseId);
-    if (found && found.sets.some((s) => s.done)) {
-      return { date: session.date, sets: found.sets.filter((s) => s.done) };
+    if (found) {
+      const workingSets = found.sets.filter((s) => s.done && !s.isWarmup);
+      if (workingSets.length > 0) {
+        return { date: session.date, sets: workingSets };
+      }
     }
   }
   return null;

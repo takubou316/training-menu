@@ -1,16 +1,17 @@
 // 入力（部位・器具・時間・レベル・目的）からその日のメニューを組み立てる純粋関数群。
 // AIには文章生成させず、あらかじめ用意した種目DB(exercises-data.js)とルール(rules.js)の組み合わせだけで決定的に組み立てる。
 
-// 動作パターンごとの動的ウォームアップ（本番動作の可動域確認・体温上昇が目的）
+// 動作パターンごとの動的ウォームアップ（本番動作の可動域確認・体温上昇が目的）。
+// descriptionは「なぜこれをやるのか」、forExercisesは実際のメニュー生成時に紐づく種目名を後から埋める。
 const DYNAMIC_WARMUP_BY_PATTERN = {
-  squat: 'ボディウェイトスクワット 10回',
-  hinge: 'ヒップヒンジ（お尻を後ろに引く動作）10回',
-  push_horizontal: '肩甲骨まわし＋腕立て伏せの姿勢キープ10秒×2',
-  push_vertical: '肩まわし＋アームサークル前後各10回',
-  pull_horizontal: 'バンドプルアパートまたは肩甲骨寄せ10回',
-  pull_vertical: 'ラットストレッチ（腕を上げて体側伸ばし）10回',
-  core: 'デッドバグ（仰向け対角伸ばし）左右5回ずつ',
-  isolation: '対象部位の関節を大きく動かすリラックス運動10回',
+  squat: { label: 'ボディウェイトスクワット 10回', description: 'しゃがむ動作に使う股関節・膝・足首を温め、可動域を確認する。' },
+  hinge: { label: 'ヒップヒンジ（お尻を後ろに引く動作）10回', description: '膝を軽く曲げたままお尻を後ろに引く練習。股関節から曲げる感覚を本セット前に掴んでおく。' },
+  push_horizontal: { label: '肩甲骨まわし＋腕立て伏せの姿勢キープ10秒×2', description: '肩甲骨を動かして肩まわりをほぐし、体を一直線に保つ感覚を確認する。' },
+  push_vertical: { label: '肩まわし＋アームサークル前後各10回', description: '腕を大きく前後に回して肩関節の可動域を広げ、頭上に押し上げる動きに備える。' },
+  pull_horizontal: { label: 'バンドプルアパートまたは肩甲骨寄せ10回', description: '肩甲骨を寄せる動きを繰り返し、引く動作で背中を使う感覚を温める。' },
+  pull_vertical: { label: 'ラットストレッチ（腕を上げて体側伸ばし）10回', description: '腕を上げて体側を伸ばし、広背筋・肩まわりをほぐしておく。' },
+  core: { label: 'デッドバグ（仰向け対角伸ばし）左右5回ずつ', description: '腹に軽く力を入れたまま手足を動かし、体幹を安定させる感覚を確認する。' },
+  isolation: { label: '対象部位の関節を大きく動かすリラックス運動10回', description: 'これから使う関節を無理のない範囲で大きく動かし、血流を上げておく。' },
 };
 
 // 部位ごとの静的クールダウンストレッチ（保持時間20〜30秒が一般的な目安）
@@ -29,6 +30,13 @@ const STATIC_STRETCH_BY_MUSCLE = {
 
 function filterByEquipment(exercises, equipmentAvailable) {
   return exercises.filter((ex) => ex.equipment.some((e) => equipmentAvailable.includes(e)));
+}
+
+// 気になる部位・痛みがある部位に負担がかかりやすい種目をあらかじめ除外する。
+// あくまで一般的な目安による除外であり、医学的な診断・アドバイスではない。
+function filterByPainAreas(exercises, painAreas) {
+  if (!painAreas || painAreas.length === 0) return exercises;
+  return exercises.filter((ex) => !(ex.riskAreas || []).some((area) => painAreas.includes(area)));
 }
 
 function buildSetPlan(exercise, level, goal) {
@@ -114,8 +122,9 @@ function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
   return selected;
 }
 
-function generateMenu({ parts, equipment, minutes, level, goal }) {
-  const pool = filterByEquipment(EXERCISES, equipment);
+function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
+  let pool = filterByEquipment(EXERCISES, equipment);
+  pool = filterByPainAreas(pool, painAreas);
   const exerciseCount = exerciseCountForTime(minutes);
   const isFullBody = parts.includes('fullbody');
 
@@ -130,7 +139,11 @@ function generateMenu({ parts, equipment, minutes, level, goal }) {
 
   const warmup = {
     general: '軽い有酸素運動（足踏み・その場ジョグなど）5分で体温を上げる',
-    dynamic: Array.from(patternsUsed).map((p) => DYNAMIC_WARMUP_BY_PATTERN[p] || DYNAMIC_WARMUP_BY_PATTERN.isolation),
+    dynamic: Array.from(patternsUsed).map((p) => {
+      const info = DYNAMIC_WARMUP_BY_PATTERN[p] || DYNAMIC_WARMUP_BY_PATTERN.isolation;
+      const forExercises = chosen.filter((ex) => ex.pattern === p).map((ex) => ex.name);
+      return { label: info.label, description: info.description, forExercises };
+    }),
   };
 
   const cooldown = {
@@ -138,7 +151,13 @@ function generateMenu({ parts, equipment, minutes, level, goal }) {
     general: '深呼吸を意識しながら1〜2分クールダウン',
   };
 
-  return { warmup, main, cooldown, generatedAt: new Date().toISOString(), params: { parts, equipment, minutes, level, goal } };
+  return {
+    warmup,
+    main,
+    cooldown,
+    generatedAt: new Date().toISOString(),
+    params: { parts, equipment, minutes, level, goal, painAreas },
+  };
 }
 
 if (typeof module !== 'undefined') {

@@ -13,7 +13,7 @@ function goalLabel(goalKey) {
 }
 
 function toggleInfoPanel(button) {
-  const panel = button.closest('.menu-block, .exercise-card').querySelector('.ex-info-panel');
+  const panel = button.closest('.menu-block, .exercise-card, .warmup-item').querySelector('.ex-info-panel');
   if (!panel) return;
   const isHidden = panel.hasAttribute('hidden');
   if (isHidden) {
@@ -41,16 +41,36 @@ function closeDemoModal() {
   video.load();
 }
 
+const PAIN_AREA_LABELS = { 肩: '肩', 腰: '腰', 膝: '膝', 手首: '手首' };
+
 function renderMenu(menu) {
   const container = document.getElementById('menu-content');
+
+  const dynamicWarmupHtml = menu.warmup.dynamic
+    .map((d) => `
+    <div class="warmup-item">
+      <div class="ex-header">
+        <div class="ex-meta">${d.label}</div>
+        <div class="ex-icons">
+          <button type="button" class="icon-btn" data-info-toggle aria-label="この動きの説明">ⓘ</button>
+        </div>
+      </div>
+      <div class="ex-info-panel" hidden>
+        <p>${d.description}${d.forExercises.length ? `<br>→ このあとの「${d.forExercises.join('・')}」の準備。` : ''}</p>
+      </div>
+    </div>`)
+    .join('');
+
+  const painNoteHtml = menu.params.painAreas && menu.params.painAreas.length > 0
+    ? `<div class="menu-block"><div class="ex-note">気になる部位（${menu.params.painAreas.join('・')}）に負担がかかりやすい種目は除外して作成しています。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</div></div>`
+    : '';
+
   const warmupHtml = `
     <div class="menu-block">
       <h3>ウォームアップ</h3>
-      <ul>
-        <li>${menu.warmup.general}</li>
-        ${menu.warmup.dynamic.map((d) => `<li>${d}</li>`).join('')}
-        <li>本セット前に、各種目1セット軽い重量・回数で肩慣らしをしてから始めましょう</li>
-      </ul>
+      <div class="warmup-item"><div class="ex-meta">${menu.warmup.general}</div></div>
+      ${dynamicWarmupHtml}
+      <div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>
     </div>`;
 
   const mainHtml = menu.main
@@ -63,7 +83,7 @@ function renderMenu(menu) {
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-meta">${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
+      <div class="ex-meta">${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
@@ -83,6 +103,7 @@ function renderMenu(menu) {
       <h3>目的</h3>
       <div class="ex-meta">${goalLabel(menu.params.goal)}</div>
     </div>
+    ${painNoteHtml}
     ${warmupHtml}
     <h3 style="margin-top:16px;">本編（${menu.main.length}種目）</h3>
     ${mainHtml}
@@ -108,16 +129,23 @@ function renderLog(session) {
       <div class="set-header">
         <span></span><span>重量(kg)</span><span>回数</span><span>RPE</span><span>完了</span>
       </div>
-      ${ex.sets
-        .map((s, setIndex) => `
-        <div class="set-row">
-          <span class="set-idx">${setIndex + 1}</span>
+      ${(() => {
+        let warmupN = 0;
+        let workingN = 0;
+        return ex.sets
+          .map((s, setIndex) => {
+            const label = s.isWarmup ? `W${(warmupN += 1)}` : `${(workingN += 1)}`;
+            return `
+        <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}">
+          <span class="set-idx">${label}</span>
           <input type="number" inputmode="decimal" step="0.5" min="0" value="${s.weight}" data-ex="${exIndex}" data-set="${setIndex}" data-field="weight">
           <input type="number" inputmode="numeric" min="0" value="${s.reps}" data-ex="${exIndex}" data-set="${setIndex}" data-field="reps">
           <input type="number" inputmode="numeric" min="1" max="10" value="${s.rpe}" data-ex="${exIndex}" data-set="${setIndex}" data-field="rpe">
           <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
-        </div>`)
-        .join('')}
+        </div>`;
+          })
+          .join('');
+      })()}
     </div>`)
     .join('');
 }
@@ -143,7 +171,7 @@ function renderHistory() {
         <summary>詳細を見る</summary>
         ${session.exercises
           .map((ex) => `<div class="h-ex">${ex.name}: ${ex.sets
-            .filter((s) => s.done)
+            .filter((s) => s.done && !s.isWarmup)
             .map((s) => `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`)
             .join(', ') || '未記録'}</div>`)
           .join('')}

@@ -38,6 +38,20 @@ function createSessionFromMenu(menu) {
     cooldown: menu.cooldown,
     exercises: menu.main.map((item) => {
       const suggestion = buildSuggestion(item);
+      const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : null;
+      const warmupSetEntries = Array.from({ length: item.warmupSets || 0 }, () => ({
+        weight: warmupWeight != null ? String(warmupWeight) : '',
+        reps: '',
+        rpe: '',
+        done: false,
+        isWarmup: true,
+      }));
+      const workingSetEntries = Array.from({ length: item.sets }, () => ({
+        weight: suggestion.weight != null ? String(suggestion.weight) : '',
+        reps: '',
+        rpe: '',
+        done: false,
+      }));
       return {
         exerciseId: item.exerciseId,
         name: item.name,
@@ -49,12 +63,7 @@ function createSessionFromMenu(menu) {
         description: item.description,
         demoMedia: item.demoMedia,
         suggestion,
-        sets: Array.from({ length: item.sets }, () => ({
-          weight: suggestion.weight != null ? String(suggestion.weight) : '',
-          reps: '',
-          rpe: '',
-          done: false,
-        })),
+        sets: [...warmupSetEntries, ...workingSetEntries],
       };
     }),
   };
@@ -63,7 +72,7 @@ function createSessionFromMenu(menu) {
 function computeSessionVolume(session) {
   return session.exercises.reduce((total, ex) => {
     const exVolume = ex.sets.reduce((sum, s) => {
-      if (!s.done) return sum;
+      if (!s.done || s.isWarmup) return sum;
       return sum + (Number(s.weight) || 0) * (Number(s.reps) || 0);
     }, 0);
     return total + exVolume;
