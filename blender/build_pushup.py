@@ -44,8 +44,32 @@ import os
 import sys
 from bpy_extras.object_utils import world_to_camera_view
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = r"C:\Users\takub\OneDrive\ドキュメント\takutolibrary\training-menu\media\exercises"
 PREVIEW_PATH = r"C:\Users\takub\AppData\Local\Temp\claude\C--Users-takub-OneDrive--------takutolibrary\281411d1-79ed-44b4-a16f-2f93e4a0224b\scratchpad\pushup_preview.png"
+TIMELINE_PATH = os.path.join(SCRIPT_DIR, "narration", "pushup", "timeline.json")
+
+
+def load_timeline_frames():
+    """generate_narration.pyが書き出したtimeline.json(ナレーションの尺)から
+    各フェーズの開始/終了フレームを求める。無ければ従来のデフォルト値を使う。"""
+    if not os.path.exists(TIMELINE_PATH):
+        return {
+            'top_hold_start': 1, 'top_hold_end': 120,
+            'bottom_hold_start': 156, 'bottom_hold_end': 300,
+            'end': 336,
+        }
+    with open(TIMELINE_PATH, encoding='utf-8') as f:
+        timeline = json.load(f)
+    top = [s for s in timeline if s['phase'] == 'top_hold']
+    bottom = [s for s in timeline if s['phase'] == 'bottom_hold']
+    return {
+        'top_hold_start': min(s['start_frame'] for s in top),
+        'top_hold_end': max(s['end_frame'] for s in top),
+        'bottom_hold_start': min(s['start_frame'] for s in bottom),
+        'bottom_hold_end': max(s['end_frame'] for s in bottom),
+        'end': max(s['end_frame'] for s in timeline),
+    }
 
 # ---------- 体の寸法(ローカル座標、Body原点=腰あたりを基準) ----------
 FOOT_LOCAL_X = -0.72       # 足(接地点)のBodyローカルX
@@ -60,12 +84,13 @@ SHOULDER_HEIGHT_TOP = 0.50     # 上: 腕がほぼ伸びきる高さ
 SHOULDER_HEIGHT_BOTTOM = 0.145  # 下: 胸が床に触れるくらいまで下げた高さ
 ELBOW_FLARE_DEG = 25           # 肘を体幹から外側に開く角度(45〜60度目安を視覚的に近似)
 
-# タイムライン(フレーム, 24fps)
-FRAME_TOP_HOLD_START = 1
-FRAME_TOP_HOLD_END = 120
-FRAME_BOTTOM_HOLD_START = 156
-FRAME_BOTTOM_HOLD_END = 300
-FRAME_END = 336
+# タイムライン(フレーム, 24fps)。generate_narration.pyのtimeline.jsonがあればそれに従う。
+_frames = load_timeline_frames()
+FRAME_TOP_HOLD_START = _frames['top_hold_start']
+FRAME_TOP_HOLD_END = _frames['top_hold_end']
+FRAME_BOTTOM_HOLD_START = _frames['bottom_hold_start']
+FRAME_BOTTOM_HOLD_END = _frames['bottom_hold_end']
+FRAME_END = _frames['end']
 
 
 def solve_theta_from_height(shoulder_height):
