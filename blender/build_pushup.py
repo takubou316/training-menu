@@ -7,17 +7,24 @@
   - 足(つま先)は常に床(z=0)の固定点に接地する
   - 手も常に床(z=0)の固定点に接地する
   - 体幹・脚は常に一直線(プランク)を保ち、足の接地点を支点に回転するだけ
-  - 肘の曲げ角度は実際のプッシュアップの目安
-    (上: ほぼ伸展 / 下: 約90度)に基づく
-    出典: Performance Health "5 Techniques for Achieving the Perfect Push-Up Form"
-    https://www.performancehealth.com/articles/5-techniques-for-achieving-the-perfect-push-up-form
-    (下ろした際の肘は概ね90度、手首の真上あたりに来るのが良いフォームとされる)
+  - 下ろす深さは「胸が床に触れるくらいまで」を目安に設定
+  - 肘は体幹から45〜60度外側に開く
+    出典:
+      - vady.jp「腕立て伏せで胸筋を最速で厚くする！正しいフォームとバリエーション完全ガイド」
+        https://vady.jp/article/pushup-chest-muscle-fast-guide/
+        (肘は上腕と体幹の角度45〜60度が目安。胸が床に触れるぐらいまで下げる。
+         呼吸は下降で吸い、上昇で吐く)
   これらの制約から肩の位置・肘の位置を毎回計算して求める(2リンクの逆運動学)。
+  「肘を体幹から45〜60度開く」は左右方向(上から見た開き)の要素なので、
+  肩の追加のX軸回転で簡易的に表現している(完全な3Dの逆運動学ではなく視覚的な近似)。
 
 使い方 (コマンドラインから、GUIなしで実行):
-  blender --background --python build_pushup.py -- preview   # frame15の静止画を1枚だけ書き出す(確認用)
-  blender --background --python build_pushup.py -- preview 1 # frame1(上のポーズ)を確認
-  blender --background --python build_pushup.py -- render    # 全フレームをmp4用PNG連番で書き出す
+  blender --background --python build_pushup.py -- preview       # frame中間の静止画を1枚だけ書き出す(確認用)
+  blender --background --python build_pushup.py -- preview 1     # 指定フレームを確認
+  blender --background --python build_pushup.py -- render        # 全フレームをmp4用PNG連番で書き出す
+
+字幕付きmp4まで一気に作る場合は同じフォルダの render_pushup.ps1 を実行する
+(このスクリプト単体はPNG連番を書き出すところまで。字幕焼き込みはffmpegで別途行う)。
 """
 
 import bpy
@@ -36,19 +43,19 @@ UPPER_ARM_LEN = 0.28
 FOREARM_LEN = 0.25
 LP = SHOULDER_LOCAL_X - FOOT_LOCAL_X  # 足の接地点(支点)から肩までの剛体長
 
-HAND_X = 0.83              # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
-ELBOW_DEG_TOP = 170        # 上: ほぼ伸展
-ELBOW_DEG_BOTTOM = 90      # 下: 約90度 (出典: Performance Health の目安)
+HAND_X = 0.80                 # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
+SHOULDER_HEIGHT_TOP = 0.50     # 上: 腕がほぼ伸びきる高さ
+SHOULDER_HEIGHT_BOTTOM = 0.145  # 下: 胸が床に触れるくらいまで下げた高さ
+ELBOW_FLARE_DEG = 25           # 肘を体幹から外側に開く角度(45〜60度目安を視覚的に近似)
+
+FRAME_TOP1 = 1
+FRAME_BOTTOM = 45
+FRAME_TOP2 = 90
 
 
-def solve_theta(hand_x, elbow_deg):
-    """指定した肘の曲げ角度になる、肩の位置(=体の傾きtheta)を逆算する。"""
-    d = math.sqrt(
-        UPPER_ARM_LEN ** 2 + FOREARM_LEN ** 2
-        - 2 * UPPER_ARM_LEN * FOREARM_LEN * math.cos(math.radians(elbow_deg))
-    )
-    cos_theta = (LP ** 2 + hand_x ** 2 - d ** 2) / (2 * LP * hand_x)
-    return math.acos(cos_theta), d
+def solve_theta_from_height(shoulder_height):
+    """肩の高さ(=体の傾きtheta)を求める。"""
+    return math.asin(min(max(shoulder_height / LP, -1.0), 1.0))
 
 
 def solve_elbow_point(shoulder, hand, upper_len, fore_len):
@@ -172,15 +179,14 @@ def build_scene():
     bpy.context.preferences.edit.keyframe_new_interpolation_type = 'SINE'
 
     scene = bpy.context.scene
-    scene.frame_start = 1
-    scene.frame_end = 30
+    scene.frame_start = FRAME_TOP1
+    scene.frame_end = FRAME_TOP2
     scene.render.fps = 24
 
-    def keyframe_pose(frame, elbow_deg):
-        theta, d = solve_theta(HAND_X, elbow_deg)
+    def keyframe_pose(frame, shoulder_height):
+        theta = solve_theta_from_height(shoulder_height)
         body_rot = -theta
         # 足の接地点(ワールド原点)からBody原点への逆算(足がローカルFOOT_LOCAL_Xにあるため)
-        # world = R(body_rot)*local + body_loc = (0,0) を満たすbody_locを求める
         foot_world_offset = (
             FOOT_LOCAL_X * math.cos(body_rot),
             -FOOT_LOCAL_X * math.sin(body_rot),
@@ -204,23 +210,25 @@ def build_scene():
         body.rotation_euler.y = body_rot
         body.keyframe_insert(data_path='location')
         body.keyframe_insert(data_path='rotation_euler', index=1)
-        for side in ('L', 'R'):
+        for side, flare_sign in (('L', 1), ('R', -1)):
             shoulders[side].rotation_euler.y = shoulder_local
+            shoulders[side].rotation_euler.x = flare_sign * math.radians(ELBOW_FLARE_DEG)
             shoulders[side].keyframe_insert(data_path='rotation_euler', index=1)
+            shoulders[side].keyframe_insert(data_path='rotation_euler', index=0)
             elbows[side].rotation_euler.y = elbow_local
             elbows[side].keyframe_insert(data_path='rotation_euler', index=1)
 
-    keyframe_pose(1, ELBOW_DEG_TOP)
-    keyframe_pose(15, ELBOW_DEG_BOTTOM)
-    keyframe_pose(30, ELBOW_DEG_TOP)
+    keyframe_pose(FRAME_TOP1, SHOULDER_HEIGHT_TOP)
+    keyframe_pose(FRAME_BOTTOM, SHOULDER_HEIGHT_BOTTOM)
+    keyframe_pose(FRAME_TOP2, SHOULDER_HEIGHT_TOP)
 
     cam_data = bpy.data.cameras.new('Camera')
     cam_data.type = 'PERSP'
-    cam_data.lens = 50
+    cam_data.lens = 42
     cam = bpy.data.objects.new('Camera', cam_data)
     bpy.context.collection.objects.link(cam)
-    cam.location = (1.5, -2.3, 0.32)
-    target = mathutils.Vector((0.4, 0, 0.15))
+    cam.location = (1.6, -1.9, 0.55)
+    target = mathutils.Vector((0.35, 0, 0.18))
     direction = target - cam.location
     cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
     scene.camera = cam
@@ -247,8 +255,8 @@ def build_scene():
 
     engine_items = [e.identifier for e in bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items]
     scene.render.engine = 'BLENDER_EEVEE_NEXT' if 'BLENDER_EEVEE_NEXT' in engine_items else 'BLENDER_EEVEE'
-    scene.render.resolution_x = 480
-    scene.render.resolution_y = 480
+    scene.render.resolution_x = 640
+    scene.render.resolution_y = 640
 
     return scene
 
@@ -256,7 +264,7 @@ def build_scene():
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     mode = argv[0] if len(argv) > 0 else 'preview'
-    preview_frame = int(argv[1]) if len(argv) > 1 else 15
+    preview_frame = int(argv[1]) if len(argv) > 1 else FRAME_BOTTOM
 
     scene = build_scene()
 
