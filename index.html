@@ -21,8 +21,8 @@
     <section id="screen-setup" class="screen active">
       <h2>今日のメニューを作る</h2>
 
-      <fieldset class="field-group">
-        <legend>気になるところ・痛みがある部位（あれば）</legend>
+      <fieldset class="field-group precheck-group">
+        <legend>事前確認：怪我・痛みはありますか？</legend>
         <div class="chip-group" id="pain-group">
           <label class="chip"><input type="checkbox" value="none" data-pain="none" checked> 特になし</label>
           <label class="chip"><input type="checkbox" value="肩" data-pain="肩"> 肩</label>
@@ -30,11 +30,11 @@
           <label class="chip"><input type="checkbox" value="膝" data-pain="膝"> 膝</label>
           <label class="chip"><input type="checkbox" value="手首" data-pain="手首"> 手首</label>
         </div>
-        <p class="hint-text">選んだ部位に負担がかかりやすい種目は自動的に除外します。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</p>
+        <p class="hint-text">選んだ箇所に負担がかかりやすい種目は自動的に除外します。痛みが続く場合は自己判断せず医療・専門家にご相談ください。（この下で改めて鍛えたい部位を選びます）</p>
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>鍛えたい部位</legend>
+        <legend>① 鍛えたい部位</legend>
         <div class="chip-group" id="part-group">
           <label class="chip"><input type="checkbox" value="fullbody" data-part="fullbody"> 全身</label>
           <label class="chip"><input type="checkbox" value="chest" data-part="chest"> 胸</label>
@@ -47,7 +47,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>使える器具</legend>
+        <legend>② 使える器具</legend>
         <div class="chip-group" id="equipment-group">
           <label class="chip"><input type="checkbox" value="bodyweight" checked> 自重のみ</label>
           <label class="chip"><input type="checkbox" value="dumbbell"> ダンベル</label>
@@ -57,7 +57,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>今日使える時間</legend>
+        <legend>③ 今日使える時間</legend>
         <select id="minutes-select">
           <option value="15">15分</option>
           <option value="30" selected>30分</option>
@@ -68,7 +68,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>レベル</legend>
+        <legend>④ レベル</legend>
         <select id="level-select">
           <option value="beginner">初心者</option>
           <option value="intermediate" selected>中級者</option>
@@ -77,7 +77,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>目的</legend>
+        <legend>⑤ 目的</legend>
         <select id="goal-select">
           <option value="hypertrophy" selected>筋肥大（大きくしたい）</option>
           <option value="strength">筋力アップ（重いものを扱いたい）</option>
@@ -122,7 +122,7 @@
     <div class="demo-modal-backdrop" data-demo-close></div>
     <div class="demo-modal-content">
       <button class="demo-close" data-demo-close>×</button>
-      <video id="demo-video" muted loop playsinline controls></video>
+      <video id="demo-video" loop playsinline controls></video>
     </div>
   </div>
 </div>

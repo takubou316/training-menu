@@ -66,7 +66,7 @@ function handleGenerate() {
   const equipment = getSelectedEquipment();
 
   if (parts.length === 0) {
-    errorEl.textContent = '鍛えたい部位を1つ以上選んでください';
+    errorEl.textContent = '「① 鍛えたい部位」を1つ以上選んでください（事前確認の欄とは別です）';
     return;
   }
   if (equipment.length === 0) {

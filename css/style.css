@@ -61,6 +61,18 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   padding: 0;
 }
 
+.precheck-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px 14px;
+  margin-bottom: 24px;
+}
+.precheck-group legend {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .field-group legend {
   font-size: 13px;
   color: var(--text-dim);
