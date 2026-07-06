@@ -18,20 +18,31 @@
   「肘を体幹から45〜60度開く」は左右方向(上から見た開き)の要素なので、
   肩の追加のX軸回転で簡易的に表現している(完全な3Dの逆運動学ではなく視覚的な近似)。
 
+タイムライン(24fps, 計336フレーム=14秒):
+  上ホールド 1〜120 (5秒: 全身の姿勢 → 顔/視線 → 首 → 肩 → 手、各1秒)
+  下降      120〜156 (1.5秒)
+  下ホールド 156〜300 (6秒: 肘 → 胸 → 股関節 → 膝 → 足首、各1秒 + 呼吸リマインド1秒)
+  上昇      300〜336 (1.5秒)
+上下のホールド区間は完全に静止するので、その間に部位ごとの注意点を字幕/ラベルで
+順番に示す時間を確保している(render_pushup.pyが字幕・ラベルのタイミングを管理する)。
+
 使い方 (コマンドラインから、GUIなしで実行):
   blender --background --python build_pushup.py -- preview       # frame中間の静止画を1枚だけ書き出す(確認用)
   blender --background --python build_pushup.py -- preview 1     # 指定フレームを確認
   blender --background --python build_pushup.py -- render        # 全フレームをmp4用PNG連番で書き出す
+  blender --background --python build_pushup.py -- anchors       # 部位ラベルのアンカー座標(画面上のピクセル位置)をJSONで出力
 
-字幕付きmp4まで一気に作る場合は同じフォルダの render_pushup.ps1 を実行する
-(このスクリプト単体はPNG連番を書き出すところまで。字幕焼き込みはffmpegで別途行う)。
+字幕・ラベル付きmp4まで一気に作る場合は同じフォルダの render_pushup.py を実行する
+(python render_pushup.py)。このビルドスクリプト単体はPNG連番を書き出すところまで。
 """
 
 import bpy
+import json
 import math
 import mathutils
 import os
 import sys
+from bpy_extras.object_utils import world_to_camera_view
 
 OUTPUT_DIR = r"C:\Users\takub\OneDrive\ドキュメント\takutolibrary\training-menu\media\exercises"
 PREVIEW_PATH = r"C:\Users\takub\AppData\Local\Temp\claude\C--Users-takub-OneDrive--------takutolibrary\281411d1-79ed-44b4-a16f-2f93e4a0224b\scratchpad\pushup_preview.png"
@@ -42,15 +53,19 @@ SHOULDER_LOCAL_X = 0.30    # 肩のBodyローカルX
 UPPER_ARM_LEN = 0.28
 FOREARM_LEN = 0.25
 LP = SHOULDER_LOCAL_X - FOOT_LOCAL_X  # 足の接地点(支点)から肩までの剛体長
+FOOT_BOX_HALF_H = 0.025    # 足メッシュの半分の厚み(床に埋まらないよう底面をz=0に合わせるため)
 
 HAND_X = 0.80                 # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
 SHOULDER_HEIGHT_TOP = 0.50     # 上: 腕がほぼ伸びきる高さ
 SHOULDER_HEIGHT_BOTTOM = 0.145  # 下: 胸が床に触れるくらいまで下げた高さ
 ELBOW_FLARE_DEG = 25           # 肘を体幹から外側に開く角度(45〜60度目安を視覚的に近似)
 
-FRAME_TOP1 = 1
-FRAME_BOTTOM = 45
-FRAME_TOP2 = 90
+# タイムライン(フレーム, 24fps)
+FRAME_TOP_HOLD_START = 1
+FRAME_TOP_HOLD_END = 120
+FRAME_BOTTOM_HOLD_START = 156
+FRAME_BOTTOM_HOLD_END = 300
+FRAME_END = 336
 
 
 def solve_theta_from_height(shoulder_height):
@@ -158,35 +173,40 @@ def build_scene():
 
     body = add_empty('Body', None, (0, 0, 0))
 
-    add_box('Torso', (0.56, 0.27, 0.2), (0.12, 0, 0), body, mat_shirt)
-    add_sphere('Head', 0.095, (0.44, 0, 0), body, mat_skin)
+    torso = add_box('Torso', (0.56, 0.27, 0.2), (0.12, 0, 0), body, mat_shirt)
+    head = add_sphere('Head', 0.095, (0.44, 0, 0), body, mat_skin)
 
+    leg_objs, foot_objs = {}, {}
     for side, y in (('L', 0.09), ('R', -0.09)):
         leg = add_cylinder(f'Leg_{side}', 0.06, 0.65, (FOOT_LOCAL_X + 0.325, y, 0), body, mat_shorts)
         leg.rotation_euler = (0, math.radians(90), 0)
-        add_box(f'Foot_{side}', (0.12, 0.08, 0.05), (FOOT_LOCAL_X, y, -0.02), body, mat_skin)
+        # 足底がちょうど床(z=0)に接地するよう、半分の厚み分だけ持ち上げる(埋まり防止)
+        foot = add_box(f'Foot_{side}', (0.12, 0.08, 0.05), (FOOT_LOCAL_X, y, FOOT_BOX_HALF_H), body, mat_skin)
+        leg_objs[side] = leg
+        foot_objs[side] = foot
 
-    shoulders, elbows = {}, {}
+    shoulders, elbows, hands = {}, {}, {}
     for side, y in (('L', 0.15), ('R', -0.15)):
         shoulder = add_empty(f'Shoulder_{side}', body, (SHOULDER_LOCAL_X, y, 0))
         add_cylinder(f'UpperArm_{side}', 0.045, UPPER_ARM_LEN, (0, 0, -UPPER_ARM_LEN / 2), shoulder, mat_skin)
         elbow = add_empty(f'Elbow_{side}', shoulder, (0, 0, -UPPER_ARM_LEN))
         add_cylinder(f'ForeArm_{side}', 0.04, FOREARM_LEN, (0, 0, -FOREARM_LEN / 2), elbow, mat_skin)
-        add_box(f'Hand_{side}', (0.1, 0.06, 0.03), (0, 0, -FOREARM_LEN), elbow, mat_skin)
+        hand = add_box(f'Hand_{side}', (0.1, 0.06, 0.03), (0, 0, -FOREARM_LEN), elbow, mat_skin)
         shoulders[side] = shoulder
         elbows[side] = elbow
+        hands[side] = hand
 
     bpy.context.preferences.edit.keyframe_new_interpolation_type = 'SINE'
 
     scene = bpy.context.scene
-    scene.frame_start = FRAME_TOP1
-    scene.frame_end = FRAME_TOP2
+    scene.frame_start = FRAME_TOP_HOLD_START
+    scene.frame_end = FRAME_END
     scene.render.fps = 24
 
-    def keyframe_pose(frame, shoulder_height):
+    def apply_pose(shoulder_height):
+        """指定した肩の高さでのIK計算結果を返す(ワールド座標)。"""
         theta = solve_theta_from_height(shoulder_height)
         body_rot = -theta
-        # 足の接地点(ワールド原点)からBody原点への逆算(足がローカルFOOT_LOCAL_Xにあるため)
         foot_world_offset = (
             FOOT_LOCAL_X * math.cos(body_rot),
             -FOOT_LOCAL_X * math.sin(body_rot),
@@ -202,25 +222,39 @@ def build_scene():
         shoulder_world_angle = world_angle(*shoulder_dir)
         forearm_world_angle = world_angle(*forearm_dir)
 
-        shoulder_local = shoulder_world_angle - body_rot
-        elbow_local = forearm_world_angle - shoulder_world_angle
+        return {
+            'body_rot': body_rot,
+            'body_loc': body_loc,
+            'shoulder_local': shoulder_world_angle - body_rot,
+            'elbow_local': forearm_world_angle - shoulder_world_angle,
+        }
 
+    def set_pose(frame, pose, keyframe=True):
         scene.frame_set(frame)
-        body.location = (body_loc[0], 0, body_loc[1])
-        body.rotation_euler.y = body_rot
-        body.keyframe_insert(data_path='location')
-        body.keyframe_insert(data_path='rotation_euler', index=1)
+        body.location = (pose['body_loc'][0], 0, pose['body_loc'][1])
+        body.rotation_euler.y = pose['body_rot']
+        if keyframe:
+            body.keyframe_insert(data_path='location')
+            body.keyframe_insert(data_path='rotation_euler', index=1)
         for side, flare_sign in (('L', 1), ('R', -1)):
-            shoulders[side].rotation_euler.y = shoulder_local
+            shoulders[side].rotation_euler.y = pose['shoulder_local']
             shoulders[side].rotation_euler.x = flare_sign * math.radians(ELBOW_FLARE_DEG)
-            shoulders[side].keyframe_insert(data_path='rotation_euler', index=1)
-            shoulders[side].keyframe_insert(data_path='rotation_euler', index=0)
-            elbows[side].rotation_euler.y = elbow_local
-            elbows[side].keyframe_insert(data_path='rotation_euler', index=1)
+            elbows[side].rotation_euler.y = pose['elbow_local']
+            if keyframe:
+                shoulders[side].keyframe_insert(data_path='rotation_euler', index=1)
+                shoulders[side].keyframe_insert(data_path='rotation_euler', index=0)
+                elbows[side].keyframe_insert(data_path='rotation_euler', index=1)
 
-    keyframe_pose(FRAME_TOP1, SHOULDER_HEIGHT_TOP)
-    keyframe_pose(FRAME_BOTTOM, SHOULDER_HEIGHT_BOTTOM)
-    keyframe_pose(FRAME_TOP2, SHOULDER_HEIGHT_TOP)
+    pose_top = apply_pose(SHOULDER_HEIGHT_TOP)
+    pose_bottom = apply_pose(SHOULDER_HEIGHT_BOTTOM)
+
+    # 上ホールド(静止) → 下降 → 下ホールド(静止) → 上昇 → (ループで上ホールドへ戻る)
+    set_pose(FRAME_TOP_HOLD_START, pose_top)
+    set_pose(FRAME_TOP_HOLD_END, pose_top)
+    set_pose(FRAME_BOTTOM_HOLD_START, pose_bottom)
+    set_pose(FRAME_BOTTOM_HOLD_END, pose_bottom)
+    set_pose(FRAME_END, pose_top)
+    # 各ホールド区間は始点・終点が同じ値なので、補間曲線の形に関係なく静止して見える。
 
     cam_data = bpy.data.cameras.new('Camera')
     cam_data.type = 'PERSP'
@@ -258,15 +292,53 @@ def build_scene():
     scene.render.resolution_x = 640
     scene.render.resolution_y = 640
 
-    return scene
+    anchors = {
+        'torso': torso, 'head': head,
+        'leg_L': leg_objs['L'], 'leg_R': leg_objs['R'],
+        'foot_L': foot_objs['L'], 'foot_R': foot_objs['R'],
+        'shoulder_L': shoulders['L'], 'shoulder_R': shoulders['R'],
+        'elbow_L': elbows['L'], 'elbow_R': elbows['R'],
+        'hand_L': hands['L'], 'hand_R': hands['R'],
+        'body': body,
+    }
+    return scene, cam, anchors
+
+
+def project_to_pixels(scene, cam, obj, local_offset=(0, 0, 0)):
+    """objのローカル座標local_offset地点が、現在のフレームで画面の何pxに映るかを返す。"""
+    world_point = obj.matrix_world @ mathutils.Vector(local_offset)
+    co = world_to_camera_view(scene, cam, world_point)
+    x = round(co.x * scene.render.resolution_x)
+    y = round((1.0 - co.y) * scene.render.resolution_y)
+    return x, y
+
+
+def dump_anchors(scene, cam, anchors):
+    """上ホールド・下ホールドそれぞれの、部位ラベルのアンカー画面座標をJSONで出力する。"""
+    result = {}
+    for phase, frame in (('top', FRAME_TOP_HOLD_START), ('bottom', FRAME_BOTTOM_HOLD_START)):
+        scene.frame_set(frame)
+        bpy.context.view_layer.update()
+        result[phase] = {
+            'head': project_to_pixels(scene, cam, anchors['head'], (0.05, 0, 0.06)),
+            'neck': project_to_pixels(scene, cam, anchors['torso'], (0.24, 0, 0.09)),
+            'shoulder': project_to_pixels(scene, cam, anchors['shoulder_R'], (0, 0, 0)),
+            'elbow': project_to_pixels(scene, cam, anchors['elbow_R'], (0, 0, 0)),
+            'hand': project_to_pixels(scene, cam, anchors['hand_R'], (0, 0, 0)),
+            'chest': project_to_pixels(scene, cam, anchors['torso'], (0.05, -0.14, 0.05)),
+            'hip': project_to_pixels(scene, cam, anchors['body'], (-0.2, 0, 0)),
+            'knee': project_to_pixels(scene, cam, anchors['leg_R'], (0, 0, 0)),
+            'foot': project_to_pixels(scene, cam, anchors['foot_R'], (0, 0, 0)),
+        }
+    return result
 
 
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     mode = argv[0] if len(argv) > 0 else 'preview'
-    preview_frame = int(argv[1]) if len(argv) > 1 else FRAME_BOTTOM
+    preview_frame = int(argv[1]) if len(argv) > 1 else FRAME_BOTTOM_HOLD_START
 
-    scene = build_scene()
+    scene, cam, anchors = build_scene()
 
     if mode == 'preview':
         scene.frame_set(preview_frame)
@@ -274,6 +346,9 @@ def main():
         scene.render.filepath = PREVIEW_PATH
         bpy.ops.render.render(write_still=True)
         print(f'PREVIEW_WRITTEN:{PREVIEW_PATH}')
+    elif mode == 'anchors':
+        result = dump_anchors(scene, cam, anchors)
+        print('ANCHORS_JSON:' + json.dumps(result))
     else:
         # このBlenderビルドはFFMPEG動画出力が無効なため、PNG連番で書き出し、
         # 別途外部ffmpegコマンドでmp4にエンコードする。
