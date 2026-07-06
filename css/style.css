@@ -223,6 +223,12 @@ select {
   margin: 0;
   line-height: 1.5;
 }
+.ex-info-panel p + p {
+  margin-top: 6px;
+}
+.ex-info-panel p strong {
+  color: var(--accent);
+}
 
 .demo-modal {
   display: none;

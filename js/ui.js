@@ -91,11 +91,19 @@ function renderMenu(menu) {
 
   const cooldownHtml = `
     <div class="menu-block">
-      <h3>クールダウン</h3>
+      <div class="ex-header">
+        <h3 style="margin:0;">クールダウン</h3>
+        <div class="ex-icons">
+          <button type="button" class="icon-btn" data-info-toggle aria-label="クールダウンのやり方">ⓘ</button>
+        </div>
+      </div>
       <ul>
-        ${menu.cooldown.static.map((s) => `<li>${s}</li>`).join('')}
+        ${menu.cooldown.static.map((s) => `<li>${s.label}</li>`).join('')}
         <li>${menu.cooldown.general}</li>
       </ul>
+      <div class="ex-info-panel" hidden>
+        ${menu.cooldown.static.map((s) => `<p><strong>${s.label.split('（')[0]}</strong><br>${s.description}</p>`).join('')}
+      </div>
     </div>`;
 
   container.innerHTML = `
