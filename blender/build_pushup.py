@@ -18,22 +18,16 @@
   「肘を体幹から45〜60度開く」は左右方向(上から見た開き)の要素なので、
   肩の追加のX軸回転で簡易的に表現している(完全な3Dの逆運動学ではなく視覚的な近似)。
 
-タイムライン(24fps, 計336フレーム=14秒):
-  上ホールド 1〜120 (5秒: 全身の姿勢 → 顔/視線 → 首 → 肩 → 手、各1秒)
-  下降      120〜156 (1.5秒)
-  下ホールド 156〜300 (6秒: 肘 → 胸 → 股関節 → 膝 → 足首、各1秒 + 呼吸リマインド1秒)
-  上昇      300〜336 (1.5秒)
-上下のホールド区間は完全に静止するので、その間に部位ごとの注意点を字幕/ラベルで
-順番に示す時間を確保している(render_pushup.pyが字幕・ラベルのタイミングを管理する)。
+構成: ポーズで静止せず、実際のトレーニング動画のように「1レップ(上→下→上)を
+繰り返しながら、レップごとに1つの注意点をナレーションする」形式。
+各レップの尺・ナレーション文・使用カメラは generate_narration.py が書き出す
+narration/pushup/timeline.json に従う(無ければ簡易デフォルトで1レップのみ生成)。
+肘のレップだけは横から見ても分かりにくいため、真上からの見下ろしカメラを使う。
 
 使い方 (コマンドラインから、GUIなしで実行):
-  blender --background --python build_pushup.py -- preview       # frame中間の静止画を1枚だけ書き出す(確認用)
+  blender --background --python build_pushup.py -- preview       # 中間フレームの静止画を1枚だけ書き出す(確認用)
   blender --background --python build_pushup.py -- preview 1     # 指定フレームを確認
-  blender --background --python build_pushup.py -- render        # 全フレームをmp4用PNG連番で書き出す
-  blender --background --python build_pushup.py -- anchors       # 部位ラベルのアンカー座標(画面上のピクセル位置)をJSONで出力
-
-字幕・ラベル付きmp4まで一気に作る場合は同じフォルダの render_pushup.py を実行する
-(python render_pushup.py)。このビルドスクリプト単体はPNG連番を書き出すところまで。
+  blender --background --python build_pushup.py -- render        # 全レップをmp4用PNG連番で書き出す
 """
 
 import bpy
@@ -42,51 +36,11 @@ import math
 import mathutils
 import os
 import sys
-from bpy_extras.object_utils import world_to_camera_view
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = r"C:\Users\takub\OneDrive\ドキュメント\takutolibrary\training-menu\media\exercises"
 PREVIEW_PATH = r"C:\Users\takub\AppData\Local\Temp\claude\C--Users-takub-OneDrive--------takutolibrary\281411d1-79ed-44b4-a16f-2f93e4a0224b\scratchpad\pushup_preview.png"
 TIMELINE_PATH = os.path.join(SCRIPT_DIR, "narration", "pushup", "timeline.json")
-
-
-def load_full_timeline():
-    if not os.path.exists(TIMELINE_PATH):
-        return None
-    with open(TIMELINE_PATH, encoding='utf-8') as f:
-        return json.load(f)
-
-
-_timeline = load_full_timeline()
-
-
-def load_timeline_frames():
-    """generate_narration.pyが書き出したtimeline.json(ナレーションの尺)から
-    各フェーズの開始/終了フレームを求める。無ければ従来のデフォルト値を使う。"""
-    if not _timeline:
-        return {
-            'top_hold_start': 1, 'top_hold_end': 120,
-            'bottom_hold_start': 156, 'bottom_hold_end': 300,
-            'end': 336,
-        }
-    top = [s for s in _timeline if s['phase'] == 'top_hold']
-    bottom = [s for s in _timeline if s['phase'] == 'bottom_hold']
-    return {
-        'top_hold_start': min(s['start_frame'] for s in top),
-        'top_hold_end': max(s['end_frame'] for s in top),
-        'bottom_hold_start': min(s['start_frame'] for s in bottom),
-        'bottom_hold_end': max(s['end_frame'] for s in bottom),
-        'end': max(s['end_frame'] for s in _timeline),
-    }
-
-
-def get_segment_range(name, fallback):
-    """timeline.json中の特定セグメント(例: 'bottom_elbow')のフレーム範囲を返す。"""
-    if _timeline:
-        for seg in _timeline:
-            if seg['name'] == name:
-                return seg['start_frame'], seg['end_frame']
-    return fallback
 
 # ---------- 体の寸法(ローカル座標、Body原点=腰あたりを基準) ----------
 FOOT_LOCAL_X = -0.72       # 足(接地点)のBodyローカルX
@@ -96,18 +50,24 @@ FOREARM_LEN = 0.25
 LP = SHOULDER_LOCAL_X - FOOT_LOCAL_X  # 足の接地点(支点)から肩までの剛体長
 FOOT_BOX_HALF_H = 0.025    # 足メッシュの半分の厚み(床に埋まらないよう底面をz=0に合わせるため)
 
-HAND_X = 0.80                 # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
-SHOULDER_HEIGHT_TOP = 0.50     # 上: 腕がほぼ伸びきる高さ
+HAND_X = 0.80                  # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
+SHOULDER_HEIGHT_TOP = 0.50      # 上: 腕がほぼ伸びきる高さ
 SHOULDER_HEIGHT_BOTTOM = 0.145  # 下: 胸が床に触れるくらいまで下げた高さ
-ELBOW_FLARE_DEG = 25           # 肘を体幹から外側に開く角度(45〜60度目安を視覚的に近似)
+ELBOW_FLARE_DEG = 25            # 肘を体幹から外側に開く角度(45〜60度目安を視覚的に近似)
 
-# タイムライン(フレーム, 24fps)。generate_narration.pyのtimeline.jsonがあればそれに従う。
-_frames = load_timeline_frames()
-FRAME_TOP_HOLD_START = _frames['top_hold_start']
-FRAME_TOP_HOLD_END = _frames['top_hold_end']
-FRAME_BOTTOM_HOLD_START = _frames['bottom_hold_start']
-FRAME_BOTTOM_HOLD_END = _frames['bottom_hold_end']
-FRAME_END = _frames['end']
+FPS = 24
+
+
+def load_reps():
+    """generate_narration.pyが書き出したtimeline.json(レップごとのナレーション尺)を読む。
+    無ければ1レップだけのデフォルトタイムラインを使う。"""
+    if not os.path.exists(TIMELINE_PATH):
+        return [{'name': 'demo', 'camera': 'main', 'start_frame': 1, 'end_frame': 73}]
+    with open(TIMELINE_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+REPS = load_reps()
 
 
 def solve_theta_from_height(shoulder_height):
@@ -263,35 +223,31 @@ def build_scene():
 
     body = add_empty('Body', None, (0, 0, 0))
 
-    torso = add_box('Torso', (0.56, 0.27, 0.2), (0.12, 0, 0), body, mat_shirt)
-    head = add_sphere('Head', 0.095, (0.44, 0, 0), body, mat_skin)
+    add_box('Torso', (0.56, 0.27, 0.2), (0.12, 0, 0), body, mat_shirt)
+    add_sphere('Head', 0.095, (0.44, 0, 0), body, mat_skin)
 
-    leg_objs, foot_objs = {}, {}
     for side, y in (('L', 0.09), ('R', -0.09)):
         leg = add_cylinder(f'Leg_{side}', 0.06, 0.65, (FOOT_LOCAL_X + 0.325, y, 0), body, mat_shorts)
         leg.rotation_euler = (0, math.radians(90), 0)
         # 足底がちょうど床(z=0)に接地するよう、半分の厚み分だけ持ち上げる(埋まり防止)
-        foot = add_box(f'Foot_{side}', (0.12, 0.08, 0.05), (FOOT_LOCAL_X, y, FOOT_BOX_HALF_H), body, mat_skin)
-        leg_objs[side] = leg
-        foot_objs[side] = foot
+        add_box(f'Foot_{side}', (0.12, 0.08, 0.05), (FOOT_LOCAL_X, y, FOOT_BOX_HALF_H), body, mat_skin)
 
-    shoulders, elbows, hands = {}, {}, {}
+    shoulders, elbows = {}, {}
     for side, y in (('L', 0.15), ('R', -0.15)):
         shoulder = add_empty(f'Shoulder_{side}', body, (SHOULDER_LOCAL_X, y, 0))
         add_cylinder(f'UpperArm_{side}', 0.045, UPPER_ARM_LEN, (0, 0, -UPPER_ARM_LEN / 2), shoulder, mat_skin)
         elbow = add_empty(f'Elbow_{side}', shoulder, (0, 0, -UPPER_ARM_LEN))
         add_cylinder(f'ForeArm_{side}', 0.04, FOREARM_LEN, (0, 0, -FOREARM_LEN / 2), elbow, mat_skin)
-        hand = add_box(f'Hand_{side}', (0.1, 0.06, 0.03), (0, 0, -FOREARM_LEN), elbow, mat_skin)
+        add_box(f'Hand_{side}', (0.1, 0.06, 0.03), (0, 0, -FOREARM_LEN), elbow, mat_skin)
         shoulders[side] = shoulder
         elbows[side] = elbow
-        hands[side] = hand
 
     bpy.context.preferences.edit.keyframe_new_interpolation_type = 'SINE'
 
     scene = bpy.context.scene
-    scene.frame_start = FRAME_TOP_HOLD_START
-    scene.frame_end = FRAME_END
-    scene.render.fps = 24
+    scene.frame_start = REPS[0]['start_frame']
+    scene.frame_end = REPS[-1]['end_frame']
+    scene.render.fps = FPS
 
     def apply_pose(shoulder_height):
         """指定した肩の高さでのIK計算結果を返す(ワールド座標)。"""
@@ -319,32 +275,29 @@ def build_scene():
             'elbow_local': forearm_world_angle - shoulder_world_angle,
         }
 
-    def set_pose(frame, pose, keyframe=True):
+    def set_pose(frame, pose):
         scene.frame_set(frame)
         body.location = (pose['body_loc'][0], 0, pose['body_loc'][1])
         body.rotation_euler.y = pose['body_rot']
-        if keyframe:
-            body.keyframe_insert(data_path='location')
-            body.keyframe_insert(data_path='rotation_euler', index=1)
+        body.keyframe_insert(data_path='location')
+        body.keyframe_insert(data_path='rotation_euler', index=1)
         for side, flare_sign in (('L', 1), ('R', -1)):
             shoulders[side].rotation_euler.y = pose['shoulder_local']
             shoulders[side].rotation_euler.x = flare_sign * math.radians(ELBOW_FLARE_DEG)
             elbows[side].rotation_euler.y = pose['elbow_local']
-            if keyframe:
-                shoulders[side].keyframe_insert(data_path='rotation_euler', index=1)
-                shoulders[side].keyframe_insert(data_path='rotation_euler', index=0)
-                elbows[side].keyframe_insert(data_path='rotation_euler', index=1)
+            shoulders[side].keyframe_insert(data_path='rotation_euler', index=1)
+            shoulders[side].keyframe_insert(data_path='rotation_euler', index=0)
+            elbows[side].keyframe_insert(data_path='rotation_euler', index=1)
 
     pose_top = apply_pose(SHOULDER_HEIGHT_TOP)
     pose_bottom = apply_pose(SHOULDER_HEIGHT_BOTTOM)
 
-    # 上ホールド(静止) → 下降 → 下ホールド(静止) → 上昇 → (ループで上ホールドへ戻る)
-    set_pose(FRAME_TOP_HOLD_START, pose_top)
-    set_pose(FRAME_TOP_HOLD_END, pose_top)
-    set_pose(FRAME_BOTTOM_HOLD_START, pose_bottom)
-    set_pose(FRAME_BOTTOM_HOLD_END, pose_bottom)
-    set_pose(FRAME_END, pose_top)
-    # 各ホールド区間は始点・終点が同じ値なので、補間曲線の形に関係なく静止して見える。
+    # 各レップ = 上(開始)→下(中間)→上(終了) の自然な1往復。レップを連ねて繰り返す。
+    for rep in REPS:
+        mid_frame = round((rep['start_frame'] + rep['end_frame']) / 2)
+        set_pose(rep['start_frame'], pose_top)
+        set_pose(mid_frame, pose_bottom)
+        set_pose(rep['end_frame'], pose_top)
 
     cam_data = bpy.data.cameras.new('Camera')
     cam_data.type = 'PERSP'
@@ -358,10 +311,9 @@ def build_scene():
     scene.camera = cam
 
     # 肘を体幹から45〜60度外側に開く動きは横からだと分かりにくいため、
-    # その説明区間だけ真上からの見下ろしカメラを使う。
-    # (Blenderのタイムラインマーカーによるカメラ自動切替は、区間外のフレームでも
-    #  「一番近いマーカー」のカメラを拾ってしまい狙った通りに動かなかったため、
-    #  レンダリング時にカメラ別で複数回に分けて書き出す方式にしている→main()参照)
+    # そのレップだけ真上からの見下ろしカメラを使う(main()で明示的にレップ単位で
+    # カメラを切り替えてレンダリングする。マーカーによる自動切替は近いフレームの
+    # マーカーを拾ってしまい狙った通りに動かなかったため採用していない)。
     cam_top_data = bpy.data.cameras.new('CameraTop')
     cam_top_data.type = 'ORTHO'
     cam_top_data.ortho_scale = 2.3
@@ -395,94 +347,45 @@ def build_scene():
     scene.render.resolution_x = 640
     scene.render.resolution_y = 640
 
-    anchors = {
-        'torso': torso, 'head': head,
-        'leg_L': leg_objs['L'], 'leg_R': leg_objs['R'],
-        'foot_L': foot_objs['L'], 'foot_R': foot_objs['R'],
-        'shoulder_L': shoulders['L'], 'shoulder_R': shoulders['R'],
-        'elbow_L': elbows['L'], 'elbow_R': elbows['R'],
-        'hand_L': hands['L'], 'hand_R': hands['R'],
-        'body': body,
-    }
-    return scene, cam, cam_top, anchors
+    return scene, cam, cam_top
 
 
-def project_to_pixels(scene, cam, obj, local_offset=(0, 0, 0)):
-    """objのローカル座標local_offset地点が、現在のフレームで画面の何pxに映るかを返す。"""
-    world_point = obj.matrix_world @ mathutils.Vector(local_offset)
-    co = world_to_camera_view(scene, cam, world_point)
-    x = round(co.x * scene.render.resolution_x)
-    y = round((1.0 - co.y) * scene.render.resolution_y)
-    return x, y
-
-
-def dump_anchors(scene, cam, cam_top, anchors):
-    """上ホールド・下ホールドそれぞれの、部位ラベルのアンカー画面座標をJSONで出力する。
-    肘(bottom)だけは、その区間で実際に使われる見下ろしカメラ(cam_top)で投影する。"""
-    result = {}
-    for phase, frame in (('top', FRAME_TOP_HOLD_START), ('bottom', FRAME_BOTTOM_HOLD_START)):
-        scene.frame_set(frame)
-        bpy.context.view_layer.update()
-        elbow_cam = cam_top if phase == 'bottom' else cam
-        result[phase] = {
-            'head': project_to_pixels(scene, cam, anchors['head'], (0.05, 0, 0.06)),
-            'neck': project_to_pixels(scene, cam, anchors['torso'], (0.24, 0, 0.09)),
-            'shoulder': project_to_pixels(scene, cam, anchors['shoulder_R'], (0, 0, 0)),
-            'elbow': project_to_pixels(scene, elbow_cam, anchors['elbow_R'], (0, 0, 0)),
-            'hand': project_to_pixels(scene, cam, anchors['hand_R'], (0, 0, 0)),
-            'chest': project_to_pixels(scene, cam, anchors['torso'], (0.05, -0.14, 0.05)),
-            'hip': project_to_pixels(scene, cam, anchors['body'], (-0.2, 0, 0)),
-            'knee': project_to_pixels(scene, cam, anchors['leg_R'], (0, 0, 0)),
-            'foot': project_to_pixels(scene, cam, anchors['foot_R'], (0, 0, 0)),
-        }
-    return result
+def camera_for_frame(frame, cam, cam_top):
+    for rep in REPS:
+        if rep['start_frame'] <= frame < rep['end_frame'] or frame == rep['end_frame'] == REPS[-1]['end_frame']:
+            return cam_top if rep['camera'] == 'top' else cam
+    return cam
 
 
 def main():
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     mode = argv[0] if len(argv) > 0 else 'preview'
-    preview_frame = int(argv[1]) if len(argv) > 1 else FRAME_BOTTOM_HOLD_START
+    preview_frame = int(argv[1]) if len(argv) > 1 else REPS[len(REPS) // 2]['start_frame']
 
-    scene, cam, cam_top, anchors = build_scene()
-
-    elbow_start, elbow_end = get_segment_range(
-        'bottom_elbow', (FRAME_BOTTOM_HOLD_START, FRAME_BOTTOM_HOLD_START + 24)
-    )
+    scene, cam, cam_top = build_scene()
 
     if mode == 'preview':
-        # プレビューでもrenderと同じルールでカメラを明示的に選ぶ(マーカー任せにしない)
-        scene.camera = cam_top if elbow_start <= preview_frame < elbow_end else cam
+        scene.camera = camera_for_frame(preview_frame, cam, cam_top)
         scene.frame_set(preview_frame)
         scene.render.image_settings.file_format = 'PNG'
         scene.render.filepath = PREVIEW_PATH
         bpy.ops.render.render(write_still=True)
         print(f'PREVIEW_WRITTEN:{PREVIEW_PATH}')
-    elif mode == 'anchors':
-        result = dump_anchors(scene, cam, cam_top, anchors)
-        print('ANCHORS_JSON:' + json.dumps(result))
     else:
         # このBlenderビルドはFFMPEG動画出力が無効なため、PNG連番で書き出し、
         # 別途外部ffmpegコマンドでmp4にエンコードする。
-        # タイムラインマーカーによるカメラ自動切替は狙った通りに動かなかったため、
-        # カメラを使う区間ごとに明示的にscene.camera/frame_start/endを設定して
-        # 複数回に分けてレンダリングし、同じ連番フォルダに書き出す(frame番号は連続するので
+        # レップごとにカメラが違う場合があるため、レップ単位で複数回に分けて
+        # レンダリングし、同じ連番フォルダに書き出す(frame番号は連続するので
         # ffmpeg側は1本の連番として扱える)。
         frames_dir = os.path.join(OUTPUT_DIR, '_frames')
         os.makedirs(frames_dir, exist_ok=True)
         scene.render.image_settings.file_format = 'PNG'
         scene.render.filepath = os.path.join(frames_dir, 'f_')
 
-        camera_segments = [
-            (FRAME_TOP_HOLD_START, elbow_start - 1, cam),
-            (elbow_start, elbow_end - 1, cam_top),
-            (elbow_end, FRAME_END, cam),
-        ]
-        for seg_start, seg_end, seg_cam in camera_segments:
-            if seg_start > seg_end:
-                continue
-            scene.camera = seg_cam
-            scene.frame_start = seg_start
-            scene.frame_end = seg_end
+        for rep in REPS:
+            scene.camera = cam_top if rep['camera'] == 'top' else cam
+            scene.frame_start = rep['start_frame']
+            scene.frame_end = rep['end_frame']
             bpy.ops.render.render(animation=True)
         print(f'RENDER_WRITTEN:{frames_dir}')
 

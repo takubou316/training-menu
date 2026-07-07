@@ -1,13 +1,12 @@
 """
-プッシュアップのデモ動画一括生成パイプライン(ナレーション同期版)。
-  0. (事前に generate_narration.py を実行しておく: VOICEVOXでナレーションを
-     生成し、その尺に合わせた narration/pushup/timeline.json を作る)
-  1. Blenderをバックグラウンド起動し、部位ラベルのアンカー座標(anchors)を取得
-  2. Blenderをバックグラウンド起動し、全フレームをPNG連番でレンダリング
-     (build_pushup.py がtimeline.jsonを読んでポーズの尺を合わせる)
-  3. ffmpegで字幕・部位ラベルを焼き込みつつ無音のmp4にエンコード
-  4. timeline.json記載の順でナレーションwavを結合し、mp4に音声トラックとして合成
-  5. 一時ファイルを削除
+プッシュアップのデモ動画一括生成パイプライン(レップ反復・ナレーション同期版)。
+  0. (事前に generate_narration.py を実行しておく: VOICEVOXでレップごとの
+     ナレーションを生成し、その尺に合わせた narration/pushup/timeline.json を作る)
+  1. Blenderをバックグラウンド起動し、レップごとに繰り返す上下動をレンダリング
+     (肘のレップだけ自動で見下ろしカメラに切り替わる)
+  2. ffmpegでレップごとの字幕を焼き込みつつ無音のmp4にエンコード
+  3. timeline.json記載の順でナレーションwavを結合し、mp4に音声トラックとして合成
+  4. 一時ファイルを削除
 
 使い方: `python render_pushup.py` (このファイルと同じフォルダで実行。
 先に `python generate_narration.py` を実行してtimeline.jsonを作っておくこと)
@@ -29,8 +28,6 @@ OUT_FILE = os.path.join(OUTPUT_DIR, "pushup.mp4")
 TIMELINE_PATH = os.path.join(SCRIPT_DIR, "narration", "pushup", "timeline.json")
 
 FPS = 24
-DOT_COLOR = "0xFFD24C"
-PLAIN_NAMES = {"intro", "down", "breathe", "up"}
 
 
 def run_blender(mode):
@@ -39,14 +36,6 @@ def run_blender(mode):
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     return result.stdout + result.stderr
-
-
-def get_anchors():
-    out = run_blender("anchors")
-    for line in out.splitlines():
-        if line.startswith("ANCHORS_JSON:"):
-            return json.loads(line[len("ANCHORS_JSON:"):])
-    raise RuntimeError("anchors JSONが取得できませんでした:\n" + out)
 
 
 def render_frames():
@@ -71,46 +60,33 @@ def load_timeline():
         return json.load(f)
 
 
-def build_filter(timeline, anchors):
-    filters = []
-    for seg in timeline:
-        name = seg["name"]
-        start, end = seg["start_sec"], seg["end_sec"]
-        text_path = ffmpeg_escape_path(os.path.join(SCRIPT_DIR, "captions", "pushup", f"{name}.txt"))
-
-        if name in PLAIN_NAMES:
-            filters.append(
-                f"drawtext=fontfile='{ffmpeg_escape_path(FONT)}':textfile='{text_path}':"
-                f"fontsize=26:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=8:"
-                f"x=(w-text_w)/2:y=h-72:enable='between(t,{start},{end})'"
-            )
-            continue
-
-        phase, part = name.split("_", 1)
-        ax, ay = anchors[phase][part]
-        filters.append(
-            f"drawbox=x={ax - 5}:y={ay - 5}:w=10:h=10:color={DOT_COLOR}@0.95:t=fill:"
-            f"enable='between(t,{start},{end})'"
-        )
-        if ax < 320:
-            x_expr = f"{ax + 16}"
-        else:
-            x_expr = f"{ax - 16}-text_w"
-        y_expr = f"{ay - 14}"
-        filters.append(
-            f"drawtext=fontfile='{ffmpeg_escape_path(FONT)}':textfile='{text_path}':"
-            f"fontsize=22:fontcolor=0xFFD24C:box=1:boxcolor=black@0.6:boxborderw=6:"
-            f"x={x_expr}:y={y_expr}:enable='between(t,{start},{end})'"
-        )
-    return ",".join(filters)
-
-
 def write_caption_files(timeline):
     cap_dir = os.path.join(SCRIPT_DIR, "captions", "pushup")
     os.makedirs(cap_dir, exist_ok=True)
+    keep = set()
     for seg in timeline:
-        with open(os.path.join(cap_dir, f"{seg['name']}.txt"), "w", encoding="utf-8") as f:
+        fname = f"{seg['name']}.txt"
+        keep.add(fname)
+        with open(os.path.join(cap_dir, fname), "w", encoding="utf-8") as f:
             f.write(seg["text"])
+    # 過去バージョンの不要なキャプションファイルを掃除
+    for fname in os.listdir(cap_dir):
+        if fname not in keep:
+            os.remove(os.path.join(cap_dir, fname))
+
+
+def build_filter(timeline):
+    filters = []
+    for seg in timeline:
+        text_path = ffmpeg_escape_path(
+            os.path.join(SCRIPT_DIR, "captions", "pushup", f"{seg['name']}.txt")
+        )
+        filters.append(
+            f"drawtext=fontfile='{ffmpeg_escape_path(FONT)}':textfile='{text_path}':"
+            f"fontsize=26:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=8:"
+            f"x=(w-text_w)/2:y=h-72:enable='between(t,{seg['start_sec']},{seg['end_sec']})'"
+        )
+    return ",".join(filters)
 
 
 def encode_silent(filter_str):
@@ -177,16 +153,14 @@ def cleanup():
 
 def main():
     timeline = load_timeline()
-    print(f"1/5 タイムライン読み込み完了 (総尺 {timeline[-1]['end_sec']:.1f}秒, {len(timeline)}セグメント)")
+    print(f"1/4 タイムライン読み込み完了 (総尺 {timeline[-1]['end_sec']:.1f}秒, {len(timeline)}レップ)")
     write_caption_files(timeline)
-    print("2/5 アンカー座標を取得中...")
-    anchors = get_anchors()
-    print("3/5 フレームをレンダリング中...")
+    print("2/4 フレームをレンダリング中(レップごとにカメラ切替)...")
     render_frames()
-    print("4/5 字幕・ラベルを焼き込みつつエンコード中...")
-    filter_str = build_filter(timeline, anchors)
+    print("3/4 字幕を焼き込みつつエンコード中...")
+    filter_str = build_filter(timeline)
     encode_silent(filter_str)
-    print("5/5 ナレーションを合成中...")
+    print("4/4 ナレーションを合成中...")
     mux_narration(timeline)
     cleanup()
     print(f"完了: {OUT_FILE}")

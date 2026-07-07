@@ -1,132 +1,102 @@
 [
   {
     "name": "intro",
-    "phase": "top_hold",
-    "text": "体は頭からかかとまで一直線をキープ",
+    "camera": "main",
+    "text": "手は肩幅よりやや広めに、体は一直線をキープ",
     "audio": "narration/pushup/intro.wav",
     "start_frame": 1,
-    "end_frame": 95,
+    "end_frame": 164,
     "start_sec": 0.0,
-    "end_sec": 3.9167
+    "end_sec": 6.7917
   },
   {
     "name": "top_head",
-    "phase": "top_hold",
-    "text": "視線はやや前の床",
+    "camera": "main",
+    "text": "視線はやや前の床を見る",
     "audio": "narration/pushup/top_head.wav",
-    "start_frame": 95,
-    "end_frame": 150,
-    "start_sec": 3.9167,
-    "end_sec": 6.2083
+    "start_frame": 164,
+    "end_frame": 236,
+    "start_sec": 6.7917,
+    "end_sec": 9.7917
   },
   {
     "name": "top_neck",
-    "phase": "top_hold",
-    "text": "首は一直線",
+    "camera": "main",
+    "text": "首は一直線をキープ",
     "audio": "narration/pushup/top_neck.wav",
-    "start_frame": 150,
-    "end_frame": 195,
-    "start_sec": 6.2083,
-    "end_sec": 8.0833
+    "start_frame": 236,
+    "end_frame": 308,
+    "start_sec": 9.7917,
+    "end_sec": 12.7917
   },
   {
     "name": "top_shoulder",
-    "phase": "top_hold",
+    "camera": "main",
     "text": "肩をすくめない",
     "audio": "narration/pushup/top_shoulder.wav",
-    "start_frame": 195,
-    "end_frame": 237,
-    "start_sec": 8.0833,
-    "end_sec": 9.8333
-  },
-  {
-    "name": "top_hand",
-    "phase": "top_hold",
-    "text": "手は肩幅よりやや広め",
-    "audio": "narration/pushup/top_hand.wav",
-    "start_frame": 237,
-    "end_frame": 300,
-    "start_sec": 9.8333,
-    "end_sec": 12.4583
-  },
-  {
-    "name": "down",
-    "phase": "descend",
-    "text": "吸う：胸が床につくまで下ろす",
-    "audio": "narration/pushup/down.wav",
-    "start_frame": 300,
-    "end_frame": 383,
-    "start_sec": 12.4583,
-    "end_sec": 15.9167
+    "start_frame": 308,
+    "end_frame": 380,
+    "start_sec": 12.7917,
+    "end_sec": 15.7917
   },
   {
     "name": "bottom_elbow",
-    "phase": "bottom_hold",
-    "text": "肘は体から45〜60度外側",
+    "camera": "top",
+    "text": "肘は体から45〜60度外側に開く",
     "audio": "narration/pushup/bottom_elbow.wav",
-    "start_frame": 383,
-    "end_frame": 482,
-    "start_sec": 15.9167,
-    "end_sec": 20.0417
+    "start_frame": 380,
+    "end_frame": 497,
+    "start_sec": 15.7917,
+    "end_sec": 20.6667
   },
   {
     "name": "bottom_chest",
-    "phase": "bottom_hold",
+    "camera": "main",
     "text": "胸が床につくまで下ろす",
     "audio": "narration/pushup/bottom_chest.wav",
-    "start_frame": 482,
-    "end_frame": 543,
-    "start_sec": 20.0417,
-    "end_sec": 22.5833
+    "start_frame": 497,
+    "end_frame": 574,
+    "start_sec": 20.6667,
+    "end_sec": 23.875
   },
   {
     "name": "bottom_hip",
-    "phase": "bottom_hold",
+    "camera": "main",
     "text": "反り腰・丸まりに注意",
     "audio": "narration/pushup/bottom_hip.wav",
-    "start_frame": 543,
-    "end_frame": 613,
-    "start_sec": 22.5833,
-    "end_sec": 25.5
+    "start_frame": 574,
+    "end_frame": 646,
+    "start_sec": 23.875,
+    "end_sec": 26.875
   },
   {
     "name": "bottom_knee",
-    "phase": "bottom_hold",
+    "camera": "main",
     "text": "膝は伸ばしたまま",
     "audio": "narration/pushup/bottom_knee.wav",
-    "start_frame": 613,
-    "end_frame": 660,
-    "start_sec": 25.5,
-    "end_sec": 27.4583
+    "start_frame": 646,
+    "end_frame": 718,
+    "start_sec": 26.875,
+    "end_sec": 29.875
   },
   {
     "name": "bottom_foot",
-    "phase": "bottom_hold",
+    "camera": "main",
     "text": "つま先を立てて床を押す",
     "audio": "narration/pushup/bottom_foot.wav",
-    "start_frame": 660,
-    "end_frame": 720,
-    "start_sec": 27.4583,
-    "end_sec": 29.9583
+    "start_frame": 718,
+    "end_frame": 790,
+    "start_sec": 29.875,
+    "end_sec": 32.875
   },
   {
     "name": "breathe",
-    "phase": "bottom_hold",
-    "text": "呼吸を止めない",
+    "camera": "main",
+    "text": "呼吸は止めない：下ろす時に吸う、上げる時に吐く",
     "audio": "narration/pushup/breathe.wav",
-    "start_frame": 720,
-    "end_frame": 762,
-    "start_sec": 29.9583,
-    "end_sec": 31.7083
-  },
-  {
-    "name": "up",
-    "phase": "ascend",
-    "text": "吐く：元の姿勢まで上げる",
-    "audio": "narration/pushup/up.wav",
-    "start_frame": 762,
-    "end_frame": 832,
-    "start_sec": 31.7083,
-    "end_sec": 34.625
+    "start_frame": 790,
+    "end_frame": 904,
+    "start_sec": 32.875,
+    "end_sec": 37.625
   }
 ]

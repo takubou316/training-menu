@@ -1,17 +1,19 @@
 """
-VOICEVOX(ずんだもん)でプッシュアップ解説のナレーション音声を生成し、
-各セリフの長さ(24fpsのフレーム数に切り上げ)をtimeline.jsonにまとめる。
+VOICEVOX(ずんだもん)でプッシュアップ解説のナレーション音声を生成する。
+
+方式: 「1レップ(上→下→上)を1つの説明区切り」として、レップを繰り返しながら
+注意点を1つずつナレーションする(ポーズを静止させたまま複数の注意点を
+まとめて説明する方式はやめ、実際のトレーニング動画のように動き続ける)。
+
+各レップの長さは「自然な最小レップ時間」と「そのレップのナレーション音声の
+長さ+余韻」のうち長い方に合わせ、24fpsのフレーム数に切り上げる。
 
 事前にVOICEVOXエンジン(vv-engine/run.exe)を起動しておくこと
 (http://localhost:50021 で待ち受け)。
 
 出力:
-  blender/narration/pushup/<name>.wav      各セリフの音声(尺に合わせて無音パディング済み)
-  blender/narration/pushup/timeline.json   セグメント名・テキスト・フレーム数・累積フレーム位置
-
-このtimeline.jsonをbuild_pushup.py(ポーズのタイミング)とrender_pushup.py
-(字幕・音声の合成タイミング)の両方が読み込むことで、ナレーションの長さと
-映像の静止時間を自動的に一致させる。
+  blender/narration/pushup/<name>.wav      各レップのナレーション音声(尺に合わせて無音パディング済み)
+  blender/narration/pushup/timeline.json   レップ名・テキスト・カメラ・フレーム範囲
 """
 
 import json
@@ -22,6 +24,7 @@ import urllib.parse
 import urllib.request
 
 FPS = 24
+MIN_REP_FRAMES = 72  # 1レップの最短尺(3秒。ナレーションが短くても不自然に速くならないように)
 SPEAKER_ID = 3  # ずんだもん(ノーマル)
 ENGINE_URL = "http://localhost:50021"
 
@@ -30,32 +33,40 @@ NARRATION_DIR = os.path.join(SCRIPT_DIR, "narration", "pushup")
 FFMPEG_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffmpeg.exe"
 FFPROBE_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffprobe.exe"
 
-# 表示順(この順番がそのままタイムラインの再生順になる)
-# (name, phase, text)
-# phase: "top_hold" / "descend" / "bottom_hold" / "ascend"
-SEGMENTS = [
-    ("intro", "top_hold", "体は頭からかかとまで一直線をキープ"),
-    ("top_head", "top_hold", "視線はやや前の床"),
-    ("top_neck", "top_hold", "首は一直線"),
-    ("top_shoulder", "top_hold", "肩をすくめない"),
-    ("top_hand", "top_hold", "手は肩幅よりやや広め"),
-    ("down", "descend", "吸う、胸が床につくまで下ろす"),
-    ("bottom_elbow", "bottom_hold", "肘は体から四十五度から六十度外側"),
-    ("bottom_chest", "bottom_hold", "胸が床につくまで下ろす"),
-    ("bottom_hip", "bottom_hold", "反り腰、丸まりに注意"),
-    ("bottom_knee", "bottom_hold", "膝は伸ばしたまま"),
-    ("bottom_foot", "bottom_hold", "つま先を立てて床を押す"),
-    ("breathe", "bottom_hold", "呼吸を止めない"),
-    ("up", "ascend", "吐く、元の姿勢まで上げる"),
+# 表示順 = レップの再生順。(name, camera, ナレーション文, 画面表示用テキスト)
+# camera: "main" = 横からの3/4アングル / "top" = 肘の開きを見せる真上からのアングル
+REPS = [
+    ("intro", "main",
+     "手は肩幅よりやや広めに置いて、体を一直線に保ったまま上下に動きます",
+     "手は肩幅よりやや広めに、体は一直線をキープ"),
+    ("top_head", "main",
+     "視線はやや前の床を見ます",
+     "視線はやや前の床を見る"),
+    ("top_neck", "main",
+     "首は一直線を保ちます",
+     "首は一直線をキープ"),
+    ("top_shoulder", "main",
+     "肩はすくめないようにします",
+     "肩をすくめない"),
+    ("bottom_elbow", "top",
+     "肘は体から四十五度から六十度外側に開きます",
+     "肘は体から45〜60度外側に開く"),
+    ("bottom_chest", "main",
+     "胸が床につくまでしっかり下ろします",
+     "胸が床につくまで下ろす"),
+    ("bottom_hip", "main",
+     "反り腰や丸まりに注意します",
+     "反り腰・丸まりに注意"),
+    ("bottom_knee", "main",
+     "膝は伸ばしたままにします",
+     "膝は伸ばしたまま"),
+    ("bottom_foot", "main",
+     "つま先を立てて床を押します",
+     "つま先を立てて床を押す"),
+    ("breathe", "main",
+     "呼吸は止めずに、下ろす時に吸って上げる時に吐きます",
+     "呼吸は止めない：下ろす時に吸う、上げる時に吐く"),
 ]
-
-# 画面表示用のテキスト(ナレーションの数字の読みと表記を分けたい箇所だけ上書き)
-DISPLAY_TEXT_OVERRIDES = {
-    "bottom_elbow": "肘は体から45〜60度外側",
-    "bottom_hip": "反り腰・丸まりに注意",
-    "down": "吸う：胸が床につくまで下ろす",
-    "up": "吐く：元の姿勢まで上げる",
-}
 
 
 def synthesize(text, out_path):
@@ -81,7 +92,7 @@ def get_duration(path):
     result = subprocess.run(
         [FFPROBE_EXE, "-v", "error", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", path],
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     return float(result.stdout.strip())
 
@@ -90,7 +101,7 @@ def pad_to_duration(in_path, out_path, target_duration):
     subprocess.run(
         [FFMPEG_EXE, "-y", "-i", in_path, "-af",
          f"apad=whole_dur={target_duration}", "-t", str(target_duration), out_path],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
     )
 
 
@@ -99,25 +110,24 @@ def main():
     timeline = []
     frame_cursor = 1
 
-    for name, phase, text in SEGMENTS:
+    for name, camera, narration_text, display_text in REPS:
         raw_path = os.path.join(NARRATION_DIR, f"{name}_raw.wav")
         final_path = os.path.join(NARRATION_DIR, f"{name}.wav")
-        print(f"合成中: {name} ({text})")
-        synthesize(text, raw_path)
+        print(f"合成中: {name} ({narration_text})")
+        synthesize(narration_text, raw_path)
         raw_duration = get_duration(raw_path)
-        # 読み上げ後に少し間を持たせる(0.35秒)
-        padded_duration = raw_duration + 0.35
-        frame_count = max(1, math.ceil(padded_duration * FPS))
-        exact_duration = frame_count / FPS
+
+        rep_frames = max(MIN_REP_FRAMES, math.ceil((raw_duration + 0.3) * FPS))
+        exact_duration = rep_frames / FPS
         pad_to_duration(raw_path, final_path, exact_duration)
         os.remove(raw_path)
 
         start_frame = frame_cursor
-        end_frame = frame_cursor + frame_count
+        end_frame = frame_cursor + rep_frames
         timeline.append({
             "name": name,
-            "phase": phase,
-            "text": DISPLAY_TEXT_OVERRIDES.get(name, text),
+            "camera": camera,
+            "text": display_text,
             "audio": os.path.relpath(final_path, SCRIPT_DIR).replace("\\", "/"),
             "start_frame": start_frame,
             "end_frame": end_frame,
@@ -130,7 +140,7 @@ def main():
     with open(timeline_path, "w", encoding="utf-8") as f:
         json.dump(timeline, f, ensure_ascii=False, indent=2)
     print(f"timeline.json を書き出しました: {timeline_path}")
-    print(f"総フレーム数: {frame_cursor - 1} ({(frame_cursor - 1) / FPS:.2f}秒)")
+    print(f"総フレーム数: {frame_cursor - 1} ({(frame_cursor - 1) / FPS:.2f}秒, {len(REPS)}レップ)")
 
 
 if __name__ == "__main__":
