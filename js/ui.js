@@ -174,7 +174,7 @@ function renderHistory() {
     .map((session) => `
     <div class="history-item">
       <div class="h-date">${formatDate(session.date)}</div>
-      <div class="h-meta">${goalLabel(session.goal)}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg</div>
+      <div class="h-meta">${goalLabel(session.goal)}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
       <details>
         <summary>詳細を見る</summary>
         ${session.exercises

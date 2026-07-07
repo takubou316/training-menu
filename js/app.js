@@ -96,6 +96,7 @@ function handleStartWorkout() {
   currentSession = createSessionFromMenu(currentMenu);
   renderLog(currentSession);
   showScreen('log');
+  startSessionTimer();
 }
 
 function handleLogInput(e) {
@@ -115,6 +116,7 @@ function handleLogInput(e) {
 
 function handleFinishWorkout() {
   if (!currentSession) return;
+  currentSession.durationSec = stopSessionTimer();
   finalizeSession(currentSession);
   currentSession = null;
   currentMenu = null;
@@ -178,6 +180,7 @@ function init() {
       const target = btn.dataset.nav;
       if (target === 'history') renderHistory();
       hideRestTimer();
+      stopSessionTimer();
       showScreen(target);
     });
   });

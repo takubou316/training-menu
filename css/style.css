@@ -53,6 +53,33 @@ html, body {
 .screen.active { display: block; }
 
 h2 { font-size: 16px; margin: 0 0 16px; color: var(--text); }
+
+.log-header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+}
+.log-header h2 { margin: 0; }
+
+.session-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.session-timer-label { font-size: 11px; color: var(--text-dim); }
+#session-timer-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
 h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
 
 .field-group {

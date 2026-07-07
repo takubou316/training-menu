@@ -85,6 +85,7 @@ function finalizeSession(session) {
     date: session.date,
     goal: session.goal,
     volume: computeSessionVolume(session),
+    durationSec: session.durationSec || 0,
     exercises: session.exercises.map((e) => ({
       exerciseId: e.exerciseId,
       name: e.name,

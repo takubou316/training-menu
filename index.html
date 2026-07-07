@@ -101,7 +101,13 @@
 
     <!-- ===== トレーニング記録画面 ===== -->
     <section id="screen-log" class="screen">
-      <h2>トレーニング記録</h2>
+      <div class="log-header">
+        <h2>トレーニング記録</h2>
+        <div class="session-timer">
+          <span class="session-timer-label">経過時間</span>
+          <span id="session-timer-value">00:00</span>
+        </div>
+      </div>
       <div id="log-content"></div>
       <button class="primary-btn" id="finish-workout-btn">記録して終了</button>
     </section>
@@ -146,6 +152,7 @@
 <script src="js/workout-log.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/rest-timer.js"></script>
+<script src="js/session-timer.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
