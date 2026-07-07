@@ -1,6 +1,10 @@
 // 種目データベース。
 // 各種目は「主動筋(primary)」「補助筋(secondary)」「種目カテゴリ」「必要器具」「動作パターン」「片側種目か」を持つ。
 // description は初心者向けのフォームのポイント・注意点の短い説明（iアイコンから表示）。
+// bodyweightLoadFactor は自重種目で実際に体のどれくらいの割合が負荷になっているかの推定値（体重×この値＝推定負荷）。
+// プッシュアップ系のみ研究値（Ebben et al., 2011, J Strength Cond Res「Kinetic Analysis of Several
+// Variations of Push-Up」）に基づく数値を設定し、根拠のある数値が見当たらない種目は未設定のまま
+// （その場合は体重100%をそのまま負荷とみなす）。
 // 出典の考え方: JATI/NSCA/ACSMなど公的資格団体が共通して教える一般的な運動分類・筋肉部位の対応関係を基にした一般知識であり、
 // 特定の書籍・教材の文章をそのまま転記したものではない。数値基準(セット/レップ/休憩)は js/rules.js 側で管理する。
 
@@ -22,12 +26,12 @@ const PATTERN_ORDER = ['squat', 'hinge', 'push_horizontal', 'push_vertical', 'pu
 
 const EXERCISES = [
   // ===== 胸 =====
-  { id: 'pushup', name: 'プッシュアップ（腕立て伏せ）', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首'],
+  { id: 'pushup', name: 'プッシュアップ（腕立て伏せ）', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首'], bodyweightLoadFactor: 0.64,
     description: '手は肩幅よりやや広め。体は頭からかかとまで一直線を保ち、お尻が上下しないように。胸が床に近づくまで下ろす。',
     demoMedia: 'media/exercises/pushup.mp4' },
-  { id: 'incline_pushup', name: 'インクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首'], note: '初心者向け・負荷を下げたい時',
+  { id: 'incline_pushup', name: 'インクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首'], bodyweightLoadFactor: 0.5, note: '初心者向け・負荷を下げたい時',
     description: '台や椅子に手をついて行う腕立て伏せ。角度が急なほど負荷が下がるので、通常のプッシュアップがきつい人はここから。' },
-  { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], note: '上級者向け・負荷を上げたい時',
+  { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.7, note: '上級者向け・負荷を上げたい時',
     description: '足を台に乗せて行う腕立て伏せ。上半身側が下がる分、通常より負荷が上がる。体幹が反らないよう腹に力を入れる。' },
   { id: 'db_bench_press', name: 'ダンベルベンチプレス', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['dumbbell'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['肩'],
     description: 'ベンチに仰向けになり、ダンベルを胸の横まで下ろしてから押し上げる。肩をすくめず、肩甲骨をベンチに寄せて固定する。' },
@@ -95,7 +99,7 @@ const EXERCISES = [
     description: 'ケーブルを使ったカール。ダンベルと違い上げきった位置でも負荷が抜けにくい。' },
   { id: 'bench_dip', name: 'ベンチディップス', primary: ['triceps'], secondary: ['chest', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'isolation', unilateral: false, riskAreas: ['肩', '手首'],
     description: 'ベンチに手をつき、肘を曲げてお尻を下ろしてから押し上げる。肩をすくめず、肘を体の後方に開きすぎないようにする。' },
-  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'],
+  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.64,
     description: '両手の親指と人差し指でダイヤモンド形を作って行う腕立て伏せ。通常より三頭筋への負荷が強く、手首への負担も増えるので注意。' },
   { id: 'db_triceps_extension', name: 'ダンベルトライセプスエクステンション', primary: ['triceps'], secondary: [], category: 'isolation', equipment: ['dumbbell'], pattern: 'isolation', unilateral: false, riskAreas: ['肩'],
     description: '頭上でダンベルを持ち、肘を支点にして後頭部側へ下ろしてから伸ばす。肘が左右に開かないよう固定する。' },
@@ -149,7 +153,7 @@ const EXERCISES = [
     description: '仰向けで膝を立て、肩甲骨が浮く程度に上体を丸める。首に力を入れて引っ張らないよう注意する。' },
   { id: 'leg_raise', name: 'レッグレイズ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰'],
     description: '仰向けで脚を伸ばしたまま上げ下げする。腰が床から浮いて反ってしまう場合は膝を軽く曲げて行う。' },
-  { id: 'mountain_climber', name: 'マウンテンクライマー', primary: ['abs'], secondary: ['shoulders'], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'],
+  { id: 'mountain_climber', name: 'マウンテンクライマー', primary: ['abs'], secondary: ['shoulders'], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.64,
     description: '腕立て伏せの姿勢から交互に膝を胸へ引きつける。お尻が上がりすぎないよう体幹を固定したまま行う。' },
   { id: 'cable_crunch', name: 'ケーブルクランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'core', unilateral: false, riskAreas: [],
     description: 'ケーブルを頭の後ろで持ち、股関節を動かさず背中を丸めるように上体を下げる。腕の力で引かないようにする。' },

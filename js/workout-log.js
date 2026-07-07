@@ -3,7 +3,29 @@
 
 const LOWER_BODY_MUSCLES = ['quads', 'hamstrings', 'glutes', 'calves'];
 
-function buildSuggestion(planItem) {
+// 自重種目は「重量」という概念がわかりにくい（プッシュアップは体重の何%も胸にかかっているわけではない）ため、
+// 体重×推定負荷率(bodyweightLoadFactor)で自動計算し、ユーザーが手動で重量を入力する必要がないようにする。
+function isBodyweightLoadExercise(planItem) {
+  return !planItem.holdBased && planItem.equipment && planItem.equipment[0] === 'bodyweight';
+}
+
+function buildSuggestion(planItem, bodyWeightKg) {
+  if (isBodyweightLoadExercise(planItem)) {
+    const estWeight = Math.round(bodyWeightKg * planItem.bodyweightLoadFactor * 2) / 2;
+    const last = findLastPerformance(planItem.exerciseId);
+    if (!last) {
+      return {
+        text: `初回記録です。体重${bodyWeightKg}kgから負荷を約${estWeight}kgと推定しています。フォームを優先しましょう。`,
+        weight: estWeight,
+      };
+    }
+    const repsList = last.sets.map((s) => s.reps).join('/');
+    return {
+      text: `前回 ${repsList}回。負荷は体重から自動計算（約${estWeight}kg）されるので、レップ数を伸ばすことを目指しましょう。`,
+      weight: estWeight,
+    };
+  }
+
   const last = findLastPerformance(planItem.exerciseId);
   if (!last) {
     return { text: '初回記録です。フォームを優先し、無理のない重量から始めましょう。', weight: null };
@@ -30,14 +52,14 @@ function buildSuggestion(planItem) {
   };
 }
 
-function createSessionFromMenu(menu) {
+function createSessionFromMenu(menu, bodyWeightKg) {
   return {
     date: new Date().toISOString(),
     goal: menu.params.goal,
     warmup: menu.warmup,
     cooldown: menu.cooldown,
     exercises: menu.main.map((item) => {
-      const suggestion = buildSuggestion(item);
+      const suggestion = buildSuggestion(item, bodyWeightKg);
       const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
       const defaultReps = item.holdBased ? 20 : item.repsMin;
       const defaultRpe = RPE_SCALE.default;

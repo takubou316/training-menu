@@ -27,6 +27,18 @@ function getSelectedPainAreas() {
     .filter((v) => v !== 'none');
 }
 
+function getBodyWeightKg() {
+  return Number(document.getElementById('bodyweight-slider').value);
+}
+
+function wireBodyWeightSlider() {
+  const slider = document.getElementById('bodyweight-slider');
+  const valueEl = document.getElementById('bodyweight-value');
+  slider.addEventListener('input', () => {
+    valueEl.textContent = `${slider.value} kg`;
+  });
+}
+
 function wirePartExclusivity() {
   document.querySelectorAll('#part-group input').forEach((input) => {
     input.addEventListener('change', () => {
@@ -81,7 +93,8 @@ function handleGenerate() {
   const goal = document.getElementById('goal-select').value;
   const painAreas = getSelectedPainAreas();
 
-  saveSettings({ parts, equipment, minutes, level, goal, painAreas });
+  const bodyWeightKg = getBodyWeightKg();
+  saveSettings({ parts, equipment, minutes, level, goal, painAreas, bodyWeightKg });
 
   currentMenu = generateMenu({ parts: muscleGroups, equipment, minutes, level, goal, painAreas });
   if (currentMenu.main.length === 0) {
@@ -93,7 +106,7 @@ function handleGenerate() {
 }
 
 function handleStartWorkout() {
-  currentSession = createSessionFromMenu(currentMenu);
+  currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
   renderLog(currentSession);
   showScreen('log');
   startSessionTimer();
@@ -141,11 +154,17 @@ function restoreLastSettings() {
   document.getElementById('minutes-select').value = settings.minutes;
   document.getElementById('level-select').value = settings.level;
   document.getElementById('goal-select').value = settings.goal;
+  if (settings.bodyWeightKg) {
+    const slider = document.getElementById('bodyweight-slider');
+    slider.value = settings.bodyWeightKg;
+    document.getElementById('bodyweight-value').textContent = `${slider.value} kg`;
+  }
 }
 
 function init() {
   wirePartExclusivity();
   wirePainExclusivity();
+  wireBodyWeightSlider();
   restoreLastSettings();
 
   document.getElementById('generate-btn').addEventListener('click', handleGenerate);

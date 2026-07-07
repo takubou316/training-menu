@@ -90,6 +90,7 @@ function buildSetPlan(exercise, level, goal) {
     demoMedia: exercise.demoMedia || null,
     holdBased: exercise.holdBased || false,
     equipment: exercise.equipment,
+    bodyweightLoadFactor: exercise.bodyweightLoadFactor != null ? exercise.bodyweightLoadFactor : 1,
   };
 }
 
