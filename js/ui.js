@@ -119,6 +119,13 @@ function renderMenu(menu) {
   `;
 }
 
+// 器具ごとの現実的な重量スライダー範囲。bodyweightは重量を扱わないためスライダー自体を出さない。
+const WEIGHT_RANGE_BY_EQUIPMENT = {
+  dumbbell: { max: 60, step: 0.5 },
+  barbell: { max: 200, step: 2.5 },
+  machine: { max: 150, step: 2.5 },
+};
+
 function formatSliderValue(field, value, holdBased) {
   if (field === 'weight') return `${value} kg`;
   if (field === 'reps') return holdBased ? `${value} 秒` : `${value} 回`;
@@ -156,12 +163,13 @@ function renderLog(session) {
         return ex.sets
           .map((s, setIndex) => {
             const label = s.isWarmup ? `W${(warmupN += 1)}` : `${(workingN += 1)}`;
-            const weightField = ex.holdBased
+            const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
+            const weightField = ex.holdBased || !weightRange
               ? ''
-              : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: 300, step: 0.5, value: s.weight });
+              : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: ex.holdBased ? 120 : 50, step: ex.holdBased ? 5 : 1, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: ex.holdBased ? 120 : 30, step: ex.holdBased ? 5 : 1, value: s.reps, holdBased: ex.holdBased,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
             const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });

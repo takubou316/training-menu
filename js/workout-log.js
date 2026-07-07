@@ -66,6 +66,7 @@ function createSessionFromMenu(menu) {
         description: item.description,
         demoMedia: item.demoMedia,
         holdBased: item.holdBased,
+        equipment: item.equipment,
         suggestion,
         sets: [...warmupSetEntries, ...workingSetEntries],
       };
