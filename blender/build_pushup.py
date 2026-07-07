@@ -322,6 +322,26 @@ def build_scene():
     cam_top.location = (0.4, 0, 2.5)
     cam_top.rotation_euler = (0, 0, math.radians(-90))  # 頭側が画面の上に来るように回転
 
+    # 手幅(左右の広さ)は横からだと分かりにくいため、正面上方から見下ろすアングルで見せる
+    # (真正面・低い位置だと頭が手を隠してしまうため、高めの位置から見下ろす)。
+    cam_front = bpy.data.objects.new('CameraFront', bpy.data.cameras.new('CameraFront'))
+    bpy.context.collection.objects.link(cam_front)
+    cam_front.data.lens = 38
+    cam_front.location = (1.6, -0.6, 1.1)
+    front_target = mathutils.Vector((0.3, 0, 0.05))
+    cam_front.rotation_euler = (front_target - cam_front.location).to_track_quat('-Z', 'Y').to_euler()
+
+    # つま先・足首の角度は足元に寄ったローアングルでズームする。
+    # 足の接地点はIKの都合上、常にワールド原点(0,0)付近に固定される。
+    # 脚(ワールド+X方向へ伸びる)の内側にカメラが入り込まないよう、
+    # 足のさらに外側(-X側)から見返す形にする。
+    cam_foot = bpy.data.objects.new('CameraFoot', bpy.data.cameras.new('CameraFoot'))
+    bpy.context.collection.objects.link(cam_foot)
+    cam_foot.data.lens = 45
+    cam_foot.location = (-0.55, -0.4, 0.22)
+    foot_target = mathutils.Vector((0.05, 0, 0.02))
+    cam_foot.rotation_euler = (foot_target - cam_foot.location).to_track_quat('-Z', 'Y').to_euler()
+
     light_data = bpy.data.lights.new('Sun', type='SUN')
     light_data.energy = 4.5
     light = bpy.data.objects.new('Sun', light_data)
@@ -347,14 +367,20 @@ def build_scene():
     scene.render.resolution_x = 640
     scene.render.resolution_y = 640
 
-    return scene, cam, cam_top
+    cameras = {
+        'main': cam,
+        'top': cam_top,
+        'front': cam_front,
+        'foot_close': cam_foot,
+    }
+    return scene, cameras
 
 
-def camera_for_frame(frame, cam, cam_top):
+def camera_for_frame(frame, cameras):
     for rep in REPS:
         if rep['start_frame'] <= frame < rep['end_frame'] or frame == rep['end_frame'] == REPS[-1]['end_frame']:
-            return cam_top if rep['camera'] == 'top' else cam
-    return cam
+            return cameras.get(rep['camera'], cameras['main'])
+    return cameras['main']
 
 
 def main():
@@ -362,10 +388,10 @@ def main():
     mode = argv[0] if len(argv) > 0 else 'preview'
     preview_frame = int(argv[1]) if len(argv) > 1 else REPS[len(REPS) // 2]['start_frame']
 
-    scene, cam, cam_top = build_scene()
+    scene, cameras = build_scene()
 
     if mode == 'preview':
-        scene.camera = camera_for_frame(preview_frame, cam, cam_top)
+        scene.camera = camera_for_frame(preview_frame, cameras)
         scene.frame_set(preview_frame)
         scene.render.image_settings.file_format = 'PNG'
         scene.render.filepath = PREVIEW_PATH
@@ -383,7 +409,7 @@ def main():
         scene.render.filepath = os.path.join(frames_dir, 'f_')
 
         for rep in REPS:
-            scene.camera = cam_top if rep['camera'] == 'top' else cam
+            scene.camera = cameras.get(rep['camera'], cameras['main'])
             scene.frame_start = rep['start_frame']
             scene.frame_end = rep['end_frame']
             bpy.ops.render.render(animation=True)

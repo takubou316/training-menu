@@ -1,7 +1,7 @@
 [
   {
     "name": "intro",
-    "camera": "main",
+    "camera": "front",
     "text": "手は肩幅よりやや広めに、体は一直線をキープ",
     "audio": "narration/pushup/intro.wav",
     "start_frame": 1,
@@ -81,7 +81,7 @@
   },
   {
     "name": "bottom_foot",
-    "camera": "main",
+    "camera": "foot_close",
     "text": "つま先を立てて床を押す",
     "audio": "narration/pushup/bottom_foot.wav",
     "start_frame": 718,

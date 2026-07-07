@@ -34,9 +34,12 @@ FFMPEG_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpe
 FFPROBE_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffprobe.exe"
 
 # 表示順 = レップの再生順。(name, camera, ナレーション文, 画面表示用テキスト)
-# camera: "main" = 横からの3/4アングル / "top" = 肘の開きを見せる真上からのアングル
+# camera: "main" = 横からの3/4アングル(通常のフォームチェック向き)
+#         "top"  = 真上から見下ろす(肘の開きなど左右方向の動きを見せる時)
+#         "front" = 正面寄りの低いアングル(手幅など左右の広さを見せる時)
+#         "foot_close" = 足元に寄ったローアングル(つま先・足首の角度を見せる時)
 REPS = [
-    ("intro", "main",
+    ("intro", "front",
      "手は肩幅よりやや広めに置いて、体を一直線に保ったまま上下に動きます",
      "手は肩幅よりやや広めに、体は一直線をキープ"),
     ("top_head", "main",
@@ -60,7 +63,7 @@ REPS = [
     ("bottom_knee", "main",
      "膝は伸ばしたままにします",
      "膝は伸ばしたまま"),
-    ("bottom_foot", "main",
+    ("bottom_foot", "foot_close",
      "つま先を立てて床を押します",
      "つま先を立てて床を押す"),
     ("breathe", "main",
