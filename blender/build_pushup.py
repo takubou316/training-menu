@@ -48,7 +48,6 @@ SHOULDER_LOCAL_X = 0.30    # 肩のBodyローカルX
 UPPER_ARM_LEN = 0.28
 FOREARM_LEN = 0.25
 LP = SHOULDER_LOCAL_X - FOOT_LOCAL_X  # 足の接地点(支点)から肩までの剛体長
-FOOT_BOX_HALF_H = 0.025    # 足メッシュの半分の厚み(床に埋まらないよう底面をz=0に合わせるため)
 
 HAND_X = 0.80                  # 手の接地点(床, 固定)のワールドX。足の接地点をワールド原点(0,0)とする
 SHOULDER_HEIGHT_TOP = 0.50      # 上: 腕がほぼ伸びきる高さ
@@ -176,6 +175,55 @@ def add_sphere(name, radius, location, parent, material):
     return obj
 
 
+# ---------- メタボール(体のパーツ用) ----------
+# 剛体の円柱・球を単純に組み合わせると、関節を曲げた時に継ぎ目に隙間ができてしまう
+# (曲がらない筒同士が角度をつけて接続するので、実際に人体を動画で見ると肘や肩が
+# 不自然に離れて見える)。メタボールは近づいた要素同士が自動的になめらかに融合する
+# ため、この問題が原理的に起きない。体の各パーツを別オブジェクトにしても、名前を
+# 共通の接頭辞(META_FAMILY)で始めておけば1つの連続した表面として融合してレンダリング
+# される(検証済み)。関節をまたぐパーツ同士は少し重なるように長さ・半径を調整している。
+META_FAMILY = 'CharBody'
+META_RESOLUTION = 0.012
+
+
+def add_meta_object(name, parent, location):
+    mball = bpy.data.metaballs.new(f'{META_FAMILY}.{name}')
+    mball.resolution = META_RESOLUTION
+    mball.render_resolution = META_RESOLUTION
+    obj = bpy.data.objects.new(f'{META_FAMILY}.{name}', mball)
+    bpy.context.collection.objects.link(obj)
+    obj.location = location
+    if parent:
+        obj.parent = parent
+    return obj
+
+
+META_STIFFNESS = 4.5  # 大きさの違う要素同士が近づいた時に膨らみすぎないよう、標準(2.0)より締める
+
+
+def add_meta_capsule(name, radius, length, location, parent, material, axis='X'):
+    """axis='X'なら親のローカルX軸方向、'Z'ならローカルZ軸方向に伸びるカプセル。"""
+    obj = add_meta_object(name, parent, location)
+    e = obj.data.elements.new()
+    e.type = 'CAPSULE'
+    e.radius = radius
+    e.size_x = length / 2
+    e.stiffness = META_STIFFNESS
+    if axis == 'Z':
+        e.rotation = mathutils.Euler((0, math.radians(90), 0), 'XYZ').to_quaternion()
+    obj.data.materials.append(material)
+    return obj
+
+
+def add_meta_ball(name, radius, location, parent, material):
+    obj = add_meta_object(name, parent, location)
+    e = obj.data.elements.new()
+    e.radius = radius
+    e.stiffness = META_STIFFNESS
+    obj.data.materials.append(material)
+    return obj
+
+
 def add_gym_set():
     """トレーニングルームらしく見せるための奥の壁・巾木・ダンベルラック・ミラー風パネル。"""
     mat_wall = new_material('Wall', (0.74, 0.72, 0.69), roughness=0.95)
@@ -223,27 +271,27 @@ def build_scene():
 
     body = add_empty('Body', None, (0, 0, 0))
 
-    add_box('Torso', (0.56, 0.27, 0.2), (0.12, 0, 0), body, mat_shirt)
-    add_sphere('Head', 0.095, (0.44, 0, 0), body, mat_skin)
+    # 胴体と脚は少し長めに重ねて配置し、股関節でなめらかに融合させる。
+    add_meta_capsule('torso', 0.13, 0.56, (0.12, 0, 0), body, mat_shirt, axis='X')
+    add_meta_ball('head', 0.1, (0.5, 0, 0), body, mat_skin)
 
     for side, y in (('L', 0.09), ('R', -0.09)):
-        leg = add_cylinder(f'Leg_{side}', 0.06, 0.65, (FOOT_LOCAL_X + 0.325, y, 0), body, mat_shorts)
-        leg.rotation_euler = (0, math.radians(90), 0)
-        # 足底がちょうど床(z=0)に接地するよう、半分の厚み分だけ持ち上げる(埋まり防止)
-        add_box(f'Foot_{side}', (0.12, 0.08, 0.05), (FOOT_LOCAL_X, y, FOOT_BOX_HALF_H), body, mat_skin)
+        add_meta_capsule(f'leg_{side}', 0.065, 0.65, (FOOT_LOCAL_X + 0.325, y, 0), body, mat_shorts, axis='X')
+        # 足底がちょうど床(z=0)に接地するよう、半径の分だけ持ち上げる(埋まり防止)
+        add_meta_ball(f'foot_{side}', 0.06, (FOOT_LOCAL_X, y, 0.05), body, mat_skin)
 
     shoulders, elbows = {}, {}
     for side, y in (('L', 0.15), ('R', -0.15)):
         flare_sign = 1 if side == 'L' else -1
         shoulder = add_empty(f'Shoulder_{side}', body, (SHOULDER_LOCAL_X, y, 0))
-        add_cylinder(f'UpperArm_{side}', 0.045, UPPER_ARM_LEN, (0, 0, -UPPER_ARM_LEN / 2), shoulder, mat_skin)
+        add_meta_capsule(f'upperarm_{side}', 0.05, UPPER_ARM_LEN, (0, 0, -UPPER_ARM_LEN / 2), shoulder, mat_skin, axis='Z')
         # 肘を体幹から外側に開く(45〜60度目安)のを、シンプルなY方向オフセットとして
         # 固定で与える(姿勢によらず一定)。以前は回転で表現していたが、Y軸回転(姿勢の
         # 上下動用)と組み合わさると手の左右位置が姿勢によってずれてしまう不具合が
         # あったため、姿勢に依存しない平行移動オフセットに変更した。
         elbow = add_empty(f'Elbow_{side}', shoulder, (0, flare_sign * ELBOW_FLARE_Y_OFFSET, -UPPER_ARM_LEN))
-        add_cylinder(f'ForeArm_{side}', 0.04, FOREARM_LEN, (0, 0, -FOREARM_LEN / 2), elbow, mat_skin)
-        add_box(f'Hand_{side}', (0.1, 0.06, 0.03), (0, 0, -FOREARM_LEN), elbow, mat_skin)
+        add_meta_capsule(f'forearm_{side}', 0.045, FOREARM_LEN, (0, 0, -FOREARM_LEN / 2), elbow, mat_skin, axis='Z')
+        add_meta_ball(f'hand_{side}', 0.055, (0, 0, -FOREARM_LEN), elbow, mat_skin)
         shoulders[side] = shoulder
         elbows[side] = elbow
 
