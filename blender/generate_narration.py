@@ -33,42 +33,24 @@ NARRATION_DIR = os.path.join(SCRIPT_DIR, "narration", "pushup")
 FFMPEG_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffmpeg.exe"
 FFPROBE_EXE = r"C:\Users\takub\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.1.2-full_build\bin\ffprobe.exe"
 
-# 表示順 = レップの再生順。(name, camera, ナレーション文, 画面表示用テキスト)
+# 表示順 = レップの再生順。(name, camera, テキスト)
+# テキストは読み上げ・字幕の両方に同じものを使う(言葉が食い違うと「字幕と喋りが
+# 連動していない」ように聞こえるため、以前あった読み上げ用/表示用の別テキストは廃止)。
 # camera: "main" = 横からの3/4アングル(通常のフォームチェック向き)
 #         "top"  = 真上から見下ろす(肘の開きなど左右方向の動きを見せる時)
 #         "front" = 正面寄りの低いアングル(手幅など左右の広さを見せる時)
 #         "foot_close" = 足元に寄ったローアングル(つま先・足首の角度を見せる時)
 REPS = [
-    ("intro", "front",
-     "手は肩幅よりやや広めに置いて、体を一直線に保ったまま上下に動きます",
-     "手は肩幅よりやや広めに、体は一直線をキープ"),
-    ("top_head", "main",
-     "視線はやや前の床を見ます",
-     "視線はやや前の床を見る"),
-    ("top_neck", "main",
-     "首は一直線を保ちます",
-     "首は一直線をキープ"),
-    ("top_shoulder", "main",
-     "肩はすくめないようにします",
-     "肩をすくめない"),
-    ("bottom_elbow", "top",
-     "肘は体から四十五度から六十度外側に開きます",
-     "肘は体から45〜60度外側に開く"),
-    ("bottom_chest", "main",
-     "胸が床につくまでしっかり下ろします",
-     "胸が床につくまで下ろす"),
-    ("bottom_hip", "main",
-     "反り腰や丸まりに注意します",
-     "反り腰・丸まりに注意"),
-    ("bottom_knee", "main",
-     "膝は伸ばしたままにします",
-     "膝は伸ばしたまま"),
-    ("bottom_foot", "foot_close",
-     "つま先を立てて床を押します",
-     "つま先を立てて床を押す"),
-    ("breathe", "main",
-     "呼吸は止めずに、下ろす時に吸って上げる時に吐きます",
-     "呼吸は止めない：下ろす時に吸う、上げる時に吐く"),
+    ("intro", "front", "手は肩幅よりやや広めに、体は一直線をキープ"),
+    ("top_head", "main", "視線はやや前の床を見る"),
+    ("top_neck", "main", "首は一直線をキープ"),
+    ("top_shoulder", "main", "肩をすくめない"),
+    ("bottom_elbow", "top", "肘は体から45度から60度外側に開く"),
+    ("bottom_chest", "main", "胸が床につくまで下ろす"),
+    ("bottom_hip", "main", "反り腰・丸まりに注意"),
+    ("bottom_knee", "main", "膝は伸ばしたまま"),
+    ("bottom_foot", "foot_close", "つま先を立てて床を押す"),
+    ("breathe", "main", "呼吸は止めない。下ろす時に吸う、上げる時に吐く"),
 ]
 
 
@@ -113,11 +95,11 @@ def main():
     timeline = []
     frame_cursor = 1
 
-    for name, camera, narration_text, display_text in REPS:
+    for name, camera, text in REPS:
         raw_path = os.path.join(NARRATION_DIR, f"{name}_raw.wav")
         final_path = os.path.join(NARRATION_DIR, f"{name}.wav")
-        print(f"合成中: {name} ({narration_text})")
-        synthesize(narration_text, raw_path)
+        print(f"合成中: {name} ({text})")
+        synthesize(text, raw_path)
         raw_duration = get_duration(raw_path)
 
         rep_frames = max(MIN_REP_FRAMES, math.ceil((raw_duration + 0.3) * FPS))
@@ -130,7 +112,7 @@ def main():
         timeline.append({
             "name": name,
             "camera": camera,
-            "text": display_text,
+            "text": text,
             "audio": os.path.relpath(final_path, SCRIPT_DIR).replace("\\", "/"),
             "start_frame": start_frame,
             "end_frame": end_frame,

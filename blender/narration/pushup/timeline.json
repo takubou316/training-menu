@@ -5,98 +5,98 @@
     "text": "手は肩幅よりやや広めに、体は一直線をキープ",
     "audio": "narration/pushup/intro.wav",
     "start_frame": 1,
-    "end_frame": 164,
+    "end_frame": 122,
     "start_sec": 0.0,
-    "end_sec": 6.7917
+    "end_sec": 5.0417
   },
   {
     "name": "top_head",
     "camera": "main",
     "text": "視線はやや前の床を見る",
     "audio": "narration/pushup/top_head.wav",
-    "start_frame": 164,
-    "end_frame": 236,
-    "start_sec": 6.7917,
-    "end_sec": 9.7917
+    "start_frame": 122,
+    "end_frame": 194,
+    "start_sec": 5.0417,
+    "end_sec": 8.0417
   },
   {
     "name": "top_neck",
     "camera": "main",
     "text": "首は一直線をキープ",
     "audio": "narration/pushup/top_neck.wav",
-    "start_frame": 236,
-    "end_frame": 308,
-    "start_sec": 9.7917,
-    "end_sec": 12.7917
+    "start_frame": 194,
+    "end_frame": 266,
+    "start_sec": 8.0417,
+    "end_sec": 11.0417
   },
   {
     "name": "top_shoulder",
     "camera": "main",
     "text": "肩をすくめない",
     "audio": "narration/pushup/top_shoulder.wav",
-    "start_frame": 308,
-    "end_frame": 380,
-    "start_sec": 12.7917,
-    "end_sec": 15.7917
+    "start_frame": 266,
+    "end_frame": 338,
+    "start_sec": 11.0417,
+    "end_sec": 14.0417
   },
   {
     "name": "bottom_elbow",
     "camera": "top",
-    "text": "肘は体から45〜60度外側に開く",
+    "text": "肘は体から45度から60度外側に開く",
     "audio": "narration/pushup/bottom_elbow.wav",
-    "start_frame": 380,
-    "end_frame": 497,
-    "start_sec": 15.7917,
-    "end_sec": 20.6667
+    "start_frame": 338,
+    "end_frame": 449,
+    "start_sec": 14.0417,
+    "end_sec": 18.6667
   },
   {
     "name": "bottom_chest",
     "camera": "main",
     "text": "胸が床につくまで下ろす",
     "audio": "narration/pushup/bottom_chest.wav",
-    "start_frame": 497,
-    "end_frame": 574,
-    "start_sec": 20.6667,
-    "end_sec": 23.875
+    "start_frame": 449,
+    "end_frame": 521,
+    "start_sec": 18.6667,
+    "end_sec": 21.6667
   },
   {
     "name": "bottom_hip",
     "camera": "main",
     "text": "反り腰・丸まりに注意",
     "audio": "narration/pushup/bottom_hip.wav",
-    "start_frame": 574,
-    "end_frame": 646,
-    "start_sec": 23.875,
-    "end_sec": 26.875
+    "start_frame": 521,
+    "end_frame": 593,
+    "start_sec": 21.6667,
+    "end_sec": 24.6667
   },
   {
     "name": "bottom_knee",
     "camera": "main",
     "text": "膝は伸ばしたまま",
     "audio": "narration/pushup/bottom_knee.wav",
-    "start_frame": 646,
-    "end_frame": 718,
-    "start_sec": 26.875,
-    "end_sec": 29.875
+    "start_frame": 593,
+    "end_frame": 665,
+    "start_sec": 24.6667,
+    "end_sec": 27.6667
   },
   {
     "name": "bottom_foot",
     "camera": "foot_close",
     "text": "つま先を立てて床を押す",
     "audio": "narration/pushup/bottom_foot.wav",
-    "start_frame": 718,
-    "end_frame": 790,
-    "start_sec": 29.875,
-    "end_sec": 32.875
+    "start_frame": 665,
+    "end_frame": 737,
+    "start_sec": 27.6667,
+    "end_sec": 30.6667
   },
   {
     "name": "breathe",
     "camera": "main",
-    "text": "呼吸は止めない：下ろす時に吸う、上げる時に吐く",
+    "text": "呼吸は止めない。下ろす時に吸う、上げる時に吐く",
     "audio": "narration/pushup/breathe.wav",
-    "start_frame": 790,
-    "end_frame": 904,
-    "start_sec": 32.875,
-    "end_sec": 37.625
+    "start_frame": 737,
+    "end_frame": 852,
+    "start_sec": 30.6667,
+    "end_sec": 35.4583
   }
 ]
