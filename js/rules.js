@@ -41,6 +41,12 @@ function exerciseCountForTime(minutes) {
   return found ? found.count : 6;
 }
 
+// RPE(自覚的運動強度)のスケール。レジスタンストレーニング向けのRPEは1〜10で、
+// 高強度側(6以降)は0.5刻みで「あと何レップできるか(Reps in Reserve)」を精緻に表現するのが一般的
+// （Zourdos et al., 2016, NSCA発行のStrength and Conditioning Journal掲載の
+// Repetitions in Reserve-based RPEスケールに基づく）。
+const RPE_SCALE = { min: 1, max: 10, step: 0.5, default: 7 };
+
 // 進捗（プログレッシブオーバーロード）の目安。
 // 直近セットが全て「目標レップ上限に到達 かつ RPE7以下（≒まだ余裕がある）」なら、次回は重量を少し上げる提案をする。
 // そうでなく目標レップ上限未満なら、まずは同重量でレップを増やす提案をする。
@@ -51,5 +57,5 @@ const PROGRESSION = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GOALS, LEVELS, exerciseCountForTime, PROGRESSION };
+  module.exports = { GOALS, LEVELS, exerciseCountForTime, PROGRESSION, RPE_SCALE };
 }

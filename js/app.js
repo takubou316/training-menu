@@ -108,19 +108,19 @@ function handleLogInput(e) {
   const set = currentSession.exercises[exIndex].sets[setIndex];
   set[field] = field === 'done' ? target.checked : target.value;
 
-  if (field === 'done' && target.checked) {
-    const restSec = currentSession.exercises[exIndex].restSec;
-    startRestTimer(restSec);
+  if (field !== 'done') {
+    const valueEl = target.parentElement.querySelector('.slider-value');
+    if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 }
 
 function handleFinishWorkout() {
   if (!currentSession) return;
+  stopHoldTimer();
   currentSession.durationSec = stopSessionTimer();
   finalizeSession(currentSession);
   currentSession = null;
   currentMenu = null;
-  hideRestTimer();
   renderHistory();
   showScreen('history');
 }
@@ -162,7 +162,12 @@ function init() {
       return;
     }
     const infoTrigger = e.target.closest('[data-info-toggle]');
-    if (infoTrigger) toggleInfoPanel(infoTrigger);
+    if (infoTrigger) {
+      toggleInfoPanel(infoTrigger);
+      return;
+    }
+    const holdTimerTrigger = e.target.closest('[data-hold-timer]');
+    if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
   });
   document.getElementById('demo-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-demo-close]')) closeDemoModal();
@@ -171,15 +176,11 @@ function init() {
     if (e.key === 'Escape') closeDemoModal();
   });
 
-  document.getElementById('rest-timer-skip').addEventListener('click', hideRestTimer);
-  document.getElementById('rest-timer-plus').addEventListener('click', () => adjustRestTimer(15));
-  document.getElementById('rest-timer-minus').addEventListener('click', () => adjustRestTimer(-15));
-
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'history') renderHistory();
-      hideRestTimer();
+      stopHoldTimer();
       stopSessionTimer();
       showScreen(target);
     });

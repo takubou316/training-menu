@@ -32,6 +32,22 @@
 記録画面ではセット番号が「W1」のように表示され、履歴・前回実績・総挙上量の計算からは除外される
 （`js/storage.js`の`findLastPerformance`と`js/workout-log.js`の`computeSessionVolume`で`isWarmup`を除外）。
 
+## タイマーまわりの方針
+
+セット完了ごとに自動で休憩カウントダウンを出す仕様は「メニュー作成中にまで出て邪魔」との指摘で撤去した。
+代わりに以下の2本立てにしている:
+- `js/session-timer.js`: トレーニング開始〜終了の経過時間を裏側で計測するだけで、画面には表示しない
+  （記録確定時に`durationSec`として保存し、履歴一覧にのみ表示する）。
+- `js/hold-timer.js`: プランクなど回数ではなく保持時間を計測する種目(`exercises-data.js`の`holdBased: true`)専用の
+  手動ストップウォッチ。セットの「秒」スライダー横の▶ボタンで開始/停止し、計測結果をスライダーに反映する。
+  ユーザーが明示的に操作した時だけ動くので、休憩タイマーのように勝手に出てくることはない。
+
+## 記録画面の入力方式
+
+重量・回数(または秒)・RPEはすべて`<input type="range">`のスライダー（数値の直接入力ではなく操作して選ぶ形）。
+RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。これはレジスタンストレーニング向けRPE
+（Reps in Reserveベース、Zourdos et al. 2016、NSCA発行のStrength and Conditioning Journal掲載）に基づく。
+
 ## ローカル起動
 
 `serve.bat` を実行（`python -m http.server 8081`）し、`http://localhost:8081` を開く。
@@ -46,6 +62,8 @@
 - `js/storage.js` — localStorageへの設定・記録の永続化、直近実績の取得
 - `js/workout-log.js` — 生成メニューから記録用セッションを作成し、前回実績を踏まえた提案を計算、記録確定処理
 - `js/ui.js` — DOM描画（状態は持たない）
+- `js/session-timer.js` — トレーニング全体の経過時間を裏側で計測（画面表示なし）
+- `js/hold-timer.js` — プランク等の保持時間計測用の手動ストップウォッチ
 - `js/app.js` — 起動処理・状態管理・画面遷移・各モジュールの結線（エントリポイント）
 - `manifest.json` / `service-worker.js` — PWA化（ホーム画面追加、静的アセットのオフラインキャッシュ）
 

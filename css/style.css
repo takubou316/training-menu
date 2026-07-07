@@ -52,39 +52,8 @@ html, body {
 .screen { display: none; }
 .screen.active { display: block; }
 
-#screen-log {
-  /* 休憩タイマーがfixedで下に重なるため、最後の要素(記録して終了ボタン)が隠れないよう余白を確保する */
-  padding-bottom: 76px;
-}
-
 h2 { font-size: 16px; margin: 0 0 16px; color: var(--text); }
 
-.log-header {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--bg);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 4px;
-  margin-bottom: 12px;
-}
-.log-header h2 { margin: 0; }
-
-.session-timer {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.2;
-}
-.session-timer-label { font-size: 11px; color: var(--text-dim); }
-#session-timer-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-}
 h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
 
 .field-group {
@@ -327,41 +296,77 @@ select {
 }
 
 .set-row {
-  display: grid;
-  grid-template-columns: 28px 1fr 1fr 1fr 32px;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
-.set-row .set-idx { font-size: 12px; color: var(--text-dim); text-align: center; }
-
-.set-row-warmup .set-idx { color: var(--accent); font-weight: 600; }
-.set-row-warmup input[type="number"] { opacity: 0.85; }
-
-.set-row input[type="number"] {
-  width: 100%;
-  padding: 8px 6px;
   background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 13px;
-  text-align: center;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+.set-row:last-child { margin-bottom: 0; }
+
+.set-row-warmup { opacity: 0.85; }
+.set-row-warmup .set-idx { color: var(--accent); font-weight: 600; }
+
+.set-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
 
-.set-row input[type="checkbox"] {
+.set-row .set-idx { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+
+.done-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  padding: 6px 4px;
+}
+.done-toggle input[type="checkbox"] {
   width: 22px;
   height: 22px;
 }
 
-.set-header {
-  display: grid;
-  grid-template-columns: 28px 1fr 1fr 1fr 32px;
-  gap: 6px;
-  font-size: 11px;
+.slider-field { margin-bottom: 10px; }
+.slider-field:last-child { margin-bottom: 0; }
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
   color: var(--text-dim);
   margin-bottom: 4px;
+}
+.slider-label .slider-value {
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider-field input[type="range"] {
+  width: 100%;
+  height: 36px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.hold-timer-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 8px;
+  background: none;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hold-timer-btn.active {
+  background: var(--accent);
+  color: #0b1210;
+  border-color: var(--accent);
 }
 
 .history-item {
@@ -378,70 +383,6 @@ select {
 .history-item .h-ex { font-size: 12px; color: var(--text-dim); margin: 4px 0; }
 
 .empty-text { color: var(--text-dim); font-size: 13px; text-align: center; padding: 24px 0; }
-
-.rest-timer {
-  position: fixed;
-  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 32px);
-  max-width: 448px;
-  background: var(--accent);
-  color: #0b1210;
-  border-radius: 12px;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  z-index: 60;
-}
-
-.rest-timer.rest-timer-done {
-  background: var(--danger);
-  animation: rest-timer-flash 0.6s ease-in-out infinite;
-}
-
-@keyframes rest-timer-flash {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-.rest-timer-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.rest-timer-label {
-  font-size: 11px;
-  font-weight: 600;
-  opacity: 0.8;
-}
-
-#rest-timer-value {
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.rest-timer-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.rest-timer-actions button {
-  border: none;
-  border-radius: 8px;
-  background: rgba(11, 18, 16, 0.15);
-  color: #0b1210;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 12px 12px;
-  min-height: 40px;
-  cursor: pointer;
-}
 
 .bottom-nav {
   position: fixed;

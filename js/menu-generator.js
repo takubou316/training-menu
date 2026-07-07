@@ -88,6 +88,7 @@ function buildSetPlan(exercise, level, goal) {
     note: exercise.note || '',
     description: exercise.description || '',
     demoMedia: exercise.demoMedia || null,
+    holdBased: exercise.holdBased || false,
   };
 }
 

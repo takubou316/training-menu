@@ -119,6 +119,22 @@ function renderMenu(menu) {
   `;
 }
 
+function formatSliderValue(field, value, holdBased) {
+  if (field === 'weight') return `${value} kg`;
+  if (field === 'reps') return holdBased ? `${value} 秒` : `${value} 回`;
+  if (field === 'rpe') return `RPE ${value}`;
+  return value;
+}
+
+function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml }) {
+  return `
+        <div class="slider-field">
+          <div class="slider-label"><span>${label}</span><span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
+          <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
+          ${extraHtml || ''}
+        </div>`;
+}
+
 function renderLog(session) {
   const container = document.getElementById('log-content');
   container.innerHTML = session.exercises
@@ -131,25 +147,36 @@ function renderLog(session) {
           ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}回　休憩${ex.restSec}秒</div>
+      <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}${ex.holdBased ? '秒' : '回'}　休憩${ex.restSec}秒</div>
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
-      <div class="set-header">
-        <span></span><span>重量(kg)</span><span>回数</span><span>RPE</span><span>完了</span>
-      </div>
       ${(() => {
         let warmupN = 0;
         let workingN = 0;
         return ex.sets
           .map((s, setIndex) => {
             const label = s.isWarmup ? `W${(warmupN += 1)}` : `${(workingN += 1)}`;
+            const weightField = ex.holdBased
+              ? ''
+              : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: 300, step: 0.5, value: s.weight });
+            const repsField = sliderFieldHtml({
+              exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
+              min: 0, max: ex.holdBased ? 120 : 50, step: ex.holdBased ? 5 : 1, value: s.reps, holdBased: ex.holdBased,
+              extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
+            });
+            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });
             return `
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}">
-          <span class="set-idx">${label}</span>
-          <input type="number" inputmode="decimal" step="0.5" min="0" value="${s.weight}" data-ex="${exIndex}" data-set="${setIndex}" data-field="weight">
-          <input type="number" inputmode="numeric" min="0" value="${s.reps}" data-ex="${exIndex}" data-set="${setIndex}" data-field="reps">
-          <input type="number" inputmode="numeric" min="1" max="10" value="${s.rpe}" data-ex="${exIndex}" data-set="${setIndex}" data-field="rpe">
-          <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
+          <div class="set-row-head">
+            <span class="set-idx">${label}</span>
+            <label class="done-toggle">
+              <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
+              完了
+            </label>
+          </div>
+          ${weightField}
+          ${repsField}
+          ${rpeField}
         </div>`;
           })
           .join('');

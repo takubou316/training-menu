@@ -141,9 +141,9 @@ const EXERCISES = [
     description: 'マシンでつま先立ちを繰り返す。かかとを下げた時にふくらはぎがしっかり伸びる範囲まで下ろす。' },
 
   // ===== 体幹・腹筋 =====
-  { id: 'plank', name: 'プランク', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'],
+  { id: 'plank', name: 'プランク', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'], holdBased: true,
     description: '肘とつま先で体を支え、頭からかかとまで一直線を保つ。お尻が上がったり腰が反ったりしないよう意識してキープする。' },
-  { id: 'side_plank', name: 'サイドプランク', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: true, riskAreas: ['手首', '肩'],
+  { id: 'side_plank', name: 'サイドプランク', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: true, riskAreas: ['手首', '肩'], holdBased: true,
     description: '横向きで肘と足の側面で体を支える。腰が落ちないよう体を一直線に保ってキープする。' },
   { id: 'crunch', name: 'クランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: [],
     description: '仰向けで膝を立て、肩甲骨が浮く程度に上体を丸める。首に力を入れて引っ張らないよう注意する。' },

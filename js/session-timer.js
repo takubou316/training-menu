@@ -1,5 +1,5 @@
 // トレーニングセッション全体の経過時間を計測するストップウォッチ。
-// 休憩タイマー(rest-timer.js)とは別に、開始から終了まで常にカウントアップし続ける。
+// 画面には表示せず、記録確定時にdurationSecとして保存するためだけに使う。
 
 let sessionTimerInterval = null;
 let sessionStartTime = null;

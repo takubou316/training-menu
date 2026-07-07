@@ -101,28 +101,10 @@
 
     <!-- ===== トレーニング記録画面 ===== -->
     <section id="screen-log" class="screen">
-      <div class="log-header">
-        <h2>トレーニング記録</h2>
-        <div class="session-timer">
-          <span class="session-timer-label">経過時間</span>
-          <span id="session-timer-value">00:00</span>
-        </div>
-      </div>
+      <h2>トレーニング記録</h2>
       <div id="log-content"></div>
       <button class="primary-btn" id="finish-workout-btn">記録して終了</button>
     </section>
-
-    <div id="rest-timer" class="rest-timer" hidden>
-      <div class="rest-timer-text">
-        <span class="rest-timer-label">休憩中</span>
-        <span id="rest-timer-value">00:00</span>
-      </div>
-      <div class="rest-timer-actions">
-        <button type="button" id="rest-timer-minus" aria-label="15秒減らす">-15</button>
-        <button type="button" id="rest-timer-plus" aria-label="15秒増やす">+15</button>
-        <button type="button" id="rest-timer-skip">スキップ</button>
-      </div>
-    </div>
 
     <!-- ===== 履歴画面 ===== -->
     <section id="screen-history" class="screen">
@@ -151,8 +133,8 @@
 <script src="js/storage.js"></script>
 <script src="js/workout-log.js"></script>
 <script src="js/ui.js"></script>
-<script src="js/rest-timer.js"></script>
 <script src="js/session-timer.js"></script>
+<script src="js/hold-timer.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

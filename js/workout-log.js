@@ -38,18 +38,21 @@ function createSessionFromMenu(menu) {
     cooldown: menu.cooldown,
     exercises: menu.main.map((item) => {
       const suggestion = buildSuggestion(item);
-      const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : null;
+      const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
+      const defaultReps = item.holdBased ? 20 : item.repsMin;
+      const defaultRpe = RPE_SCALE.default;
+      const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       const warmupSetEntries = Array.from({ length: item.warmupSets || 0 }, () => ({
-        weight: warmupWeight != null ? String(warmupWeight) : '',
-        reps: '',
-        rpe: '',
+        weight: String(warmupWeight),
+        reps: String(defaultReps),
+        rpe: String(defaultRpe),
         done: false,
         isWarmup: true,
       }));
       const workingSetEntries = Array.from({ length: item.sets }, () => ({
-        weight: suggestion.weight != null ? String(suggestion.weight) : '',
-        reps: '',
-        rpe: '',
+        weight: String(defaultWeight),
+        reps: String(defaultReps),
+        rpe: String(defaultRpe),
         done: false,
       }));
       return {
@@ -62,6 +65,7 @@ function createSessionFromMenu(menu) {
         repsMax: item.repsMax,
         description: item.description,
         demoMedia: item.demoMedia,
+        holdBased: item.holdBased,
         suggestion,
         sets: [...warmupSetEntries, ...workingSetEntries],
       };
