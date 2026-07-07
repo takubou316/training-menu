@@ -106,6 +106,11 @@ function handleLogInput(e) {
   const field = target.dataset.field;
   const set = currentSession.exercises[exIndex].sets[setIndex];
   set[field] = field === 'done' ? target.checked : target.value;
+
+  if (field === 'done' && target.checked) {
+    const restSec = currentSession.exercises[exIndex].restSec;
+    startRestTimer(restSec);
+  }
 }
 
 function handleFinishWorkout() {
@@ -113,6 +118,7 @@ function handleFinishWorkout() {
   finalizeSession(currentSession);
   currentSession = null;
   currentMenu = null;
+  hideRestTimer();
   renderHistory();
   showScreen('history');
 }
@@ -163,10 +169,15 @@ function init() {
     if (e.key === 'Escape') closeDemoModal();
   });
 
+  document.getElementById('rest-timer-skip').addEventListener('click', hideRestTimer);
+  document.getElementById('rest-timer-plus').addEventListener('click', () => adjustRestTimer(15));
+  document.getElementById('rest-timer-minus').addEventListener('click', () => adjustRestTimer(-15));
+
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'history') renderHistory();
+      hideRestTimer();
       showScreen(target);
     });
   });

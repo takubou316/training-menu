@@ -346,6 +346,69 @@ select {
 
 .empty-text { color: var(--text-dim); font-size: 13px; text-align: center; padding: 24px 0; }
 
+.rest-timer {
+  position: fixed;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 448px;
+  background: var(--accent);
+  color: #0b1210;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 60;
+}
+
+.rest-timer.rest-timer-done {
+  background: var(--danger);
+  animation: rest-timer-flash 0.6s ease-in-out infinite;
+}
+
+@keyframes rest-timer-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.rest-timer-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.rest-timer-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+#rest-timer-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rest-timer-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.rest-timer-actions button {
+  border: none;
+  border-radius: 8px;
+  background: rgba(11, 18, 16, 0.15);
+  color: #0b1210;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
 .bottom-nav {
   position: fixed;
   bottom: 0;
