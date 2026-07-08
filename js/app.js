@@ -129,11 +129,16 @@ function handleLogInput(e) {
   if (field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
     target.max = Number(target.max) + 20;
   }
+
+  if (field === 'done' && target.checked) {
+    startRestTimer(currentSession.exercises[exIndex].restSec);
+  }
 }
 
 function handleFinishWorkout() {
   if (!currentSession) return;
   stopHoldTimer();
+  endRestTimer();
   currentSession.durationSec = stopSessionTimer();
   finalizeSession(currentSession);
   currentSession = null;
@@ -199,11 +204,15 @@ function init() {
     if (e.key === 'Escape') closeDemoModal();
   });
 
+  document.getElementById('rest-timer-plus10').addEventListener('click', () => addRestTimerSeconds(10));
+  document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
+
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'history') renderHistory();
       stopHoldTimer();
+      endRestTimer();
       stopSessionTimer();
       showScreen(target);
     });

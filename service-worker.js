@@ -1,6 +1,6 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v4';
+const CACHE_NAME = 'training-menu-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   './js/ui.js',
   './js/session-timer.js',
   './js/hold-timer.js',
+  './js/rest-timer.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
