@@ -125,6 +125,10 @@ function handleLogInput(e) {
     const valueEl = target.parentElement.querySelector('.slider-value');
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
+
+  if (field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
+    target.max = Number(target.max) + 20;
+  }
 }
 
 function handleFinishWorkout() {
