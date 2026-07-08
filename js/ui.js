@@ -43,10 +43,8 @@ function closeDemoModal() {
 
 const PAIN_AREA_LABELS = { 肩: '肩', 腰: '腰', 膝: '膝', 手首: '手首' };
 
-function renderMenu(menu) {
-  const container = document.getElementById('menu-content');
-
-  const dynamicWarmupHtml = menu.warmup.dynamic
+function buildWarmupHtml(warmup) {
+  const dynamicWarmupHtml = warmup.dynamic
     .map((d) => `
     <div class="warmup-item">
       <div class="ex-header">
@@ -61,17 +59,42 @@ function renderMenu(menu) {
     </div>`)
     .join('');
 
+  return `
+    <div class="menu-block">
+      <h3>ウォームアップ</h3>
+      <div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>
+      ${dynamicWarmupHtml}
+      <div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>
+    </div>`;
+}
+
+function buildCooldownHtml(cooldown) {
+  return `
+    <div class="menu-block">
+      <div class="ex-header">
+        <h3 style="margin:0;">クールダウン</h3>
+        <div class="ex-icons">
+          <button type="button" class="icon-btn" data-info-toggle aria-label="クールダウンのやり方">ⓘ</button>
+        </div>
+      </div>
+      <ul>
+        ${cooldown.static.map((s) => `<li>${s.label}</li>`).join('')}
+        <li>${cooldown.general}</li>
+      </ul>
+      <div class="ex-info-panel" hidden>
+        ${cooldown.static.map((s) => `<p><strong>${s.label.split('（')[0]}</strong><br>${s.description}</p>`).join('')}
+      </div>
+    </div>`;
+}
+
+function renderMenu(menu) {
+  const container = document.getElementById('menu-content');
+
   const painNoteHtml = menu.params.painAreas && menu.params.painAreas.length > 0
     ? `<div class="menu-block"><div class="ex-note">気になる部位（${menu.params.painAreas.join('・')}）に負担がかかりやすい種目は除外して作成しています。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</div></div>`
     : '';
 
-  const warmupHtml = `
-    <div class="menu-block">
-      <h3>ウォームアップ</h3>
-      <div class="warmup-item"><div class="ex-meta">${menu.warmup.general}</div></div>
-      ${dynamicWarmupHtml}
-      <div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>
-    </div>`;
+  const warmupHtml = buildWarmupHtml(menu.warmup);
 
   const mainHtml = menu.main
     .map((item, i) => `
@@ -89,22 +112,7 @@ function renderMenu(menu) {
     </div>`)
     .join('');
 
-  const cooldownHtml = `
-    <div class="menu-block">
-      <div class="ex-header">
-        <h3 style="margin:0;">クールダウン</h3>
-        <div class="ex-icons">
-          <button type="button" class="icon-btn" data-info-toggle aria-label="クールダウンのやり方">ⓘ</button>
-        </div>
-      </div>
-      <ul>
-        ${menu.cooldown.static.map((s) => `<li>${s.label}</li>`).join('')}
-        <li>${menu.cooldown.general}</li>
-      </ul>
-      <div class="ex-info-panel" hidden>
-        ${menu.cooldown.static.map((s) => `<p><strong>${s.label.split('（')[0]}</strong><br>${s.description}</p>`).join('')}
-      </div>
-    </div>`;
+  const cooldownHtml = buildCooldownHtml(menu.cooldown);
 
   container.innerHTML = `
     <div class="menu-block">
@@ -144,7 +152,13 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
 
 function renderLog(session) {
   const container = document.getElementById('log-content');
-  container.innerHTML = session.exercises
+  const wuCdHtml = `
+    <details class="wu-cd-toggle">
+      <summary>ウォームアップ・クールダウンを見る</summary>
+      ${buildWarmupHtml(session.warmup)}
+      ${buildCooldownHtml(session.cooldown)}
+    </details>`;
+  const exercisesHtml = session.exercises
     .map((ex, exIndex) => `
     <div class="exercise-card">
       <div class="ex-header">
@@ -191,6 +205,7 @@ function renderLog(session) {
       })()}
     </div>`)
     .join('');
+  container.innerHTML = wuCdHtml + exercisesHtml;
 }
 
 function formatDate(iso) {
