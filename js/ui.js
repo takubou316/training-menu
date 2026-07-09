@@ -32,6 +32,14 @@ function openDemoModal(url) {
   modal.classList.add('open');
 }
 
+function openRpeInfoModal() {
+  document.getElementById('rpe-info-modal').classList.add('open');
+}
+
+function closeRpeInfoModal() {
+  document.getElementById('rpe-info-modal').classList.remove('open');
+}
+
 function closeDemoModal() {
   const modal = document.getElementById('demo-modal');
   const video = document.getElementById('demo-video');
@@ -108,10 +116,12 @@ function renderMenu(menu) {
         <div class="ex-icons">
           ${item.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
-          <button type="button" class="icon-btn" data-menu-move="up" data-menu-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
-          <button type="button" class="icon-btn" data-menu-move="down" data-menu-index="${i}" aria-label="下へ移動" ${i === menu.main.length - 1 ? 'disabled' : ''}>↓</button>
-          <button type="button" class="icon-btn" data-menu-remove data-menu-index="${i}" aria-label="この種目を削除">✕</button>
         </div>
+      </div>
+      <div class="ex-icons ex-icons-row2">
+        <button type="button" class="icon-btn" data-menu-move="up" data-menu-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="icon-btn" data-menu-move="down" data-menu-index="${i}" aria-label="下へ移動" ${i === menu.main.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="icon-btn" data-menu-remove data-menu-index="${i}" aria-label="この種目を削除">✕</button>
       </div>
       <div class="ex-meta">${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
@@ -148,9 +158,12 @@ function formatSliderValue(field, value, holdBased) {
 }
 
 function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml }) {
+  const labelHtml = field === 'rpe'
+    ? `<span>${label} <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span>`
+    : `<span>${label}</span>`;
   return `
         <div class="slider-field">
-          <div class="slider-label"><span>${label}</span><span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
+          <div class="slider-label">${labelHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
           <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
           ${extraHtml || ''}
         </div>`;
@@ -222,13 +235,11 @@ function renderCustomExerciseList(customExercises, customRestSec) {
       const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
       return `
     <div class="custom-exercise-item">
-      <div class="ex-header">
-        <div class="ex-name">${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
-        <div class="ex-icons">
-          <button type="button" class="icon-btn" data-custom-move="up" data-custom-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
-          <button type="button" class="icon-btn" data-custom-move="down" data-custom-index="${i}" aria-label="下へ移動" ${i === customExercises.length - 1 ? 'disabled' : ''}>↓</button>
-          <button type="button" class="custom-remove-btn" data-custom-remove-exercise="${ex.id}" aria-label="削除">✕</button>
-        </div>
+      <div class="ex-name">${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+      <div class="ex-icons ex-icons-row2">
+        <button type="button" class="icon-btn" data-custom-move="up" data-custom-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="icon-btn" data-custom-move="down" data-custom-index="${i}" aria-label="下へ移動" ${i === customExercises.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="custom-remove-btn" data-custom-remove-exercise="${ex.id}" aria-label="削除">✕</button>
       </div>
       <div class="slider-field">
         <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
@@ -264,10 +275,14 @@ function renderExercisePicker(query, isSelectedFn) {
 
 function renderLog(session) {
   const container = document.getElementById('log-content');
-  const wuCdHtml = `
+  const warmupHtml = `
     <details class="wu-cd-toggle">
-      <summary>ウォームアップ・クールダウンを見る</summary>
+      <summary>ウォームアップを見る</summary>
       ${buildWarmupHtml(session.warmup)}
+    </details>`;
+  const cooldownHtml = `
+    <details class="wu-cd-toggle">
+      <summary>クールダウンを見る</summary>
       ${buildCooldownHtml(session.cooldown)}
     </details>`;
   const exercisesHtml = session.exercises
@@ -293,9 +308,12 @@ function renderLog(session) {
             const weightField = ex.holdBased || !weightRange
               ? ''
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
+            // 回数スライダーは最初は10回までにしておき、右端で離すと10ずつ伸びる(handleLogInput参照)。
+            // ただし前回実績などで初期値が10を超えている場合はその値が隠れないよう初期maxを引き上げる。
+            const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Math.ceil(Number(s.reps) / 10) * 10);
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: ex.holdBased ? 120 : 30, step: ex.holdBased ? 5 : 10, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: repsInitialMax, step: ex.holdBased ? 5 : 10, value: s.reps, holdBased: ex.holdBased,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
             const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });
@@ -317,7 +335,7 @@ function renderLog(session) {
       })()}
     </div>`)
     .join('');
-  container.innerHTML = wuCdHtml + exercisesHtml;
+  container.innerHTML = warmupHtml + exercisesHtml + cooldownHtml;
 }
 
 function formatDate(iso) {

@@ -156,7 +156,6 @@ function openExercisePicker(target) {
   searchInput.value = '';
   renderExercisePicker('', isExercisePickerSelected);
   document.getElementById('exercise-picker-modal').hidden = false;
-  searchInput.focus();
 }
 
 function closeExercisePicker() {
@@ -329,7 +328,10 @@ function handleLogInput(e) {
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 
-  if (field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
+  // ドラッグ中(input)ではなく指を離した瞬間(change)にだけ上限を伸ばす。
+  // input時に伸ばすとドラッグの途中で上限が先回りして伸びてしまい、
+  // 「右端まで行って離すと+10」という直感的な挙動にならないため。
+  if (e.type === 'change' && field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
     target.max = Number(target.max) + 10;
   }
 
@@ -411,14 +413,20 @@ function init() {
     }
     const holdTimerTrigger = e.target.closest('[data-hold-timer]');
     if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
+    const rpeInfoTrigger = e.target.closest('[data-rpe-info-toggle]');
+    if (rpeInfoTrigger) openRpeInfoModal();
   });
   document.getElementById('demo-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-demo-close]')) closeDemoModal();
+  });
+  document.getElementById('rpe-info-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeDemoModal();
       closeExercisePicker();
+      closeRpeInfoModal();
     }
   });
 

@@ -101,8 +101,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   margin-bottom: 10px;
 }
 
-.custom-exercise-item .ex-header { margin-bottom: 8px; }
-.custom-exercise-item .ex-name { font-size: 15px; font-weight: 600; margin-bottom: 0; }
+.custom-exercise-item .ex-name { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
 
 .custom-remove-btn {
   width: 32px;
@@ -149,7 +148,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 #exercise-picker-close {
@@ -341,6 +340,11 @@ select {
   flex-shrink: 0;
 }
 
+.ex-icons-row2 {
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
 .icon-btn {
   width: 38px;
   height: 38px;
@@ -420,6 +424,57 @@ select {
   display: block;
   background: #000;
 }
+
+.rpe-info-content {
+  width: min(92vw, 420px);
+  max-height: 82vh;
+  overflow-y: auto;
+}
+
+.rpe-info-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.rpe-info-text {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.rpe-scale {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.rpe-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+}
+
+.rpe-num {
+  flex-shrink: 0;
+  width: 78px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.rpe-desc {
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.rpe-10 { background: #c0392b; color: #fff; }
+.rpe-9  { background: #d2691e; color: #fff; }
+.rpe-8  { background: #e0a030; color: #1a1a1a; }
+.rpe-7  { background: #c9b93f; color: #1a1a1a; }
+.rpe-6  { background: #9bc450; color: #1a1a1a; }
+.rpe-5  { background: #5cb85c; color: #fff; }
 
 .demo-close {
   position: absolute;
@@ -543,6 +598,24 @@ select {
   color: var(--text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.rpe-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 2px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+  vertical-align: -3px;
 }
 
 .slider-field input[type="range"] {

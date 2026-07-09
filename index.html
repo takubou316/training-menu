@@ -179,6 +179,23 @@
     </div>
     <div id="exercise-picker-list"></div>
   </div>
+
+  <div id="rpe-info-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-rpe-info-close></div>
+    <div class="demo-modal-content rpe-info-content">
+      <button class="demo-close" data-rpe-info-close aria-label="閉じる">×</button>
+      <h3 class="rpe-info-title">RPEとは</h3>
+      <p class="rpe-info-text">RPE(自覚的運動強度)は、そのセットが「あと何回できそうだったか」を1〜10の数字で自己評価するものです。数字が大きいほど限界に近い、きついセットだったことを表します。0.5刻みで、数字の間くらいの感覚も表せます。</p>
+      <div class="rpe-scale">
+        <div class="rpe-row rpe-10"><span class="rpe-num">RPE 10</span><span class="rpe-desc">限界。もう1回もできない</span></div>
+        <div class="rpe-row rpe-9"><span class="rpe-num">RPE 9</span><span class="rpe-desc">あと1回はできそう</span></div>
+        <div class="rpe-row rpe-8"><span class="rpe-num">RPE 8</span><span class="rpe-desc">あと2回はできそう</span></div>
+        <div class="rpe-row rpe-7"><span class="rpe-num">RPE 7</span><span class="rpe-desc">あと3回はできそう（まずはここを目安に）</span></div>
+        <div class="rpe-row rpe-6"><span class="rpe-num">RPE 6</span><span class="rpe-desc">あと4回以上できる。余裕あり</span></div>
+        <div class="rpe-row rpe-5"><span class="rpe-num">RPE 5以下</span><span class="rpe-desc">かなり軽い。ウォームアップ向き</span></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="js/exercises-data.js"></script>
