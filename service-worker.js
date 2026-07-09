@@ -1,6 +1,6 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v6';
+const CACHE_NAME = 'training-menu-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -37,8 +37,11 @@ self.addEventListener('fetch', (event) => {
 
   // ネットワーク優先: オンライン時は常に最新のコードを取得し、取れた分だけキャッシュを更新する。
   // オフライン時のみキャッシュにフォールバックする。
+  // cache: 'no-store' が必須: 指定しないとブラウザの通常HTTPキャッシュ(GitHub Pagesの
+  // Cache-Control: max-age=600)がそのまま使われてしまい、pushしても最大10分は
+  // 古いコードが表示され続けるバグがあった。
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
