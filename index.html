@@ -17,8 +17,23 @@
   </header>
 
   <main id="main">
-    <!-- ===== 設定画面 ===== -->
-    <section id="screen-setup" class="screen active">
+    <!-- ===== モード選択画面 ===== -->
+    <section id="screen-mode" class="screen active">
+      <h2>今日のメニューを作る</h2>
+      <div class="mode-choice">
+        <button type="button" class="mode-card" id="mode-request-btn">
+          <div class="mode-card-title">要望から作る</div>
+          <div class="mode-card-desc">部位・器具・時間などを選ぶと自動でメニューを組み立てます</div>
+        </button>
+        <button type="button" class="mode-card" id="mode-custom-btn">
+          <div class="mode-card-title">自分で作る</div>
+          <div class="mode-card-desc">種目・休憩時間などを自分で細かく決められます</div>
+        </button>
+      </div>
+    </section>
+
+    <!-- ===== 設定画面（要望から作る） ===== -->
+    <section id="screen-setup" class="screen">
       <h2>今日のメニューを作る</h2>
 
       <fieldset class="field-group precheck-group">
@@ -97,6 +112,20 @@
       <button class="primary-btn" id="generate-btn">メニューを作る</button>
     </section>
 
+    <!-- ===== 自分で作る画面 ===== -->
+    <section id="screen-custom" class="screen">
+      <h2>自分でメニューを作る</h2>
+
+      <div id="custom-wu-cd"></div>
+
+      <h3>種目（<span id="custom-exercise-count">0</span>個）</h3>
+      <div id="custom-exercise-list"></div>
+      <button type="button" class="secondary-btn" id="custom-add-exercise-btn">＋ 種目を追加</button>
+
+      <p class="error-text" id="custom-error"></p>
+      <button class="primary-btn" id="custom-generate-btn">このメニューで進む</button>
+    </section>
+
     <!-- ===== 生成されたメニュー画面 ===== -->
     <section id="screen-menu" class="screen">
       <h2>今日のメニュー</h2>
@@ -122,7 +151,7 @@
   </main>
 
   <nav class="bottom-nav">
-    <button class="nav-btn active" data-nav="setup">メニュー作成</button>
+    <button class="nav-btn active" data-nav="mode">メニュー作成</button>
     <button class="nav-btn" data-nav="history">記録一覧</button>
   </nav>
 
@@ -141,6 +170,14 @@
       <button type="button" id="rest-timer-plus10">+10秒</button>
       <button type="button" id="rest-timer-end">今すぐ終わる</button>
     </div>
+  </div>
+
+  <div id="exercise-picker-modal" class="exercise-picker-modal" hidden>
+    <div class="exercise-picker-header">
+      <input type="search" id="exercise-picker-search" placeholder="種目名で検索">
+      <button type="button" id="exercise-picker-close" aria-label="閉じる">×</button>
+    </div>
+    <div id="exercise-picker-list"></div>
   </div>
 </div>
 

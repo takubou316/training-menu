@@ -61,7 +61,7 @@ function createSessionFromMenu(menu, bodyWeightKg) {
     exercises: menu.main.map((item) => {
       const suggestion = buildSuggestion(item, bodyWeightKg);
       const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
-      const defaultReps = item.holdBased ? 20 : item.repsMin;
+      const defaultReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
       const defaultRpe = RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       const warmupSetEntries = Array.from({ length: item.warmupSets || 0 }, () => ({

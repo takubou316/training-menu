@@ -90,6 +90,10 @@ function buildCooldownHtml(cooldown) {
 function renderMenu(menu) {
   const container = document.getElementById('menu-content');
 
+  const goalBlockHtml = menu.params.custom
+    ? `<div class="menu-block"><h3>種目の組み方</h3><div class="ex-meta">自分で選んだ種目</div></div>`
+    : `<div class="menu-block"><h3>目的</h3><div class="ex-meta">${goalLabel(menu.params.goal)}</div></div>`;
+
   const painNoteHtml = menu.params.painAreas && menu.params.painAreas.length > 0
     ? `<div class="menu-block"><div class="ex-note">気になる部位（${menu.params.painAreas.join('・')}）に負担がかかりやすい種目は除外して作成しています。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</div></div>`
     : '';
@@ -104,6 +108,9 @@ function renderMenu(menu) {
         <div class="ex-icons">
           ${item.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
+          <button type="button" class="icon-btn" data-menu-move="up" data-menu-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="icon-btn" data-menu-move="down" data-menu-index="${i}" aria-label="下へ移動" ${i === menu.main.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="icon-btn" data-menu-remove data-menu-index="${i}" aria-label="この種目を削除">✕</button>
         </div>
       </div>
       <div class="ex-meta">${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
@@ -115,14 +122,13 @@ function renderMenu(menu) {
   const cooldownHtml = buildCooldownHtml(menu.cooldown);
 
   container.innerHTML = `
-    <div class="menu-block">
-      <h3>目的</h3>
-      <div class="ex-meta">${goalLabel(menu.params.goal)}</div>
-    </div>
+    ${goalBlockHtml}
     ${painNoteHtml}
     ${warmupHtml}
     <h3 style="margin-top:16px;">本編（${menu.main.length}種目）</h3>
     ${mainHtml}
+    <button type="button" class="secondary-btn" id="menu-add-exercise-btn">＋ 種目を追加</button>
+    <div style="height:16px;"></div>
     ${cooldownHtml}
   `;
 }
@@ -148,6 +154,112 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
           <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
           ${extraHtml || ''}
         </div>`;
+}
+
+// ===== 「自分で作る」モード / メニュー画面での種目追加で使う共通部品 =====
+
+function renderCustomWuCd(warmup, cooldown) {
+  const container = document.getElementById('custom-wu-cd');
+  if (!container) return;
+
+  if (warmup.dynamic.length === 0 && cooldown.static.length === 0) {
+    container.innerHTML = '<p class="hint-text">種目を追加すると、内容に応じたウォームアップ・クールダウンが自動で表示されます。</p>';
+    return;
+  }
+
+  const warmupItemsHtml = warmup.dynamic
+    .map((d, i) => `
+    <div class="warmup-item">
+      <div class="ex-header">
+        <div class="ex-meta">${d.label}</div>
+        <div class="ex-icons">
+          <button type="button" class="icon-btn" data-info-toggle aria-label="この動きの説明">ⓘ</button>
+          <button type="button" class="custom-remove-btn" data-custom-remove-warmup="${i}" aria-label="この項目を外す">✕</button>
+        </div>
+      </div>
+      <div class="ex-info-panel" hidden>
+        <p>${d.description}${d.forExercises.length ? `<br>→ このあとの「${d.forExercises.join('・')}」の準備。` : ''}</p>
+      </div>
+    </div>`)
+    .join('');
+
+  const cooldownItemsHtml = cooldown.static
+    .map((s, i) => `
+    <div class="warmup-item cd-item">
+      <div class="ex-header">
+        <div class="ex-meta">${s.label}</div>
+        <div class="ex-icons">
+          <button type="button" class="custom-remove-btn" data-custom-remove-cooldown="${i}" aria-label="この項目を外す">✕</button>
+        </div>
+      </div>
+    </div>`)
+    .join('');
+
+  container.innerHTML = `
+    <div class="menu-block">
+      <h3>ウォームアップ（自動）</h3>
+      ${warmupItemsHtml || '<p class="hint-text">自動提案なし</p>'}
+    </div>
+    <div class="menu-block">
+      <h3>クールダウン（自動）</h3>
+      ${cooldownItemsHtml || '<p class="hint-text">自動提案なし</p>'}
+    </div>`;
+}
+
+function renderCustomExerciseList(customExercises, customRestSec) {
+  const container = document.getElementById('custom-exercise-list');
+  const countEl = document.getElementById('custom-exercise-count');
+  if (countEl) countEl.textContent = customExercises.length;
+  if (!container) return;
+
+  if (customExercises.length === 0) {
+    container.innerHTML = '<p class="empty-text">まだ種目がありません。「＋ 種目を追加」から選んでください。</p>';
+    return;
+  }
+
+  container.innerHTML = customExercises
+    .map((ex, i) => {
+      const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
+      return `
+    <div class="custom-exercise-item">
+      <div class="ex-header">
+        <div class="ex-name">${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+        <div class="ex-icons">
+          <button type="button" class="icon-btn" data-custom-move="up" data-custom-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="icon-btn" data-custom-move="down" data-custom-index="${i}" aria-label="下へ移動" ${i === customExercises.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="custom-remove-btn" data-custom-remove-exercise="${ex.id}" aria-label="削除">✕</button>
+        </div>
+      </div>
+      <div class="slider-field">
+        <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
+        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
+      </div>
+    </div>`;
+    })
+    .join('');
+}
+
+function renderExercisePicker(query, isSelectedFn) {
+  const listEl = document.getElementById('exercise-picker-list');
+  const q = (query || '').trim().toLowerCase();
+  const matches = EXERCISES.filter((ex) => !q || ex.name.toLowerCase().includes(q));
+
+  if (matches.length === 0) {
+    listEl.innerHTML = '<div class="exercise-picker-empty">見つかりませんでした</div>';
+    return;
+  }
+
+  listEl.innerHTML = matches
+    .map((ex) => {
+      const muscleLabel = (ex.primary || []).map((m) => MUSCLE_GROUPS[m] || m).join('・');
+      const selected = isSelectedFn(ex.id);
+      return `
+    <button type="button" class="exercise-picker-item${selected ? ' selected' : ''}" data-picker-exercise="${ex.id}">
+      <span>${selected ? '✓ ' : ''}${ex.name}</span>
+      <span class="picker-item-muscle">${muscleLabel}</span>
+    </button>`;
+    })
+    .join('');
 }
 
 function renderLog(session) {
@@ -183,7 +295,7 @@ function renderLog(session) {
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: ex.holdBased ? 120 : 30, step: ex.holdBased ? 5 : 1, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: ex.holdBased ? 120 : 30, step: ex.holdBased ? 5 : 10, value: s.reps, holdBased: ex.holdBased,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
             const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });

@@ -155,18 +155,9 @@ function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
   return selected;
 }
 
-function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
-  let pool = filterByEquipment(EXERCISES, equipment);
-  pool = filterByPainAreas(pool, painAreas);
-  const exerciseCount = exerciseCountForTime(minutes);
-  const isFullBody = parts.includes('fullbody');
-
-  const chosen = isFullBody
-    ? pickFullBodyExercises(pool, exerciseCount)
-    : pickTargetedExercises(pool, parts, exerciseCount);
-
-  const main = chosen.map((ex) => buildSetPlan(ex, level, goal));
-
+// 選んだ種目一覧（EXERCISESの生データ）から、動作パターン・部位に応じたウォームアップ/クールダウンを組み立てる。
+// 「要望から作る」「自分で作る」どちらのモードからも同じロジックを使う。
+function buildWarmupAndCooldown(chosen) {
   const patternsUsed = new Set(chosen.map((ex) => ex.pattern));
   const musclesUsed = new Set(chosen.flatMap((ex) => ex.primary));
 
@@ -184,6 +175,45 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
     general: '深呼吸を意識しながら1〜2分クールダウン',
   };
 
+  return { warmup, cooldown };
+}
+
+// 「自分で作る」モード用。目的/レベルの選択がないため、セット数・レップ範囲は中級者・筋肥大相当の
+// 一般的な値で固定し、休憩時間だけユーザー指定(デフォルト90秒)を使う。
+function buildCustomSetPlan(exercise, restSec) {
+  return {
+    exerciseId: exercise.id,
+    name: exercise.name,
+    category: exercise.category,
+    primary: exercise.primary,
+    unilateral: exercise.unilateral,
+    sets: 3,
+    repsMin: 8,
+    repsMax: 12,
+    restSec,
+    warmupSets: exercise.category === 'compound' ? 1 : 0,
+    note: exercise.note || '',
+    description: exercise.description || '',
+    demoMedia: exercise.demoMedia || null,
+    holdBased: exercise.holdBased || false,
+    equipment: exercise.equipment,
+    bodyweightLoadFactor: exercise.bodyweightLoadFactor != null ? exercise.bodyweightLoadFactor : 1,
+  };
+}
+
+function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
+  let pool = filterByEquipment(EXERCISES, equipment);
+  pool = filterByPainAreas(pool, painAreas);
+  const exerciseCount = exerciseCountForTime(minutes);
+  const isFullBody = parts.includes('fullbody');
+
+  const chosen = isFullBody
+    ? pickFullBodyExercises(pool, exerciseCount)
+    : pickTargetedExercises(pool, parts, exerciseCount);
+
+  const main = chosen.map((ex) => buildSetPlan(ex, level, goal));
+  const { warmup, cooldown } = buildWarmupAndCooldown(chosen);
+
   return {
     warmup,
     main,
@@ -194,5 +224,5 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { generateMenu };
+  module.exports = { generateMenu, buildWarmupAndCooldown, buildCustomSetPlan };
 }
