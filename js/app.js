@@ -22,6 +22,179 @@ let customCooldown = { static: [], general: '' };
 // 種目ピッカーが今どちらの画面から開かれているか('custom' | 'menu')
 let exercisePickerTarget = null;
 
+// ===== 種目カードの長押し→ドラッグ並べ替え（スマホのホーム画面アイコンと同じ操作感） =====
+// 長押しで「入れ替えモード」に入り、カードがゆれる。ゆれている間はどのカードもそのまま
+// ドラッグして並べ替えできる（2つ目以降は長押し不要）。各カードの左上の×バッジで削除。
+// 「完了」を押すか、もう一度長押しすると通常モードに戻る。
+
+const REORDER_LONG_PRESS_MS = 450;
+const REORDER_MOVE_TOLERANCE = 10;
+
+function createReorderController({ stableContainer, listSelector, onReorder, onRemove }) {
+  let reorderMode = false;
+  let pressTimer = null;
+  let pressStart = null;
+  let pressItem = null;
+  let drag = null;
+
+  function listEl() {
+    if (!stableContainer) return null;
+    if (stableContainer.matches && stableContainer.matches(listSelector)) return stableContainer;
+    return stableContainer.querySelector(listSelector);
+  }
+
+  function items() {
+    const list = listEl();
+    return list ? Array.from(list.querySelectorAll(':scope > .reorder-item')) : [];
+  }
+
+  function applyModeClass() {
+    const list = listEl();
+    if (list) list.classList.toggle('reorder-mode', reorderMode);
+  }
+
+  function setReorderMode(on) {
+    reorderMode = on;
+    applyModeClass();
+  }
+
+  function clearPressTimer() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+  }
+
+  function beginDrag(item, pointerId) {
+    if (item.setPointerCapture) {
+      try { item.setPointerCapture(pointerId); } catch (err) { /* 対象外のポインタは無視 */ }
+    }
+    const els = items();
+    const originalOrder = els.map((el) => el.dataset.reorderKey);
+    drag = {
+      pointerId,
+      key: item.dataset.reorderKey,
+      el: item,
+      order: originalOrder.slice(),
+      originalIndex: Object.fromEntries(originalOrder.map((k, i) => [k, i])),
+      slotTop: els.map((el) => el.getBoundingClientRect().top),
+      slotHeight: els.map((el) => el.offsetHeight),
+      startClientY: null,
+    };
+    item.classList.add('reorder-dragging');
+    const list = listEl();
+    if (list) list.classList.add('dragging-active');
+  }
+
+  function updateDrag(clientY) {
+    if (!drag) return;
+    if (drag.startClientY == null) drag.startClientY = clientY;
+    const deltaY = clientY - drag.startClientY;
+    drag.el.style.transform = `translateY(${deltaY}px)`;
+
+    const draggedSlot = drag.originalIndex[drag.key];
+    const draggedCenter = drag.slotTop[draggedSlot] + drag.slotHeight[draggedSlot] / 2 + deltaY;
+
+    let targetSlot = drag.order.indexOf(drag.key);
+    let bestDist = Infinity;
+    drag.slotTop.forEach((top, i) => {
+      const center = top + drag.slotHeight[i] / 2;
+      const dist = Math.abs(center - draggedCenter);
+      if (dist < bestDist) {
+        bestDist = dist;
+        targetSlot = i;
+      }
+    });
+
+    const currentSlot = drag.order.indexOf(drag.key);
+    if (targetSlot !== currentSlot) {
+      drag.order.splice(currentSlot, 1);
+      drag.order.splice(targetSlot, 0, drag.key);
+    }
+
+    items().forEach((el) => {
+      if (el === drag.el) return;
+      const key = el.dataset.reorderKey;
+      const target = drag.slotTop[drag.order.indexOf(key)];
+      const orig = drag.slotTop[drag.originalIndex[key]];
+      const shift = target - orig;
+      el.style.transform = shift ? `translateY(${shift}px)` : '';
+    });
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    const finalOrder = drag.order.slice();
+    drag.el.classList.remove('reorder-dragging');
+    drag.el.style.transform = '';
+    items().forEach((el) => { el.style.transform = ''; });
+    const list = listEl();
+    if (list) list.classList.remove('dragging-active');
+    drag = null;
+    onReorder(finalOrder);
+  }
+
+  stableContainer.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.reorder-delete-badge')) return;
+    if (e.target.closest('input, button, a')) return;
+    const item = e.target.closest('.reorder-item');
+    const list = listEl();
+    if (!item || !list || !list.contains(item)) return;
+    pressStart = { x: e.clientX, y: e.clientY };
+    pressItem = item;
+    clearPressTimer();
+    if (reorderMode) {
+      beginDrag(item, e.pointerId);
+    } else {
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        if (!pressItem) return;
+        setReorderMode(true);
+        beginDrag(pressItem, e.pointerId);
+      }, REORDER_LONG_PRESS_MS);
+    }
+  });
+
+  stableContainer.addEventListener('pointermove', (e) => {
+    if (pressStart && !drag) {
+      if (Math.abs(e.clientX - pressStart.x) > REORDER_MOVE_TOLERANCE || Math.abs(e.clientY - pressStart.y) > REORDER_MOVE_TOLERANCE) {
+        clearPressTimer();
+        pressItem = null;
+      }
+    }
+    if (drag && drag.pointerId === e.pointerId) {
+      e.preventDefault();
+      updateDrag(e.clientY);
+    }
+  });
+
+  function handlePointerEnd(e) {
+    clearPressTimer();
+    pressItem = null;
+    pressStart = null;
+    if (drag && drag.pointerId === e.pointerId) endDrag();
+  }
+  stableContainer.addEventListener('pointerup', handlePointerEnd);
+  stableContainer.addEventListener('pointercancel', handlePointerEnd);
+
+  stableContainer.addEventListener('click', (e) => {
+    const badge = e.target.closest('.reorder-delete-badge');
+    if (badge) {
+      const item = badge.closest('.reorder-item');
+      if (item) onRemove(item.dataset.reorderKey);
+      return;
+    }
+    if (e.target.closest('[data-reorder-done]')) setReorderMode(false);
+  });
+
+  return {
+    reapplyAfterRender() { applyModeClass(); },
+  };
+}
+
+let menuReorderController = null;
+let customReorderController = null;
+
 function findExerciseById(id) {
   return EXERCISES.find((ex) => ex.id === id);
 }
@@ -64,6 +237,7 @@ function recomputeCustomWarmupCooldown() {
 function renderCustomScreen() {
   recomputeCustomWarmupCooldown();
   renderCustomExerciseList(customExercises, customRestSec);
+  if (customReorderController) customReorderController.reapplyAfterRender();
 }
 
 function addCustomExercise(id) {
@@ -80,24 +254,21 @@ function removeCustomExercise(id) {
   renderCustomScreen();
 }
 
-function moveCustomExercise(index, direction) {
-  const target = direction === 'up' ? index - 1 : index + 1;
-  if (target < 0 || target >= customExercises.length) return;
-  [customExercises[index], customExercises[target]] = [customExercises[target], customExercises[index]];
+function reorderCustomExercises(keyOrder) {
+  const byId = Object.fromEntries(customExercises.map((ex) => [ex.id, ex]));
+  customExercises = keyOrder.map((key) => byId[key]).filter(Boolean);
   renderCustomExerciseList(customExercises, customRestSec);
+  if (customReorderController) customReorderController.reapplyAfterRender();
 }
 
 function wireCustomScreen() {
   document.getElementById('custom-add-exercise-btn').addEventListener('click', () => openExercisePicker('custom'));
 
-  document.getElementById('custom-exercise-list').addEventListener('click', (e) => {
-    const moveBtn = e.target.closest('[data-custom-move]');
-    if (moveBtn) {
-      moveCustomExercise(Number(moveBtn.dataset.customIndex), moveBtn.dataset.customMove);
-      return;
-    }
-    const removeBtn = e.target.closest('[data-custom-remove-exercise]');
-    if (removeBtn) removeCustomExercise(removeBtn.dataset.customRemoveExercise);
+  customReorderController = createReorderController({
+    stableContainer: document.getElementById('custom-exercise-list'),
+    listSelector: '#custom-exercise-list',
+    onReorder: reorderCustomExercises,
+    onRemove: removeCustomExercise,
   });
 
   document.getElementById('custom-exercise-list').addEventListener('input', (e) => {
@@ -137,7 +308,7 @@ function wireCustomScreen() {
       generatedAt: new Date().toISOString(),
       params: { custom: true },
     };
-    renderMenu(currentMenu);
+    renderMenuScreen();
     showScreen('menu');
   });
 }
@@ -196,6 +367,31 @@ function recomputeMenuWarmupCooldown() {
   currentMenu.cooldown = cooldown;
 }
 
+function renderMenuScreen() {
+  renderMenu(currentMenu);
+  if (!menuReorderController) {
+    menuReorderController = createReorderController({
+      stableContainer: document.getElementById('menu-content'),
+      listSelector: '#menu-exercise-list',
+      onReorder: reorderMenuMain,
+      onRemove: removeMenuExercise,
+    });
+  }
+  menuReorderController.reapplyAfterRender();
+}
+
+function reorderMenuMain(keyOrder) {
+  const byKey = Object.fromEntries(currentMenu.main.map((item) => [item.exerciseId, item]));
+  currentMenu.main = keyOrder.map((key) => byKey[key]).filter(Boolean);
+  renderMenuScreen();
+}
+
+function removeMenuExercise(exerciseId) {
+  currentMenu.main = currentMenu.main.filter((item) => item.exerciseId !== exerciseId);
+  recomputeMenuWarmupCooldown();
+  renderMenuScreen();
+}
+
 function toggleMenuExercise(id) {
   const existingIndex = currentMenu.main.findIndex((item) => item.exerciseId === id);
   if (existingIndex >= 0) {
@@ -209,31 +405,13 @@ function toggleMenuExercise(id) {
     currentMenu.main.push(plan);
   }
   recomputeMenuWarmupCooldown();
-  renderMenu(currentMenu);
+  renderMenuScreen();
 }
 
 function wireMenuScreen() {
   document.getElementById('menu-content').addEventListener('click', (e) => {
     const addBtn = e.target.closest('#menu-add-exercise-btn');
-    if (addBtn) {
-      openExercisePicker('menu');
-      return;
-    }
-    const moveBtn = e.target.closest('[data-menu-move]');
-    if (moveBtn) {
-      const index = Number(moveBtn.dataset.menuIndex);
-      const target = moveBtn.dataset.menuMove === 'up' ? index - 1 : index + 1;
-      if (target < 0 || target >= currentMenu.main.length) return;
-      [currentMenu.main[index], currentMenu.main[target]] = [currentMenu.main[target], currentMenu.main[index]];
-      renderMenu(currentMenu);
-      return;
-    }
-    const removeBtn = e.target.closest('[data-menu-remove]');
-    if (removeBtn) {
-      currentMenu.main.splice(Number(removeBtn.dataset.menuIndex), 1);
-      recomputeMenuWarmupCooldown();
-      renderMenu(currentMenu);
-    }
+    if (addBtn) openExercisePicker('menu');
   });
 }
 
@@ -299,7 +477,7 @@ function handleGenerate() {
     errorEl.textContent = '選んだ条件に合う種目が見つかりませんでした。器具や部位を見直してください。';
     return;
   }
-  renderMenu(currentMenu);
+  renderMenuScreen();
   showScreen('menu');
 }
 

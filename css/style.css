@@ -103,6 +103,97 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
 
 .custom-exercise-item .ex-name { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
 
+/* ===== 長押しで並べ替え・×で削除（ホーム画面アイコンと同じ操作感） ===== */
+
+.reorder-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-height: 28px;
+}
+
+.reorder-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.reorder-list.reorder-mode .reorder-hint {
+  display: none;
+}
+
+.reorder-done-btn {
+  display: none;
+  padding: 6px 16px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.reorder-list.reorder-mode .reorder-done-btn {
+  display: inline-flex;
+}
+
+.reorder-item {
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.reorder-delete-badge {
+  display: none;
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  background: #e5484d;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+}
+
+.reorder-list.reorder-mode .reorder-delete-badge {
+  display: flex;
+}
+
+.reorder-list.reorder-mode .reorder-item {
+  animation: reorder-jiggle 0.25s infinite ease-in-out;
+}
+
+.reorder-list.reorder-mode .reorder-item:nth-child(even) {
+  animation-delay: -0.125s;
+}
+
+.reorder-list .reorder-item.reorder-dragging {
+  animation: none;
+  touch-action: none;
+  z-index: 10;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.reorder-list.dragging-active .reorder-item:not(.reorder-dragging) {
+  animation: none;
+  transition: transform 0.15s ease;
+}
+
+@keyframes reorder-jiggle {
+  0% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+  100% { transform: rotate(-1deg); }
+}
+
 .custom-remove-btn {
   width: 32px;
   height: 32px;
@@ -338,11 +429,6 @@ select {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
-}
-
-.ex-icons-row2 {
-  justify-content: flex-end;
-  margin-bottom: 4px;
 }
 
 .icon-btn {

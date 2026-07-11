@@ -108,9 +108,10 @@ function renderMenu(menu) {
 
   const warmupHtml = buildWarmupHtml(menu.warmup);
 
-  const mainHtml = menu.main
+  const mainItemsHtml = menu.main
     .map((item, i) => `
-    <div class="menu-block">
+    <div class="menu-block reorder-item" data-reorder-key="${item.exerciseId}">
+      <button type="button" class="reorder-delete-badge" aria-label="この種目を削除">×</button>
       <div class="ex-header">
         <div class="ex-name">${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
         <div class="ex-icons">
@@ -118,16 +119,20 @@ function renderMenu(menu) {
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-icons ex-icons-row2">
-        <button type="button" class="icon-btn" data-menu-move="up" data-menu-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" class="icon-btn" data-menu-move="down" data-menu-index="${i}" aria-label="下へ移動" ${i === menu.main.length - 1 ? 'disabled' : ''}>↓</button>
-        <button type="button" class="icon-btn" data-menu-remove data-menu-index="${i}" aria-label="この種目を削除">✕</button>
-      </div>
       <div class="ex-meta">${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
     .join('');
+
+  const mainHtml = `
+    <div class="reorder-list" id="menu-exercise-list">
+      <div class="reorder-toolbar">
+        <span class="reorder-hint">カードを長押しすると並べ替え・削除ができます</span>
+        <button type="button" class="reorder-done-btn" data-reorder-done>完了</button>
+      </div>
+      ${mainItemsHtml}
+    </div>`;
 
   const cooldownHtml = buildCooldownHtml(menu.cooldown);
 
@@ -230,17 +235,13 @@ function renderCustomExerciseList(customExercises, customRestSec) {
     return;
   }
 
-  container.innerHTML = customExercises
+  const itemsHtml = customExercises
     .map((ex, i) => {
       const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
       return `
-    <div class="custom-exercise-item">
+    <div class="custom-exercise-item reorder-item" data-reorder-key="${ex.id}">
+      <button type="button" class="reorder-delete-badge" aria-label="この種目を削除">×</button>
       <div class="ex-name">${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
-      <div class="ex-icons ex-icons-row2">
-        <button type="button" class="icon-btn" data-custom-move="up" data-custom-index="${i}" aria-label="上へ移動" ${i === 0 ? 'disabled' : ''}>↑</button>
-        <button type="button" class="icon-btn" data-custom-move="down" data-custom-index="${i}" aria-label="下へ移動" ${i === customExercises.length - 1 ? 'disabled' : ''}>↓</button>
-        <button type="button" class="custom-remove-btn" data-custom-remove-exercise="${ex.id}" aria-label="削除">✕</button>
-      </div>
       <div class="slider-field">
         <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
         <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
@@ -248,6 +249,13 @@ function renderCustomExerciseList(customExercises, customRestSec) {
     </div>`;
     })
     .join('');
+
+  container.innerHTML = `
+    <div class="reorder-toolbar">
+      <span class="reorder-hint">カードを長押しすると並べ替え・削除ができます</span>
+      <button type="button" class="reorder-done-btn" data-reorder-done>完了</button>
+    </div>
+    ${itemsHtml}`;
 }
 
 function renderExercisePicker(query, isSelectedFn) {
@@ -309,8 +317,10 @@ function renderLog(session) {
               ? ''
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
             // 回数スライダーは最初は10回までにしておき、右端で離すと10ずつ伸びる(handleLogInput参照)。
-            // ただし前回実績などで初期値が10を超えている場合はその値が隠れないよう初期maxを引き上げる。
-            const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Math.ceil(Number(s.reps) / 10) * 10);
+            // ただし初期値ちょうどをmaxにすると「つまみが最初から右端に張り付いて動かせる幅がない」
+            // 状態になり、指で触ってもほぼ反応しない(選べる位置が0とmaxの2箇所しかなくなる)ため、
+            // 常に現在値より1段(10)上まで動かせる余白を持たせる。
+            const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Number(s.reps) + 10);
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
               min: 0, max: repsInitialMax, step: ex.holdBased ? 5 : 10, value: s.reps, holdBased: ex.holdBased,
