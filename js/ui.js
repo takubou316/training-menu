@@ -12,6 +12,12 @@ function goalLabel(goalKey) {
   return GOALS[goalKey] ? GOALS[goalKey].label : goalKey;
 }
 
+// 種目名の左に置く★お気に入りトグル。表示箇所を問わず共通で使う。
+function favoriteStarHtml(exerciseId) {
+  const fav = isFavoriteExercise(exerciseId);
+  return `<button type="button" class="fav-star${fav ? ' active' : ''}" data-fav-toggle="${exerciseId}" aria-label="${fav ? 'お気に入りから外す' : 'お気に入りに追加'}">${fav ? '★' : '☆'}</button>`;
+}
+
 function toggleInfoPanel(button) {
   const panel = button.closest('.menu-block, .exercise-card, .warmup-item').querySelector('.ex-info-panel');
   if (!panel) return;
@@ -113,7 +119,7 @@ function renderMenu(menu) {
     <div class="menu-block reorder-item" data-reorder-key="${item.exerciseId}">
       <button type="button" class="reorder-delete-badge" aria-label="この種目を削除">×</button>
       <div class="ex-header">
-        <div class="ex-name">${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
+        <div class="ex-name">${favoriteStarHtml(item.exerciseId)}${i + 1}. ${item.name}${item.unilateral ? '（左右それぞれ）' : ''}</div>
         <div class="ex-icons">
           ${item.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
@@ -241,7 +247,7 @@ function renderCustomExerciseList(customExercises, customRestSec) {
       return `
     <div class="custom-exercise-item reorder-item" data-reorder-key="${ex.id}">
       <button type="button" class="reorder-delete-badge" aria-label="この種目を削除">×</button>
-      <div class="ex-name">${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+      <div class="ex-name">${favoriteStarHtml(ex.id)}${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
       <div class="slider-field">
         <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
         <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
@@ -258,13 +264,27 @@ function renderCustomExerciseList(customExercises, customRestSec) {
     ${itemsHtml}`;
 }
 
-function renderExercisePicker(query, isSelectedFn) {
+function renderExercisePicker(query, isSelectedFn, filterMode) {
   const listEl = document.getElementById('exercise-picker-list');
   const q = (query || '').trim().toLowerCase();
-  const matches = EXERCISES.filter((ex) => !q || ex.name.toLowerCase().includes(q));
+  let pool = EXERCISES;
+  if (filterMode === 'favorites') {
+    const favorites = new Set(loadFavorites());
+    pool = EXERCISES.filter((ex) => favorites.has(ex.id));
+  } else if (filterMode === 'recent') {
+    const recentIds = recentExerciseIds();
+    const byId = Object.fromEntries(EXERCISES.map((ex) => [ex.id, ex]));
+    pool = recentIds.map((id) => byId[id]).filter(Boolean);
+  }
+  const matches = pool.filter((ex) => !q || ex.name.toLowerCase().includes(q));
 
   if (matches.length === 0) {
-    listEl.innerHTML = '<div class="exercise-picker-empty">見つかりませんでした</div>';
+    const emptyMessage = filterMode === 'favorites'
+      ? 'お気に入りの種目がありません。★を押すと登録できます'
+      : filterMode === 'recent'
+        ? 'まだ実施した種目がありません'
+        : '見つかりませんでした';
+    listEl.innerHTML = `<div class="exercise-picker-empty">${emptyMessage}</div>`;
     return;
   }
 
@@ -273,10 +293,13 @@ function renderExercisePicker(query, isSelectedFn) {
       const muscleLabel = (ex.primary || []).map((m) => MUSCLE_GROUPS[m] || m).join('・');
       const selected = isSelectedFn(ex.id);
       return `
-    <button type="button" class="exercise-picker-item${selected ? ' selected' : ''}" data-picker-exercise="${ex.id}">
-      <span>${selected ? '✓ ' : ''}${ex.name}</span>
-      <span class="picker-item-muscle">${muscleLabel}</span>
-    </button>`;
+    <div class="exercise-picker-item${selected ? ' selected' : ''}">
+      ${favoriteStarHtml(ex.id)}
+      <button type="button" class="exercise-picker-item-main" data-picker-exercise="${ex.id}">
+        <span>${selected ? '✓ ' : ''}${ex.name}</span>
+        <span class="picker-item-muscle">${muscleLabel}</span>
+      </button>
+    </div>`;
     })
     .join('');
 }
@@ -297,7 +320,7 @@ function renderLog(session) {
     .map((ex, exIndex) => `
     <div class="exercise-card">
       <div class="ex-header">
-        <div class="ex-name">${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
+        <div class="ex-name">${favoriteStarHtml(ex.exerciseId)}${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
         <div class="ex-icons">
           ${ex.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
           ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}

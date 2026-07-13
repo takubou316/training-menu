@@ -21,6 +21,8 @@ let customCooldown = { static: [], general: '' };
 
 // 種目ピッカーが今どちらの画面から開かれているか('custom' | 'menu')
 let exercisePickerTarget = null;
+// 種目ピッカーの絞り込みモード('all' | 'favorites' | 'recent')
+let exercisePickerFilter = 'all';
 
 // ===== 種目カードの長押し→ドラッグ並べ替え（スマホのホーム画面アイコンと同じ操作感） =====
 // 長押しで「入れ替えモード」に入り、カードがゆれる。ゆれている間はどのカードもそのまま
@@ -334,11 +336,19 @@ function isExercisePickerSelected(id) {
   return false;
 }
 
+function renderExercisePickerNow() {
+  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter);
+}
+
 function openExercisePicker(target) {
   exercisePickerTarget = target;
+  exercisePickerFilter = 'all';
+  document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.pickerFilter === 'all');
+  });
   const searchInput = document.getElementById('exercise-picker-search');
   searchInput.value = '';
-  renderExercisePicker('', isExercisePickerSelected);
+  renderExercisePickerNow();
   document.getElementById('exercise-picker-modal').hidden = false;
 }
 
@@ -357,15 +367,26 @@ function handleExercisePickerSelect(id) {
   } else if (exercisePickerTarget === 'menu') {
     toggleMenuExercise(id);
   }
-  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected);
+  renderExercisePickerNow();
 }
 
 function wireExercisePicker() {
-  document.getElementById('exercise-picker-search').addEventListener('input', (e) => {
-    renderExercisePicker(e.target.value, isExercisePickerSelected);
-  });
+  document.getElementById('exercise-picker-search').addEventListener('input', renderExercisePickerNow);
   document.getElementById('exercise-picker-close').addEventListener('click', closeExercisePicker);
+  document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      exercisePickerFilter = btn.dataset.pickerFilter;
+      document.querySelectorAll('.picker-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      renderExercisePickerNow();
+    });
+  });
   document.getElementById('exercise-picker-list').addEventListener('click', (e) => {
+    const favBtn = e.target.closest('[data-fav-toggle]');
+    if (favBtn) {
+      toggleFavoriteExercise(favBtn.dataset.favToggle);
+      renderExercisePickerNow();
+      return;
+    }
     const item = e.target.closest('[data-picker-exercise]');
     if (item) handleExercisePickerSelect(item.dataset.pickerExercise);
   });
@@ -606,6 +627,19 @@ function init() {
     if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
     const rpeInfoTrigger = e.target.closest('[data-rpe-info-toggle]');
     if (rpeInfoTrigger) openRpeInfoModal();
+    const favTrigger = e.target.closest('[data-fav-toggle]');
+    if (favTrigger) {
+      const id = favTrigger.dataset.favToggle;
+      const favorites = toggleFavoriteExercise(id);
+      const isFav = favorites.includes(id);
+      // その種目の★はどの画面(裏で非表示になっている画面も含む)にあっても
+      // まとめて見た目を更新する。一覧の並び自体は変わらないので全体再描画は不要。
+      document.querySelectorAll(`[data-fav-toggle="${CSS.escape(id)}"]`).forEach((btn) => {
+        btn.textContent = isFav ? '★' : '☆';
+        btn.classList.toggle('active', isFav);
+        btn.setAttribute('aria-label', isFav ? 'お気に入りから外す' : 'お気に入りに追加');
+      });
+    }
   });
   document.getElementById('demo-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-demo-close]')) closeDemoModal();

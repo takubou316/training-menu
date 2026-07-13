@@ -255,6 +255,28 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   cursor: pointer;
 }
 
+.exercise-picker-filters {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+
+.picker-filter-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.picker-filter-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 #exercise-picker-list {
   flex: 1;
   overflow-y: auto;
@@ -263,14 +285,53 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
 
 .exercise-picker-item {
   width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* .ex-nameの文中に置く小さい版がデフォルト。種目ピッカーの一覧だけタップ領域を広げる。 */
+.fav-star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-right: 2px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  line-height: 1;
+  vertical-align: -3px;
+  cursor: pointer;
+}
+
+.fav-star.active {
+  color: #f5b301;
+}
+
+.exercise-picker-item .fav-star {
+  width: 32px;
+  height: 44px;
+  margin-right: 0;
+  font-size: 18px;
+  vertical-align: middle;
+}
+
+.exercise-picker-item-main {
+  flex: 1;
+  min-width: 0;
   text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 12px 8px;
+  padding: 12px 8px 12px 0;
   border: none;
-  border-bottom: 1px solid var(--border);
   background: none;
   color: var(--text);
   font-size: 14px;
@@ -282,7 +343,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   color: var(--text-dim);
 }
 
-.exercise-picker-item.selected {
+.exercise-picker-item.selected .exercise-picker-item-main {
   color: var(--accent);
   font-weight: 600;
 }

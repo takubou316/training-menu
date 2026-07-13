@@ -3,6 +3,7 @@
 const STORAGE_KEYS = {
   settings: 'training-menu:settings',
   history: 'training-menu:history',
+  favorites: 'training-menu:favorites',
 };
 
 function loadSettings() {
@@ -48,6 +49,48 @@ function findLastPerformance(exerciseId) {
   return null;
 }
 
+function loadFavorites() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.favorites);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function isFavoriteExercise(exerciseId) {
+  return loadFavorites().includes(exerciseId);
+}
+
+function toggleFavoriteExercise(exerciseId) {
+  const favorites = loadFavorites();
+  const idx = favorites.indexOf(exerciseId);
+  if (idx >= 0) favorites.splice(idx, 1);
+  else favorites.push(exerciseId);
+  localStorage.setItem(STORAGE_KEYS.favorites, JSON.stringify(favorites));
+  return favorites;
+}
+
+// 記録履歴(新しい順)から、実施したことのある種目IDを直近順・重複なしで返す。
+function recentExerciseIds(limit) {
+  const history = loadHistory();
+  const seen = new Set();
+  const result = [];
+  for (const session of history) {
+    for (const ex of session.exercises) {
+      if (!seen.has(ex.exerciseId)) {
+        seen.add(ex.exerciseId);
+        result.push(ex.exerciseId);
+        if (limit && result.length >= limit) return result;
+      }
+    }
+  }
+  return result;
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { loadSettings, saveSettings, loadHistory, saveSession, findLastPerformance };
+  module.exports = {
+    loadSettings, saveSettings, loadHistory, saveSession, findLastPerformance,
+    loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
+  };
 }
