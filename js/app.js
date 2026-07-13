@@ -69,6 +69,7 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
     if (item.setPointerCapture) {
       try { item.setPointerCapture(pointerId); } catch (err) { /* 対象外のポインタは無視 */ }
     }
+    item.style.touchAction = 'none';
     const els = items();
     const originalOrder = els.map((el) => el.dataset.reorderKey);
     drag = {
@@ -135,6 +136,7 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
   }
 
   stableContainer.addEventListener('pointerdown', (e) => {
+    if (drag) return; // 既にドラッグ中は多重タッチを無視（指を2本置いた時の誤動作防止）
     if (e.target.closest('.reorder-delete-badge')) return;
     if (e.target.closest('input, button, a')) return;
     const item = e.target.closest('.reorder-item');
@@ -142,6 +144,11 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
     if (!item || !list || !list.contains(item)) return;
     pressStart = { x: e.clientX, y: e.clientY };
     pressItem = item;
+    // 長押し待ちの間から即座にtouch-action:noneを効かせる。iOSは指が少しでも動いた
+    // 時点でスクロールするかどうかを確定してしまうため、長押し成立(beginDrag)を
+    // 待ってから付けるのでは遅く、ドラッグ中に画面ごとスクロールしてしまう。
+    // (長押しがキャンセルされた場合はpressCanceledで元に戻す)
+    item.style.touchAction = 'none';
     clearPressTimer();
     if (reorderMode) {
       beginDrag(item, e.pointerId);
@@ -155,27 +162,33 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
     }
   });
 
-  stableContainer.addEventListener('pointermove', (e) => {
+  function cancelPendingPress() {
+    clearPressTimer();
+    if (pressItem && !drag) pressItem.style.touchAction = '';
+    pressItem = null;
+    pressStart = null;
+  }
+
+  // move/up/cancelはcontainerではなくdocumentで拾う。ドラッグ中に指がリストの外
+  // (下部ナビや画面端)まで動いても追跡を取りこぼさないようにするため。
+  document.addEventListener('pointermove', (e) => {
     if (pressStart && !drag) {
       if (Math.abs(e.clientX - pressStart.x) > REORDER_MOVE_TOLERANCE || Math.abs(e.clientY - pressStart.y) > REORDER_MOVE_TOLERANCE) {
-        clearPressTimer();
-        pressItem = null;
+        cancelPendingPress();
       }
     }
     if (drag && drag.pointerId === e.pointerId) {
       e.preventDefault();
       updateDrag(e.clientY);
     }
-  });
+  }, { passive: false });
 
   function handlePointerEnd(e) {
-    clearPressTimer();
-    pressItem = null;
-    pressStart = null;
+    cancelPendingPress();
     if (drag && drag.pointerId === e.pointerId) endDrag();
   }
-  stableContainer.addEventListener('pointerup', handlePointerEnd);
-  stableContainer.addEventListener('pointercancel', handlePointerEnd);
+  document.addEventListener('pointerup', handlePointerEnd);
+  document.addEventListener('pointercancel', handlePointerEnd);
 
   stableContainer.addEventListener('click', (e) => {
     const badge = e.target.closest('.reorder-delete-badge');
