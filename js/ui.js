@@ -346,7 +346,7 @@ function renderLog(session) {
             const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Number(s.reps) + 10);
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: repsInitialMax, step: ex.holdBased ? 5 : 10, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: repsInitialMax, step: ex.holdBased ? 1 : 10, value: s.reps, holdBased: ex.holdBased,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
             const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });

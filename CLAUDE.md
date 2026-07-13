@@ -46,7 +46,8 @@
 3種類のタイマーを用途ごとに分けている:
 - `js/rest-timer.js`: 記録画面でセットの「完了」にチェックを入れると自動で始まる、全画面表示の休憩タイマー
   （`#rest-timer-modal`）。対象種目の`restSec`ぶんカウントダウンし、「+10秒」で延長、「今すぐ終わる」で
-  即座に閉じられる。メニュー作成画面など記録画面以外では呼ばれない。
+  即座に閉じられる。メニュー作成画面など記録画面以外では呼ばれない。残り3・2・1秒でビープ音、
+  0秒で終了の合図音を鳴らす（音声ファイルは使わずWeb Audio APIで生成、`ensureRestTimerAudioCtx`）。
 - `js/session-timer.js`: トレーニング開始〜終了の経過時間を裏側で計測するだけで、画面には表示しない
   （記録確定時に`durationSec`として保存し、履歴一覧にのみ表示する）。
 - `js/hold-timer.js`: プランクなど回数ではなく保持時間を計測する種目(`exercises-data.js`の`holdBased: true`)専用の
@@ -57,8 +58,9 @@
 重量・回数(または秒)・RPEはすべて`<input type="range">`のスライダー（数値の直接入力ではなく操作して選ぶ形）。
 RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。これはレジスタンストレーニング向けRPE
 （Reps in Reserveベース、Zourdos et al. 2016、NSCA発行のStrength and Conditioning Journal掲載）に基づく。
-回数スライダーは10刻み（保持時間系種目の秒数スライダーは5刻みのまま）。上限（30回）まで動かすと
-自動で+10ずつ上限が伸びる（`js/app.js`の`handleLogInput`）。
+回数スライダーは10刻み（保持時間系種目の秒数スライダーは1刻み）。上限は常に現在値の1段上まで
+（例: 10回なら上限20）にしてあり、右端まで動かして指を離すとさらに+10ずつ上限が伸びる
+（`js/ui.js`の`repsInitialMax`、`js/app.js`の`handleLogInput`）。
 
 ## ローカル起動
 

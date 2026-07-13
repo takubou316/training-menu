@@ -67,15 +67,10 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
     }
   }
 
-  function beginDrag(item, pointerId) {
-    if (item.setPointerCapture) {
-      try { item.setPointerCapture(pointerId); } catch (err) { /* 対象外のポインタは無視 */ }
-    }
-    item.style.touchAction = 'none';
+  function beginDrag(item) {
     const els = items();
     const originalOrder = els.map((el) => el.dataset.reorderKey);
     drag = {
-      pointerId,
       key: item.dataset.reorderKey,
       el: item,
       order: originalOrder.slice(),
@@ -137,60 +132,76 @@ function createReorderController({ stableContainer, listSelector, onReorder, onR
     onReorder(finalOrder);
   }
 
-  stableContainer.addEventListener('pointerdown', (e) => {
-    if (drag) return; // 既にドラッグ中は多重タッチを無視（指を2本置いた時の誤動作防止）
+  // Pointer Eventsではなく生のTouch/Mouseイベントを使う。iOSのPointer Eventsは
+  // touch-action(CSS)をJSから動的に変更してもドラッグ開始時のスクロール判定に
+  // 間に合わないことがある既知の制限があり(w3c/pointerevents issue #178)、
+  // 実際にドラッグ中に画面ごとスクロールしてしまう不具合が起きたため、より枯れた
+  // Touch Events(preventDefaultがtouchmoveで確実に効く)方式に切り替えた。
+
+  function pointFromEvent(e) {
+    if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    return { x: e.clientX, y: e.clientY };
+  }
+
+  function handleStart(e) {
+    if (drag) return; // 既にドラッグ中は多重タッチ/多重クリックを無視
     if (e.target.closest('.reorder-delete-badge')) return;
     if (e.target.closest('input, button, a')) return;
     const item = e.target.closest('.reorder-item');
     const list = listEl();
     if (!item || !list || !list.contains(item)) return;
-    pressStart = { x: e.clientX, y: e.clientY };
+    const p = pointFromEvent(e);
+    pressStart = { x: p.x, y: p.y };
     pressItem = item;
-    // 長押し待ちの間から即座にtouch-action:noneを効かせる。iOSは指が少しでも動いた
-    // 時点でスクロールするかどうかを確定してしまうため、長押し成立(beginDrag)を
-    // 待ってから付けるのでは遅く、ドラッグ中に画面ごとスクロールしてしまう。
-    // (長押しがキャンセルされた場合はpressCanceledで元に戻す)
-    item.style.touchAction = 'none';
     clearPressTimer();
     if (reorderMode) {
-      beginDrag(item, e.pointerId);
+      beginDrag(item);
     } else {
       pressTimer = setTimeout(() => {
         pressTimer = null;
         if (!pressItem) return;
         setReorderMode(true);
-        beginDrag(pressItem, e.pointerId);
+        beginDrag(pressItem);
       }, REORDER_LONG_PRESS_MS);
     }
-  });
+  }
 
   function cancelPendingPress() {
     clearPressTimer();
-    if (pressItem && !drag) pressItem.style.touchAction = '';
     pressItem = null;
     pressStart = null;
   }
 
-  // move/up/cancelはcontainerではなくdocumentで拾う。ドラッグ中に指がリストの外
+  // move/end/cancelはcontainerではなくdocumentで拾う。ドラッグ中に指がリストの外
   // (下部ナビや画面端)まで動いても追跡を取りこぼさないようにするため。
-  document.addEventListener('pointermove', (e) => {
+  function handleMove(e) {
+    const p = pointFromEvent(e);
     if (pressStart && !drag) {
-      if (Math.abs(e.clientX - pressStart.x) > REORDER_MOVE_TOLERANCE || Math.abs(e.clientY - pressStart.y) > REORDER_MOVE_TOLERANCE) {
+      if (Math.abs(p.x - pressStart.x) > REORDER_MOVE_TOLERANCE || Math.abs(p.y - pressStart.y) > REORDER_MOVE_TOLERANCE) {
         cancelPendingPress();
       }
     }
-    if (drag && drag.pointerId === e.pointerId) {
-      e.preventDefault();
-      updateDrag(e.clientY);
+    if (drag) {
+      e.preventDefault(); // touchmoveでのpreventDefaultが画面スクロール抑制の本体
+      updateDrag(p.y);
     }
-  }, { passive: false });
-
-  function handlePointerEnd(e) {
-    cancelPendingPress();
-    if (drag && drag.pointerId === e.pointerId) endDrag();
   }
-  document.addEventListener('pointerup', handlePointerEnd);
-  document.addEventListener('pointercancel', handlePointerEnd);
+
+  function handleEnd() {
+    cancelPendingPress();
+    if (drag) endDrag();
+  }
+
+  stableContainer.addEventListener('touchstart', handleStart, { passive: true });
+  document.addEventListener('touchmove', handleMove, { passive: false });
+  document.addEventListener('touchend', handleEnd);
+  document.addEventListener('touchcancel', handleEnd);
+
+  // マウス操作(PCでの動作確認用)
+  stableContainer.addEventListener('mousedown', handleStart);
+  document.addEventListener('mousemove', handleMove);
+  document.addEventListener('mouseup', handleEnd);
 
   stableContainer.addEventListener('click', (e) => {
     const badge = e.target.closest('.reorder-delete-badge');
