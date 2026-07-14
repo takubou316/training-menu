@@ -288,7 +288,8 @@ function addCustomExercise(id) {
   const ex = findExerciseById(id);
   if (!ex) return;
   customExercises.push(ex);
-  if (customRestSec[id] == null) customRestSec[id] = 90;
+  // 有酸素種目はセット間の休憩という概念がないため、休憩時間は設定しない
+  if (ex.type !== 'cardio' && customRestSec[id] == null) customRestSec[id] = 90;
   renderCustomScreen();
 }
 
@@ -343,7 +344,9 @@ function wireCustomScreen() {
       return;
     }
     errorEl.textContent = '';
-    const main = customExercises.map((ex) => buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90));
+    const main = customExercises.map((ex) => (ex.type === 'cardio'
+      ? buildCustomCardioPlan(ex)
+      : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90)));
     currentMenu = {
       warmup: customWarmup,
       cooldown: customCooldown,
@@ -461,9 +464,11 @@ function toggleMenuExercise(id) {
   } else {
     const ex = findExerciseById(id);
     if (!ex) return;
-    const plan = currentMenu.params.custom
-      ? buildCustomSetPlan(ex, 90)
-      : buildSetPlan(ex, currentMenu.params.level, currentMenu.params.goal);
+    const plan = ex.type === 'cardio'
+      ? buildCustomCardioPlan(ex)
+      : currentMenu.params.custom
+        ? buildCustomSetPlan(ex, 90)
+        : buildSetPlan(ex, currentMenu.params.level, currentMenu.params.goal);
     currentMenu.main.push(plan);
   }
   recomputeMenuWarmupCooldown();
@@ -554,8 +559,40 @@ function handleStartWorkout() {
   startSessionTimer();
 }
 
+// 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
+// data-cardio-ex/data-cardio-fieldという別の属性でstrengthの仕組み(data-ex/data-set/data-field)
+// と衝突しないようにしている。
+function handleCardioLogInput(e) {
+  const target = e.target;
+  const exIndex = Number(target.dataset.cardioEx);
+  const field = target.dataset.cardioField;
+  const ex = currentSession.exercises[exIndex];
+  ex[field] = field === 'done' ? target.checked : target.value;
+
+  if (field !== 'done') {
+    const valueEl = target.parentElement.querySelector('.slider-value');
+    if (valueEl) {
+      valueEl.textContent = field === 'duration' ? `${target.value}分`
+        : field === 'distance' ? `${Number(target.value).toFixed(1)}km`
+          : `RPE ${target.value}`;
+    }
+  }
+
+  if (field === 'duration' || field === 'rpe') {
+    const calorieEl = document.querySelector(`[data-cardio-calorie="${exIndex}"]`);
+    if (calorieEl) {
+      const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0, Number(ex.rpe) || 0);
+      calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
+    }
+  }
+}
+
 function handleLogInput(e) {
   const target = e.target;
+  if (target.dataset.cardioField) {
+    handleCardioLogInput(e);
+    return;
+  }
   if (!target.dataset.field) return;
   const exIndex = Number(target.dataset.ex);
   const setIndex = Number(target.dataset.set);

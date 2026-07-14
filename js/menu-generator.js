@@ -12,6 +12,7 @@ const DYNAMIC_WARMUP_BY_PATTERN = {
   pull_vertical: { label: 'ラットストレッチ（腕を上げて体側伸ばし）10回', description: '腕を上げて体側を伸ばし、広背筋・肩まわりをほぐしておく。' },
   core: { label: 'デッドバグ（仰向け対角伸ばし）左右5回ずつ', description: '腹に軽く力を入れたまま手足を動かし、体幹を安定させる感覚を確認する。' },
   isolation: { label: '対象部位の関節を大きく動かすリラックス運動10回', description: 'これから使う関節を無理のない範囲で大きく動かし、血流を上げておく。' },
+  cardio: { label: 'ごく軽いペースで3〜5分', description: '本来のペースの半分以下の軽さから入り、心拍と関節を徐々に慣らしてから本セットのペースに上げる。' },
 };
 
 // 部位ごとの静的クールダウンストレッチ（保持時間20〜30秒が一般的な目安）
@@ -201,6 +202,24 @@ function buildCustomSetPlan(exercise, restSec) {
   };
 }
 
+// 有酸素種目(type:'cardio')用のプラン。セット/レップ/重量の概念がないため、
+// buildCustomSetPlanとは別の専用ビルダーにしている。「自分で作る」「今日のメニュー」
+// どちらから追加しても同じものを使う（目的・レベルの選択に依存しないため）。
+function buildCustomCardioPlan(exercise) {
+  return {
+    exerciseId: exercise.id,
+    name: exercise.name,
+    type: 'cardio',
+    primary: exercise.primary,
+    hasDistance: exercise.hasDistance,
+    met: exercise.met,
+    note: exercise.note || '',
+    description: exercise.description || '',
+    demoMedia: exercise.demoMedia || null,
+    equipment: exercise.equipment,
+  };
+}
+
 function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
   let pool = filterByEquipment(EXERCISES, equipment);
   pool = filterByPainAreas(pool, painAreas);
@@ -224,5 +243,5 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { generateMenu, buildWarmupAndCooldown, buildCustomSetPlan };
+  module.exports = { generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan };
 }

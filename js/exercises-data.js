@@ -159,6 +159,41 @@ const EXERCISES = [
     description: 'ケーブルを頭の後ろで持ち、股関節を動かさず背中を丸めるように上体を下げる。腕の力で引かないようにする。' },
   { id: 'ab_wheel', name: 'アブローラー', primary: ['abs'], secondary: ['shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰', '肩', '手首'], note: '中級者以上向け',
     description: '膝立ちでローラーを前に転がし、体が伸びきる手前で戻す。腰が反ると負担が大きいので無理のない範囲で戻す。' },
+
+  // ===== 有酸素 =====
+  // type:'cardio'の種目は「セット×回数×重量」ではなく「時間・距離・RPE」で記録する別UIを使う
+  // （js/ui.jsのrenderLog内でtype==='cardio'を分岐）。metは2024 Adult Compendium of Physical
+  // Activities（Ainsworth et al.）に基づく中強度時の代表値。hasDistanceは距離入力欄を出すかどうか
+  // （屋外で実際の距離が測れる種目のみtrue。エアロバイク等の室内マシンは時間・RPEのみで記録する）。
+  // primary/patternは強度別の自動メニュー生成では使わない(自分で作る/今日のメニューへの手動追加のみ対応)が、
+  // ウォームアップ・クールダウンの自動提案（動作パターン・使う筋肉ベース）とは連動する。
+  { id: 'walking', name: 'ウォーキング', primary: ['quads', 'hamstrings', 'calves'], secondary: [], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: [],
+    type: 'cardio', hasDistance: true, met: 3.8,
+    description: '普通〜やや速歩のペース。背筋を伸ばし、かかとから着地してつま先で蹴り出すことを意識する。' },
+  { id: 'running', name: 'ランニング', primary: ['quads', 'hamstrings', 'calves', 'glutes'], secondary: [], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: ['膝'],
+    type: 'cardio', hasDistance: true, met: 9.3,
+    description: '時速6km前後の一定ペースを目安に。着地の衝撃が大きいので、膝や足首に違和感がある時は無理をしない。' },
+  { id: 'outdoor_cycling', name: '自転車（屋外）', primary: ['quads', 'hamstrings', 'glutes'], secondary: ['calves'], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: [],
+    type: 'cardio', hasDistance: true, met: 8.0,
+    description: '時速12〜14km程度のペースを目安に。サドルの高さはペダルが一番下にきた時に膝が軽く曲がる程度に調整する。' },
+  { id: 'stationary_bike', name: 'エアロバイク（室内）', primary: ['quads', 'hamstrings', 'glutes'], secondary: ['calves'], category: 'cardio', equipment: ['cardio_machine'], pattern: 'cardio', unilateral: false, riskAreas: [],
+    type: 'cardio', hasDistance: false, met: 6.8,
+    description: '負荷を調整して一定のペースを保つ。天候に左右されず自宅で行える。サドル位置は屋外の自転車と同様に調整する。' },
+  { id: 'elliptical', name: 'エリプティカル（クロストレーナー）', primary: ['quads', 'hamstrings', 'glutes'], secondary: ['shoulders'], category: 'cardio', equipment: ['cardio_machine'], pattern: 'cardio', unilateral: false, riskAreas: [],
+    type: 'cardio', hasDistance: false, met: 5.0,
+    description: '足が地面から離れないため着地の衝撃が少ない。ハンドルを前後に押し引きすると上半身も一緒に使える。' },
+  { id: 'rowing_machine', name: 'ローイングマシン', primary: ['back', 'hamstrings', 'quads'], secondary: ['biceps'], category: 'cardio', equipment: ['cardio_machine'], pattern: 'cardio', unilateral: false, riskAreas: ['腰'],
+    type: 'cardio', hasDistance: false, met: 7.0,
+    description: '脚→体幹→腕の順に力を伝えて引き、戻す時は腕→体幹→脚の順で戻る。腰を丸めたまま引かないよう注意する。' },
+  { id: 'jump_rope', name: '縄跳び', primary: ['calves', 'quads'], secondary: ['shoulders'], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: ['膝'],
+    type: 'cardio', hasDistance: false, met: 11.0,
+    description: '高く跳びすぎず、足首とふくらはぎの弾みだけで小さく跳ぶ。着地の衝撃が大きいので膝に不安がある時は控えめに。' },
+  { id: 'stair_climbing', name: '階段昇降・ステッパー', primary: ['quads', 'glutes', 'calves'], secondary: [], category: 'cardio', equipment: ['cardio_machine'], pattern: 'cardio', unilateral: false, riskAreas: ['膝'],
+    type: 'cardio', hasDistance: false, met: 8.8,
+    description: '一段ずつ足裏全体で踏むイメージで。膝がつま先より内側に入らないよう注意する。' },
+  { id: 'swimming', name: '水泳', primary: ['back', 'shoulders', 'quads'], secondary: ['triceps', 'abs'], category: 'cardio', equipment: ['cardio_pool'], pattern: 'cardio', unilateral: false, riskAreas: ['肩'],
+    type: 'cardio', hasDistance: false, met: 6.0,
+    description: '呼吸のタイミングを一定にし、無理なく続けられるペースで。肩に痛みがある場合は無理に大きく回さない。' },
 ];
 
 if (typeof module !== 'undefined') {

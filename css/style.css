@@ -343,6 +343,16 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   color: var(--text-dim);
 }
 
+.picker-item-cardio-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #5aa9e6;
+  background: rgba(90, 169, 230, 0.15);
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
 .exercise-picker-item.selected .exercise-picker-item-main {
   color: var(--accent);
   font-weight: 600;

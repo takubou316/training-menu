@@ -52,6 +52,15 @@ function buildSuggestion(planItem, bodyWeightKg) {
   };
 }
 
+// 有酸素種目1分あたりの消費カロリー目安。運動生理学でよく使われる簡易式
+// 「kcal = MET × 体重(kg) × 時間(h)」がベース（詳細はrules.jsのRPE_SCALE同様、
+// 出典はexercises-data.jsのコメント参照）。RPE(きつさ)による強度の上下は、そのMET値
+// (中強度の代表値)を基準に「軽ければ引き、きつければ足す」形で単純化した独自の補正。
+function estimateCardioCalories(met, bodyWeightKg, durationMinutes, rpe) {
+  const intensityMultiplier = 0.6 + (Number(rpe) || 0) * 0.08; // RPE1→0.68倍、RPE7→1.16倍、RPE10→1.4倍
+  return met * intensityMultiplier * bodyWeightKg * (Number(durationMinutes) / 60);
+}
+
 function createSessionFromMenu(menu, bodyWeightKg) {
   return {
     date: new Date().toISOString(),
@@ -59,6 +68,22 @@ function createSessionFromMenu(menu, bodyWeightKg) {
     warmup: menu.warmup,
     cooldown: menu.cooldown,
     exercises: menu.main.map((item) => {
+      if (item.type === 'cardio') {
+        return {
+          exerciseId: item.exerciseId,
+          name: item.name,
+          type: 'cardio',
+          primary: item.primary,
+          hasDistance: item.hasDistance,
+          met: item.met,
+          description: item.description,
+          demoMedia: item.demoMedia,
+          duration: 0,
+          distance: item.hasDistance ? 0 : null,
+          rpe: String(RPE_SCALE.default),
+          done: false,
+        };
+      }
       const suggestion = buildSuggestion(item, bodyWeightKg);
       const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
       const defaultReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
@@ -99,6 +124,7 @@ function createSessionFromMenu(menu, bodyWeightKg) {
 
 function computeSessionVolume(session) {
   return session.exercises.reduce((total, ex) => {
+    if (ex.type === 'cardio') return total; // 有酸素は重量の概念がないため挙上量には含めない
     const exVolume = ex.sets.reduce((sum, s) => {
       if (!s.done || s.isWarmup) return sum;
       return sum + (Number(s.weight) || 0) * (Number(s.reps) || 0);
@@ -114,11 +140,22 @@ function finalizeSession(session) {
     goal: session.goal,
     volume: computeSessionVolume(session),
     durationSec: session.durationSec || 0,
-    exercises: session.exercises.map((e) => ({
-      exerciseId: e.exerciseId,
-      name: e.name,
-      sets: e.sets,
-    })),
+    exercises: session.exercises.map((e) => (e.type === 'cardio'
+      ? {
+        exerciseId: e.exerciseId,
+        name: e.name,
+        type: 'cardio',
+        duration: e.duration,
+        distance: e.distance,
+        rpe: e.rpe,
+        met: e.met,
+        done: e.done,
+      }
+      : {
+        exerciseId: e.exerciseId,
+        name: e.name,
+        sets: e.sets,
+      })),
   };
   saveSession(record);
   return record;
@@ -140,6 +177,15 @@ function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
   for (const session of history) {
     const ex = session.exercises.find((e) => e.exerciseId === exerciseId);
     if (!ex) continue;
+    if (exerciseMeta.type === 'cardio') {
+      if (!ex.done || !ex.duration) continue;
+      // 距離が測れる種目(屋外)は距離を、室内マシン系は時間を進捗の目安にする
+      const value = exerciseMeta.hasDistance ? Number(ex.distance) || 0 : Number(ex.duration) || 0;
+      if (value <= 0) continue;
+      points.push({ date: session.date, value, duration: Number(ex.duration) || 0 });
+      if (limit && points.length >= limit) break;
+      continue;
+    }
     const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup);
     if (workingSets.length === 0) continue;
     if (holdBased || isBodyweight) {
@@ -170,6 +216,6 @@ function overallVolumeSeries(limit) {
 if (typeof module !== 'undefined') {
   module.exports = {
     createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion,
-    exerciseProgressSeries, overallVolumeSeries,
+    exerciseProgressSeries, overallVolumeSeries, estimateCardioCalories,
   };
 }

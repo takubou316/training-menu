@@ -125,7 +125,9 @@ function renderMenu(menu) {
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-meta">${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒</div>
+      <div class="ex-meta">${item.type === 'cardio'
+        ? `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`
+        : `${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒`}</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
@@ -243,15 +245,23 @@ function renderCustomExerciseList(customExercises, customRestSec) {
 
   const itemsHtml = customExercises
     .map((ex, i) => {
-      const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
+      // 有酸素種目はセット間の休憩という概念がないため、休憩時間スライダーの代わりに
+      // 「有酸素種目」のバッジだけを表示する
+      const bodyHtml = ex.type === 'cardio'
+        ? '<span class="picker-item-cardio-badge">有酸素種目</span>'
+        : (() => {
+          const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
+          return `
+      <div class="slider-field">
+        <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
+        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
+      </div>`;
+        })();
       return `
     <div class="custom-exercise-item reorder-item" data-reorder-key="${ex.id}">
       <button type="button" class="reorder-delete-badge" aria-label="この種目を削除">×</button>
       <div class="ex-name">${favoriteStarHtml(ex.id)}${i + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
-      <div class="slider-field">
-        <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
-        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
-      </div>
+      ${bodyHtml}
     </div>`;
     })
     .join('');
@@ -290,14 +300,18 @@ function renderExercisePicker(query, isSelectedFn, filterMode) {
 
   listEl.innerHTML = matches
     .map((ex) => {
-      const muscleLabel = (ex.primary || []).map((m) => MUSCLE_GROUPS[m] || m).join('・');
+      // 有酸素種目は「胸」「背中」のような部位ラベルの代わりに、検索中でもひと目で
+      // 見分けられるよう見た目の違うバッジで「有酸素」と表示する
+      const typeLabelHtml = ex.type === 'cardio'
+        ? '<span class="picker-item-cardio-badge">有酸素</span>'
+        : `<span class="picker-item-muscle">${(ex.primary || []).map((m) => MUSCLE_GROUPS[m] || m).join('・')}</span>`;
       const selected = isSelectedFn(ex.id);
       return `
     <div class="exercise-picker-item${selected ? ' selected' : ''}">
       ${favoriteStarHtml(ex.id)}
       <button type="button" class="exercise-picker-item-main" data-picker-exercise="${ex.id}">
         <span>${selected ? '✓ ' : ''}${ex.name}</span>
-        <span class="picker-item-muscle">${muscleLabel}</span>
+        ${typeLabelHtml}
       </button>
     </div>`;
     })
@@ -315,6 +329,11 @@ function formatShortDate(iso) {
 // 軸やツールチップは持たず、直近値だけを右にテキストで直接ラベル表示する。
 // 種目のタイプ(保持時間系／自重／重量設定あり)によって、進捗グラフで何を見せるかを決める。
 function progressMetricInfo(exerciseMeta) {
+  if (exerciseMeta.type === 'cardio') {
+    return exerciseMeta.hasDistance
+      ? { title: '距離の推移（直近12回）', caption: '距離', valueFormatter: (v) => `${v.toFixed(1)}km`, detailFormatter: (p) => `${p.duration}分` }
+      : { title: '時間の推移（直近12回）', caption: '時間', valueFormatter: (v) => `${Math.round(v)}分` };
+  }
   if (exerciseMeta.holdBased) {
     return {
       title: '保持時間の推移（直近12回）',
@@ -477,7 +496,7 @@ function renderLog(session) {
       ${buildCooldownHtml(session.cooldown)}
     </details>`;
   const exercisesHtml = session.exercises
-    .map((ex, exIndex) => `
+    .map((ex, exIndex) => (ex.type === 'cardio' ? buildCardioExerciseCardHtml(ex, exIndex) : `
     <div class="exercise-card">
       <div class="ex-header">
         <div class="ex-name">${favoriteStarHtml(ex.exerciseId)}${exIndex + 1}. ${ex.name}${ex.unilateral ? '（左右それぞれ）' : ''}</div>
@@ -536,9 +555,53 @@ function renderLog(session) {
           })
           .join('');
       })()}
-    </div>`)
+    </div>`))
     .join('');
   container.innerHTML = warmupHtml + exercisesHtml + cooldownHtml;
+}
+
+// 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)・
+// きつさ(RPE流用)を記録し、体重×MET×時間から推定消費カロリーを表示する。
+function buildCardioExerciseCardHtml(ex, exIndex) {
+  const bodyWeightKg = getBodyWeightKg();
+  const calories = estimateCardioCalories(ex.met, bodyWeightKg, Number(ex.duration) || 0, Number(ex.rpe) || 0);
+  const metricInfo = progressMetricInfo(ex);
+  const sparklineHtml = buildProgressSparklineHtml(
+    exerciseProgressSeries(ex.exerciseId, ex, 8),
+    metricInfo.valueFormatter,
+    metricInfo.caption,
+  );
+  return `
+    <div class="exercise-card">
+      <div class="ex-header">
+        <div class="ex-name">${favoriteStarHtml(ex.exerciseId)}${exIndex + 1}. ${ex.name}</div>
+        <div class="ex-icons">
+          ${ex.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="やり方のポイント">ⓘ</button>` : ''}
+          ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
+        </div>
+      </div>
+      <div class="ex-meta">有酸素種目</div>
+      ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
+      ${sparklineHtml}
+      <div class="slider-field">
+        <div class="slider-label"><span>時間</span><span class="slider-value">${ex.duration}分</span></div>
+        <input type="range" min="0" max="120" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+      </div>
+      ${ex.hasDistance ? `
+      <div class="slider-field">
+        <div class="slider-label"><span>距離</span><span class="slider-value">${Number(ex.distance).toFixed(1)}km</span></div>
+        <input type="range" min="0" max="20" step="0.1" value="${ex.distance}" data-cardio-ex="${exIndex}" data-cardio-field="distance">
+      </div>` : ''}
+      <div class="slider-field">
+        <div class="slider-label"><span>きつさ <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span><span class="slider-value">RPE ${ex.rpe}</span></div>
+        <input type="range" min="${RPE_SCALE.min}" max="${RPE_SCALE.max}" step="${RPE_SCALE.step}" value="${ex.rpe}" data-cardio-ex="${exIndex}" data-cardio-field="rpe">
+      </div>
+      <div class="ex-note" data-cardio-calorie="${exIndex}">推定消費カロリー: 約${Math.round(calories)}kcal</div>
+      <label class="done-toggle">
+        <input type="checkbox" ${ex.done ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="done">
+        完了
+      </label>
+    </div>`;
 }
 
 function formatDate(iso) {
@@ -561,10 +624,18 @@ function renderHistory() {
       <details>
         <summary>詳細を見る</summary>
         ${session.exercises
-          .map((ex) => `<div class="h-ex">${ex.name}: ${ex.sets
-            .filter((s) => s.done && !s.isWarmup)
-            .map((s) => `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`)
-            .join(', ') || '未記録'}</div>`)
+          .map((ex) => {
+            if (ex.type === 'cardio') {
+              const detail = ex.done
+                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${ex.rpe ? `(RPE${ex.rpe})` : ''}`
+                : '未記録';
+              return `<div class="h-ex">${ex.name}: ${detail}</div>`;
+            }
+            return `<div class="h-ex">${ex.name}: ${ex.sets
+              .filter((s) => s.done && !s.isWarmup)
+              .map((s) => `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`)
+              .join(', ') || '未記録'}</div>`;
+          })
           .join('')}
       </details>
     </div>`)
@@ -579,8 +650,10 @@ function exercisesWithHistoryOptions() {
   history.forEach((session) => {
     session.exercises.forEach((ex) => {
       if (seen.has(ex.exerciseId)) return;
-      const hasWorkingSet = ex.sets.some((s) => s.done && !s.isWarmup);
-      if (hasWorkingSet) seen.set(ex.exerciseId, ex.name);
+      const hasRecord = ex.type === 'cardio'
+        ? ex.done && Number(ex.duration) > 0
+        : ex.sets.some((s) => s.done && !s.isWarmup);
+      if (hasRecord) seen.set(ex.exerciseId, ex.name);
     });
   });
   return Array.from(seen, ([id, name]) => ({ id, name }));
