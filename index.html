@@ -165,10 +165,18 @@
 
   <div id="rest-timer-modal" class="rest-timer-modal" hidden>
     <div class="rest-timer-label">休憩中</div>
-    <div id="rest-timer-value">00:00</div>
+    <div id="rest-timer-value" class="timer-value">00:00</div>
     <div class="rest-timer-actions">
       <button type="button" id="rest-timer-plus10">+10秒</button>
       <button type="button" id="rest-timer-end">今すぐ終わる</button>
+    </div>
+  </div>
+
+  <div id="hold-timer-modal" class="rest-timer-modal" hidden>
+    <div class="rest-timer-label" id="hold-timer-label">準備</div>
+    <div id="hold-timer-value" class="timer-value">5</div>
+    <div class="rest-timer-actions">
+      <button type="button" id="hold-timer-cancel">中断</button>
     </div>
   </div>
 

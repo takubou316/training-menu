@@ -655,7 +655,8 @@ select {
   display: none;
 }
 
-.rest-timer-modal.rest-timer-done {
+.rest-timer-modal.rest-timer-done,
+.rest-timer-modal.hold-timer-measuring {
   background: var(--accent-dim);
 }
 
@@ -665,7 +666,7 @@ select {
   letter-spacing: 0.05em;
 }
 
-#rest-timer-value {
+.timer-value {
   font-size: 72px;
   font-weight: 700;
   color: var(--accent);

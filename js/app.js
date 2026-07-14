@@ -668,6 +668,7 @@ function init() {
 
   document.getElementById('rest-timer-plus10').addEventListener('click', () => addRestTimerSeconds(10));
   document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
+  document.getElementById('hold-timer-cancel').addEventListener('click', stopHoldTimer);
 
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
