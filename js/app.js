@@ -551,6 +551,16 @@ function handleLogInput(e) {
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 
+  if (field === 'reps' && !set.isWarmup) {
+    const progressionEl = document.querySelector(`[data-ex-reps-progression="${exIndex}"]`);
+    if (progressionEl) {
+      progressionEl.textContent = buildRepsProgressionText(
+        currentSession.exercises[exIndex].sets,
+        currentSession.exercises[exIndex].holdBased,
+      );
+    }
+  }
+
   // ドラッグ中(input)ではなく指を離した瞬間(change)にだけ上限を伸ばす。
   // input時に伸ばすとドラッグの途中で上限が先回りして伸びてしまい、
   // 「右端まで行って離すと+10」という直感的な挙動にならないため。
@@ -660,7 +670,8 @@ function init() {
         const viewBox = svg.viewBox.baseVal;
         const cx = Number(chartPoint.getAttribute('cx'));
         const cy = Number(chartPoint.getAttribute('cy'));
-        tooltip.textContent = `${chartPoint.dataset.chartDate}: ${chartPoint.dataset.chartValue}`;
+        const detail = chartPoint.dataset.chartDetail;
+        tooltip.textContent = `${chartPoint.dataset.chartDate}: ${chartPoint.dataset.chartValue}${detail ? `（${detail}）` : ''}`;
         tooltip.style.left = `${(cx / viewBox.width) * 100}%`;
         tooltip.style.top = `${(cy / viewBox.height) * 100}%`;
         tooltip.hidden = false;

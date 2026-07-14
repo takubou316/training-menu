@@ -81,6 +81,7 @@ function createSessionFromMenu(menu, bodyWeightKg) {
         exerciseId: item.exerciseId,
         name: item.name,
         category: item.category,
+        primary: item.primary,
         unilateral: item.unilateral,
         restSec: item.restSec,
         repsMin: item.repsMin,
@@ -123,8 +124,17 @@ function finalizeSession(session) {
   return record;
 }
 
+// Epley式による推定1RM。「今の実力なら理論上何kg挙げられるか」を重量と回数から1つの
+// 数値にする、筋トレ記録アプリでは定番の指標。挙上量(重量×回数の合計)よりも、回数と重量の
+// 組み合わせが変わっても一貫して「強くなっているか」を比較しやすい。
+function estimateOneRepMax(weight, reps) {
+  if (reps <= 0) return 0;
+  return weight * (1 + reps / 30);
+}
+
 // 指定した種目の、過去のセッションごとの進捗値を古い→新しい順で返す（グラフ表示用）。
-// 保持時間系はそのセットで一番長く保持できた秒数、それ以外は重量×回数の合計(挙上量)を使う。
+// 保持時間系はそのセットで一番長く保持できた秒数。それ以外は、そのセッションの各セットの
+// 推定1RMのうち一番高いものを「その日の実力の目安」として使う(weight/repsも内訳として保持)。
 function exerciseProgressSeries(exerciseId, holdBased, limit) {
   const history = loadHistory(); // 新しい順
   const points = [];
@@ -133,10 +143,20 @@ function exerciseProgressSeries(exerciseId, holdBased, limit) {
     if (!ex) continue;
     const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup);
     if (workingSets.length === 0) continue;
-    const value = holdBased
-      ? Math.max(...workingSets.map((s) => Number(s.reps) || 0))
-      : workingSets.reduce((sum, s) => sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
-    points.push({ date: session.date, value });
+    if (holdBased) {
+      const value = Math.max(...workingSets.map((s) => Number(s.reps) || 0));
+      points.push({ date: session.date, value });
+    } else {
+      let best = null;
+      workingSets.forEach((s) => {
+        const weight = Number(s.weight) || 0;
+        const reps = Number(s.reps) || 0;
+        const e1rm = estimateOneRepMax(weight, reps);
+        if (e1rm > 0 && (!best || e1rm > best.value)) best = { value: e1rm, weight, reps };
+      });
+      if (!best) continue;
+      points.push({ date: session.date, ...best });
+    }
     if (limit && points.length >= limit) break;
   }
   return points.reverse();

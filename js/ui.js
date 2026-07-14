@@ -313,7 +313,7 @@ function formatShortDate(iso) {
 
 // 記録画面：種目カードに出す小さな推移スパークライン。装飾的な一目確認用で、
 // 軸やツールチップは持たず、直近値だけを右にテキストで直接ラベル表示する。
-function buildProgressSparklineHtml(points, valueFormatter) {
+function buildProgressSparklineHtml(points, valueFormatter, caption) {
   if (points.length < 2) return '';
   const width = 120;
   const height = 36;
@@ -338,12 +338,49 @@ function buildProgressSparklineHtml(points, valueFormatter) {
         <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3" fill="var(--accent)" />
       </svg>
-      <span class="progress-sparkline-label">${lastValueText}</span>
+      <span class="progress-sparkline-label">${caption ? `${caption} ` : ''}${lastValueText}</span>
     </div>`;
 }
 
+// このセッション内で、より前にやった種目が同じ主動筋を使っていれば、その筋肉名の配列を返す。
+// 疲労で回数・重量が普段より下がっていても、それが「今日たまたま調子が悪い」のではなく
+// 「先に同じ筋肉を使う種目をやったから」だと分かるようにするため。
+function priorSameMuscleOverlap(session, exIndex) {
+  const current = session.exercises[exIndex];
+  if (!current || !current.primary) return [];
+  const priorMuscles = new Set();
+  for (let i = 0; i < exIndex; i += 1) {
+    (session.exercises[i].primary || []).forEach((m) => priorMuscles.add(m));
+  }
+  return current.primary.filter((m) => priorMuscles.has(m));
+}
+
+function buildPrefatigueNoteHtml(session, exIndex) {
+  const overlap = priorSameMuscleOverlap(session, exIndex);
+  if (overlap.length === 0) return '';
+  const muscleLabel = overlap.map((m) => MUSCLE_GROUPS[m] || m).join('・');
+  return `<div class="ex-prefatigue-note">⚠ この前に${muscleLabel}を使う種目をやっています。疲労で回数・重量がいつもより下がることがあります</div>`;
+}
+
+// 本セット(ウォームアップ除く)の回数(または保持秒数)を1セット目から順に並べ、
+// 1セット目から最終セットでどれだけ変わったかを添える。セット間の疲労の見え方を確認するため。
+function buildRepsProgressionText(sets, holdBased) {
+  const values = sets.filter((s) => !s.isWarmup).map((s) => Number(s.reps) || 0);
+  if (values.length < 2) return '';
+  const unit = holdBased ? '秒' : '回';
+  const label = holdBased ? '保持時間の推移' : '回数の推移';
+  const first = values[0];
+  const last = values[values.length - 1];
+  const diffText = last < first
+    ? `（1セット目から${first - last}${unit}減少）`
+    : last > first
+      ? `（1セット目から${last - first}${unit}増加）`
+      : '（変化なし）';
+  return `${label}: ${values.map((v) => `${v}${unit}`).join('→')}${diffText}`;
+}
+
 // 履歴画面：セッション全体の推移を見る大きめのグラフ。軸・グリッド・タップでのツールチップつき。
-function buildProgressTrendChartHtml(points, { title, valueFormatter }) {
+function buildProgressTrendChartHtml(points, { title, valueFormatter, detailFormatter }) {
   if (points.length < 2) return '';
   const width = 320;
   const height = 160;
@@ -383,6 +420,7 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter }) {
   const dots = coords
     .map((c) => `
         <circle class="chart-point" data-chart-date="${formatShortDate(c.p.date)}" data-chart-value="${valueFormatter(c.p.value)}"
+          data-chart-detail="${detailFormatter ? detailFormatter(c.p) : ''}"
           cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="10" fill="transparent" />
         <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="var(--accent)" style="pointer-events:none;" />`)
     .join('');
@@ -427,10 +465,13 @@ function renderLog(session) {
       <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}${ex.holdBased ? '秒' : '回'}　休憩${ex.restSec}秒</div>
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
+      ${buildPrefatigueNoteHtml(session, exIndex)}
       ${buildProgressSparklineHtml(
         exerciseProgressSeries(ex.exerciseId, ex.holdBased, 8),
         (v) => (ex.holdBased ? `${formatDuration(v)}` : `${Math.round(v)}kg`),
+        ex.holdBased ? '保持時間' : '推定1RM',
       )}
+      <div class="ex-reps-progression" data-ex-reps-progression="${exIndex}">${buildRepsProgressionText(ex.sets, ex.holdBased)}</div>
       ${(() => {
         let warmupN = 0;
         let workingN = 0;
@@ -552,9 +593,13 @@ function renderExerciseProgressChart(exerciseId) {
   const holdBased = exercise ? exercise.holdBased : false;
   const series = exerciseProgressSeries(exerciseId, holdBased, 12);
   const chartHtml = buildProgressTrendChartHtml(series, {
-    title: holdBased ? '保持時間の推移（直近12回）' : '挙上量の推移（直近12回）',
+    title: holdBased ? '保持時間の推移（直近12回）' : '推定1RMの推移（直近12回）',
     valueFormatter: (v) => (holdBased ? formatDuration(v) : `${Math.round(v)}kg`),
+    detailFormatter: holdBased ? null : (p) => `${p.weight}kg×${p.reps}回`,
   });
-  container.innerHTML = chartHtml
+  const captionHtml = holdBased
+    ? ''
+    : '<p class="chart-caption">推定1RM(Epley式): その日のベストセットから「今の実力なら理論上何kg挙げられるか」を算出したもの。回数と重量の組み合わせが変わっても比較しやすい指標。タップすると実際の重量×回数も見られます。</p>';
+  container.innerHTML = (chartHtml ? captionHtml + chartHtml : '')
     || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
 }

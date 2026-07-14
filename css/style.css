@@ -527,6 +527,30 @@ select {
 .exercise-card .ex-meta { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
 .exercise-card .ex-note { font-size: 12px; color: var(--accent); margin-bottom: 8px; }
 
+.ex-prefatigue-note {
+  font-size: 12px;
+  color: #f5b301;
+  background: rgba(245, 179, 1, 0.12);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.ex-reps-progression {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 2px 0 10px;
+}
+.ex-reps-progression:empty { margin: 0; }
+
+.chart-caption {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
 .ex-info-panel {
   margin: 0 0 8px;
 }
