@@ -123,6 +123,35 @@ function finalizeSession(session) {
   return record;
 }
 
+// 指定した種目の、過去のセッションごとの進捗値を古い→新しい順で返す（グラフ表示用）。
+// 保持時間系はそのセットで一番長く保持できた秒数、それ以外は重量×回数の合計(挙上量)を使う。
+function exerciseProgressSeries(exerciseId, holdBased, limit) {
+  const history = loadHistory(); // 新しい順
+  const points = [];
+  for (const session of history) {
+    const ex = session.exercises.find((e) => e.exerciseId === exerciseId);
+    if (!ex) continue;
+    const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup);
+    if (workingSets.length === 0) continue;
+    const value = holdBased
+      ? Math.max(...workingSets.map((s) => Number(s.reps) || 0))
+      : workingSets.reduce((sum, s) => sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0);
+    points.push({ date: session.date, value });
+    if (limit && points.length >= limit) break;
+  }
+  return points.reverse();
+}
+
+// 直近セッションの総挙上量(volume)推移を古い→新しい順で返す（履歴画面の全体グラフ用）。
+function overallVolumeSeries(limit) {
+  const history = loadHistory(); // 新しい順
+  const sliced = limit ? history.slice(0, limit) : history;
+  return sliced.map((s) => ({ date: s.date, value: s.volume || 0 })).reverse();
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion };
+  module.exports = {
+    createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion,
+    exerciseProgressSeries, overallVolumeSeries,
+  };
 }

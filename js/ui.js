@@ -304,6 +304,104 @@ function renderExercisePicker(query, isSelectedFn, filterMode) {
     .join('');
 }
 
+// ===== 進捗グラフ（チャートライブラリは使わず、インラインSVGを自前で組み立てる） =====
+
+function formatShortDate(iso) {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// 記録画面：種目カードに出す小さな推移スパークライン。装飾的な一目確認用で、
+// 軸やツールチップは持たず、直近値だけを右にテキストで直接ラベル表示する。
+function buildProgressSparklineHtml(points, valueFormatter) {
+  if (points.length < 2) return '';
+  const width = 120;
+  const height = 36;
+  const padX = 4;
+  const padY = 5;
+  const values = points.map((p) => p.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const coords = points.map((p, i) => [
+    padX + (i / (points.length - 1)) * innerW,
+    padY + innerH - ((p.value - min) / range) * innerH,
+  ]);
+  const path = coords.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lastX, lastY] = coords[coords.length - 1];
+  const lastValueText = valueFormatter(points[points.length - 1].value);
+  return `
+    <div class="progress-sparkline-wrap">
+      <svg class="progress-sparkline" viewBox="0 0 ${width} ${height}" role="img" aria-label="直近の推移、最新値は${lastValueText}">
+        <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="3" fill="var(--accent)" />
+      </svg>
+      <span class="progress-sparkline-label">${lastValueText}</span>
+    </div>`;
+}
+
+// 履歴画面：セッション全体の推移を見る大きめのグラフ。軸・グリッド・タップでのツールチップつき。
+function buildProgressTrendChartHtml(points, { title, valueFormatter }) {
+  if (points.length < 2) return '';
+  const width = 320;
+  const height = 160;
+  const padL = 36;
+  const padR = 12;
+  const padT = 12;
+  const padB = 22;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  const values = points.map((p) => p.value);
+  const max = Math.max(...values) || 1;
+  const coords = points.map((p, i) => ({
+    x: padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW),
+    y: padT + innerH - (p.value / max) * innerH,
+    p,
+  }));
+  const path = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+
+  const gridLines = [0, 0.5, 1]
+    .map((frac) => {
+      const y = padT + innerH - frac * innerH;
+      const val = Math.round(frac * max);
+      return `
+        <line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
+        <text x="${padL - 6}" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="middle" class="chart-axis-label">${val}</text>`;
+    })
+    .join('');
+
+  const labelIdxs = new Set([0, coords.length - 1]);
+  if (coords.length >= 5) labelIdxs.add(Math.floor((coords.length - 1) / 2));
+  const xLabels = coords
+    .map((c, i) => (labelIdxs.has(i)
+      ? `<text x="${c.x.toFixed(1)}" y="${height - 6}" text-anchor="middle" class="chart-axis-label">${formatShortDate(c.p.date)}</text>`
+      : ''))
+    .join('');
+
+  const dots = coords
+    .map((c) => `
+        <circle class="chart-point" data-chart-date="${formatShortDate(c.p.date)}" data-chart-value="${valueFormatter(c.p.value)}"
+          cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="10" fill="transparent" />
+        <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="var(--accent)" style="pointer-events:none;" />`)
+    .join('');
+
+  return `
+    <div class="progress-trend-chart-wrap">
+      <h3 style="margin-bottom:4px;">${title}</h3>
+      <div class="progress-trend-chart" style="position:relative;">
+        <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="${title}のグラフ">
+          ${gridLines}
+          <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          ${dots}
+          ${xLabels}
+        </svg>
+        <div class="chart-tooltip" hidden></div>
+      </div>
+    </div>`;
+}
+
 function renderLog(session) {
   const container = document.getElementById('log-content');
   const warmupHtml = `
@@ -329,6 +427,10 @@ function renderLog(session) {
       <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}${ex.holdBased ? '秒' : '回'}　休憩${ex.restSec}秒</div>
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
+      ${buildProgressSparklineHtml(
+        exerciseProgressSeries(ex.exerciseId, ex.holdBased, 8),
+        (v) => (ex.holdBased ? `${formatDuration(v)}` : `${Math.round(v)}kg`),
+      )}
       ${(() => {
         let warmupN = 0;
         let workingN = 0;
@@ -383,7 +485,11 @@ function renderHistory() {
     container.innerHTML = '<p class="empty-text">まだ記録がありません。メニューを作って始めましょう。</p>';
     return;
   }
-  container.innerHTML = history
+  const trendChartHtml = buildProgressTrendChartHtml(
+    overallVolumeSeries(12),
+    { title: '総挙上量の推移（直近12回）', valueFormatter: (v) => `${Math.round(v)}kg` },
+  );
+  container.innerHTML = trendChartHtml + history
     .map((session) => `
     <div class="history-item">
       <div class="h-date">${formatDate(session.date)}</div>

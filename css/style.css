@@ -803,6 +803,59 @@ select {
   border-color: var(--accent);
 }
 
+/* ===== 進捗グラフ（記録画面のミニスパークライン／履歴画面の全体推移グラフ） ===== */
+
+.progress-sparkline-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 2px;
+}
+
+.progress-sparkline {
+  width: 120px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.progress-sparkline-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-trend-chart-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.chart-axis-label {
+  font-size: 9px;
+  fill: var(--text-dim);
+}
+
+.chart-point {
+  cursor: pointer;
+}
+
+.chart-tooltip {
+  position: absolute;
+  transform: translate(-50%, -125%);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .history-item {
   background: var(--surface);
   border: 1px solid var(--border);

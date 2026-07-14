@@ -650,7 +650,24 @@ function init() {
         btn.classList.toggle('active', isFav);
         btn.setAttribute('aria-label', isFav ? 'お気に入りから外す' : 'お気に入りに追加');
       });
+      return;
     }
+    const chartPoint = e.target.closest('.chart-point');
+    if (chartPoint) {
+      const svg = chartPoint.closest('svg');
+      const tooltip = chartPoint.closest('.progress-trend-chart')?.querySelector('.chart-tooltip');
+      if (svg && tooltip) {
+        const viewBox = svg.viewBox.baseVal;
+        const cx = Number(chartPoint.getAttribute('cx'));
+        const cy = Number(chartPoint.getAttribute('cy'));
+        tooltip.textContent = `${chartPoint.dataset.chartDate}: ${chartPoint.dataset.chartValue}`;
+        tooltip.style.left = `${(cx / viewBox.width) * 100}%`;
+        tooltip.style.top = `${(cy / viewBox.height) * 100}%`;
+        tooltip.hidden = false;
+      }
+      return;
+    }
+    document.querySelectorAll('.chart-tooltip').forEach((t) => { t.hidden = true; });
   });
   document.getElementById('demo-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-demo-close]')) closeDemoModal();
