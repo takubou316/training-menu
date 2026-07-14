@@ -687,10 +687,15 @@ function init() {
   document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
   document.getElementById('hold-timer-cancel').addEventListener('click', stopHoldTimer);
 
+  document.getElementById('progress-exercise-select').addEventListener('change', (e) => {
+    renderExerciseProgressChart(e.target.value);
+  });
+
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'history') renderHistory();
+      if (target === 'progress') renderProgressScreen();
       stopHoldTimer();
       endRestTimer();
       stopSessionTimer();

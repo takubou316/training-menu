@@ -148,11 +148,23 @@
       <h2>これまでの記録</h2>
       <div id="history-content"></div>
     </section>
+
+    <!-- ===== グラフ画面 ===== -->
+    <section id="screen-progress" class="screen">
+      <h2>グラフ</h2>
+      <div id="overall-progress-content"></div>
+      <div class="menu-block">
+        <h3>種目ごとの推移</h3>
+        <select id="progress-exercise-select"></select>
+        <div id="exercise-progress-content"></div>
+      </div>
+    </section>
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-btn active" data-nav="mode">メニュー作成</button>
     <button class="nav-btn" data-nav="history">記録一覧</button>
+    <button class="nav-btn" data-nav="progress">グラフ</button>
   </nav>
 
   <div id="demo-modal" class="demo-modal">

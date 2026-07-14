@@ -408,6 +408,15 @@ select {
   font-size: 14px;
 }
 
+#progress-exercise-select {
+  margin-bottom: 12px;
+}
+
+#overall-progress-content .empty-text,
+#exercise-progress-content .empty-text {
+  padding: 12px 0;
+}
+
 .primary-btn {
   width: 100%;
   padding: 14px;

@@ -485,11 +485,7 @@ function renderHistory() {
     container.innerHTML = '<p class="empty-text">まだ記録がありません。メニューを作って始めましょう。</p>';
     return;
   }
-  const trendChartHtml = buildProgressTrendChartHtml(
-    overallVolumeSeries(12),
-    { title: '総挙上量の推移（直近12回）', valueFormatter: (v) => `${Math.round(v)}kg` },
-  );
-  container.innerHTML = trendChartHtml + history
+  container.innerHTML = history
     .map((session) => `
     <div class="history-item">
       <div class="h-date">${formatDate(session.date)}</div>
@@ -505,4 +501,60 @@ function renderHistory() {
       </details>
     </div>`)
     .join('');
+}
+
+// ===== グラフ画面（記録一覧とは別画面。全体の総挙上量推移＋種目ごとの推移） =====
+
+function exercisesWithHistoryOptions() {
+  const history = loadHistory();
+  const seen = new Map(); // exerciseId -> name
+  history.forEach((session) => {
+    session.exercises.forEach((ex) => {
+      if (seen.has(ex.exerciseId)) return;
+      const hasWorkingSet = ex.sets.some((s) => s.done && !s.isWarmup);
+      if (hasWorkingSet) seen.set(ex.exerciseId, ex.name);
+    });
+  });
+  return Array.from(seen, ([id, name]) => ({ id, name }));
+}
+
+function renderProgressScreen() {
+  const overallContainer = document.getElementById('overall-progress-content');
+  const overallChartHtml = buildProgressTrendChartHtml(
+    overallVolumeSeries(12),
+    { title: '総挙上量の推移（直近12回）', valueFormatter: (v) => `${Math.round(v)}kg` },
+  );
+  overallContainer.innerHTML = overallChartHtml
+    || '<p class="empty-text">記録が2回分たまるとグラフが表示されます。</p>';
+
+  const select = document.getElementById('progress-exercise-select');
+  const options = exercisesWithHistoryOptions();
+  if (options.length === 0) {
+    select.innerHTML = '<option value="">まだ記録済みの種目がありません</option>';
+    select.disabled = true;
+    document.getElementById('exercise-progress-content').innerHTML = '';
+    return;
+  }
+  select.disabled = false;
+  const prevValue = select.value;
+  select.innerHTML = options.map((ex) => `<option value="${ex.id}">${ex.name}</option>`).join('');
+  select.value = options.some((ex) => ex.id === prevValue) ? prevValue : options[0].id;
+  renderExerciseProgressChart(select.value);
+}
+
+function renderExerciseProgressChart(exerciseId) {
+  const container = document.getElementById('exercise-progress-content');
+  if (!exerciseId) {
+    container.innerHTML = '';
+    return;
+  }
+  const exercise = EXERCISES.find((ex) => ex.id === exerciseId);
+  const holdBased = exercise ? exercise.holdBased : false;
+  const series = exerciseProgressSeries(exerciseId, holdBased, 12);
+  const chartHtml = buildProgressTrendChartHtml(series, {
+    title: holdBased ? '保持時間の推移（直近12回）' : '挙上量の推移（直近12回）',
+    valueFormatter: (v) => (holdBased ? formatDuration(v) : `${Math.round(v)}kg`),
+  });
+  container.innerHTML = chartHtml
+    || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
 }
