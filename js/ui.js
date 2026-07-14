@@ -599,7 +599,7 @@ function renderExerciseProgressChart(exerciseId) {
   });
   const captionHtml = holdBased
     ? ''
-    : '<p class="chart-caption">推定1RM(Epley式): その日のベストセットから「今の実力なら理論上何kg挙げられるか」を算出したもの。回数と重量の組み合わせが変わっても比較しやすい指標。タップすると実際の重量×回数も見られます。</p>';
+    : '<p class="chart-caption">推定1RM(Epley式、計算式: 重量 ×（1 ＋ 回数 ÷ 30）): その日のベストセットから「今の実力なら理論上何kg挙げられるか」を算出したもの。回数と重量の組み合わせが変わっても比較しやすい指標。タップすると実際の重量×回数も見られます。</p>';
   container.innerHTML = (chartHtml ? captionHtml + chartHtml : '')
     || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
 }
