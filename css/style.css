@@ -700,6 +700,17 @@ select {
   border-color: var(--accent);
 }
 
+/* 全画面計測タイマーの唯一の操作ボタンなので、他の休憩タイマーのボタンより
+   ひとまわり大きく・押しやすくする */
+#hold-timer-cancel {
+  padding: 24px 12px;
+  font-size: 20px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #0b1210;
+  border-color: var(--accent);
+}
+
 .set-row {
   background: var(--surface-2);
   border-radius: 10px;
