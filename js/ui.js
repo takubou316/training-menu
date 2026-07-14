@@ -339,14 +339,14 @@ function renderLog(session) {
             const weightField = ex.holdBased || !weightRange
               ? ''
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
-            // 回数スライダーは最初は10回までにしておき、右端で離すと10ずつ伸びる(handleLogInput参照)。
-            // ただし初期値ちょうどをmaxにすると「つまみが最初から右端に張り付いて動かせる幅がない」
-            // 状態になり、指で触ってもほぼ反応しない(選べる位置が0とmaxの2箇所しかなくなる)ため、
-            // 常に現在値より1段(10)上まで動かせる余白を持たせる。
+            // 回数スライダー自体は1刻みで細かく動かせるようにしつつ、上限(max)は最初10回に
+            // しておき、右端で離すと10ずつ伸びる(handleLogInput参照、伸びる幅が10刻み)。
+            // 初期値ちょうどをmaxにすると「つまみが最初から右端に張り付いて動かせる幅がない」
+            // 状態になるため、常に現在値より1段(10)上まで動かせる余白を持たせる。
             const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Number(s.reps) + 10);
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: repsInitialMax, step: ex.holdBased ? 1 : 10, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
             const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });

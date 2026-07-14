@@ -58,7 +58,7 @@
 重量・回数(または秒)・RPEはすべて`<input type="range">`のスライダー（数値の直接入力ではなく操作して選ぶ形）。
 RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。これはレジスタンストレーニング向けRPE
 （Reps in Reserveベース、Zourdos et al. 2016、NSCA発行のStrength and Conditioning Journal掲載）に基づく。
-回数スライダーは10刻み（保持時間系種目の秒数スライダーは1刻み）。上限は常に現在値の1段上まで
+回数・秒数スライダーはどちらも1刻みで細かく動かせる。回数側は上限(max)だけ常に現在値の1段上まで
 （例: 10回なら上限20）にしてあり、右端まで動かして指を離すとさらに+10ずつ上限が伸びる
 （`js/ui.js`の`repsInitialMax`、`js/app.js`の`handleLogInput`）。
 
