@@ -124,26 +124,25 @@ function finalizeSession(session) {
   return record;
 }
 
-// Epley式による推定1RM。「今の実力なら理論上何kg挙げられるか」を重量と回数から1つの
-// 数値にする、筋トレ記録アプリでは定番の指標。挙上量(重量×回数の合計)よりも、回数と重量の
-// 組み合わせが変わっても一貫して「強くなっているか」を比較しやすい。
-function estimateOneRepMax(weight, reps) {
-  if (reps <= 0) return 0;
-  return weight * (1 + reps / 30);
-}
-
 // 指定した種目の、過去のセッションごとの進捗値を古い→新しい順で返す（グラフ表示用）。
-// 保持時間系はそのセットで一番長く保持できた秒数。それ以外は、そのセッションの各セットの
-// 推定1RMのうち一番高いものを「その日の実力の目安」として使う(weight/repsも内訳として保持)。
-function exerciseProgressSeries(exerciseId, holdBased, limit) {
+// 種目のタイプによって「何を見れば分かりやすいか」が違うため、指標を出し分ける:
+// - 保持時間系(プランク等): そのセットで一番長く保持できた秒数
+// - 自重種目(プッシュアップ等): 重量という概念がわかりにくいので、一番多くできた回数
+// - 重量を設定するタイプ(ダンベル/バーベル/マシン): 一番重いセットの重量(その時の回数も内訳として保持)
+// 以前は重量と回数を推定1RMの式で1つの数値にまとめていたが、Epley式は本来コンパウンド種目の
+// 低レップ(〜10回程度)向けの推定式で、高レップのセットやアイソレーション種目では誤差が大きく
+// 当てにならないと分かったため、種目タイプ別に素直な実測値を見せる方式に変更した。
+function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
   const history = loadHistory(); // 新しい順
+  const holdBased = exerciseMeta.holdBased;
+  const isBodyweight = isBodyweightLoadExercise(exerciseMeta);
   const points = [];
   for (const session of history) {
     const ex = session.exercises.find((e) => e.exerciseId === exerciseId);
     if (!ex) continue;
     const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup);
     if (workingSets.length === 0) continue;
-    if (holdBased) {
+    if (holdBased || isBodyweight) {
       const value = Math.max(...workingSets.map((s) => Number(s.reps) || 0));
       points.push({ date: session.date, value });
     } else {
@@ -151,8 +150,7 @@ function exerciseProgressSeries(exerciseId, holdBased, limit) {
       workingSets.forEach((s) => {
         const weight = Number(s.weight) || 0;
         const reps = Number(s.reps) || 0;
-        const e1rm = estimateOneRepMax(weight, reps);
-        if (e1rm > 0 && (!best || e1rm > best.value)) best = { value: e1rm, weight, reps };
+        if (!best || weight > best.value) best = { value: weight, reps };
       });
       if (!best) continue;
       points.push({ date: session.date, ...best });

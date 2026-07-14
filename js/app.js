@@ -12,6 +12,7 @@ const PART_TO_MUSCLES = {
 
 let currentMenu = null;
 let currentSession = null;
+let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
 
 // 「自分で作る」モードの状態
 let customExercises = []; // EXERCISESの生データを追加順に並べたもの
@@ -239,15 +240,31 @@ function getSelectedPainAreas() {
     .filter((v) => v !== 'none');
 }
 
+// 体重は「要望から作る」の設定画面と「自分で作る」画面の両方にスライダーがあり、
+// どちらを操作しても同じ値として扱う(片方でしか設定できないと、自分で作る派の人が
+// 一度も体重を入れないまま自重種目の負荷推定が行われてしまうため)。
 function getBodyWeightKg() {
-  return Number(document.getElementById('bodyweight-slider').value);
+  return bodyWeightKg;
+}
+
+function setBodyWeightKg(value, persist) {
+  bodyWeightKg = value;
+  ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
+    const slider = document.getElementById(id);
+    if (slider) slider.value = value;
+  });
+  ['bodyweight-value', 'bodyweight-value-custom'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = `${value} kg`;
+  });
+  if (persist) saveSettings({ ...(loadSettings() || {}), bodyWeightKg: value });
 }
 
 function wireBodyWeightSlider() {
-  const slider = document.getElementById('bodyweight-slider');
-  const valueEl = document.getElementById('bodyweight-value');
-  slider.addEventListener('input', () => {
-    valueEl.textContent = `${slider.value} kg`;
+  ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
+    const slider = document.getElementById(id);
+    if (!slider) return;
+    slider.addEventListener('input', () => setBodyWeightKg(Number(slider.value), true));
   });
 }
 
@@ -588,24 +605,27 @@ function handleFinishWorkout() {
 function restoreLastSettings() {
   const settings = loadSettings();
   if (!settings) return;
-  document.querySelectorAll('#part-group input').forEach((el) => {
-    el.checked = settings.parts.includes(el.dataset.part);
-  });
-  document.querySelectorAll('#equipment-group input').forEach((el) => {
-    el.checked = settings.equipment.includes(el.value);
-  });
-  const painAreas = settings.painAreas || [];
-  document.querySelectorAll('#pain-group input').forEach((el) => {
-    el.checked = el.dataset.pain === 'none' ? painAreas.length === 0 : painAreas.includes(el.dataset.pain);
-  });
-  document.getElementById('minutes-select').value = settings.minutes;
-  document.getElementById('level-select').value = settings.level;
-  document.getElementById('goal-select').value = settings.goal;
-  if (settings.bodyWeightKg) {
-    const slider = document.getElementById('bodyweight-slider');
-    slider.value = settings.bodyWeightKg;
-    document.getElementById('bodyweight-value').textContent = `${slider.value} kg`;
+  // 体重だけが保存されている(自分で作るモードしか使ったことがない)場合など、
+  // 一部のフィールドしか無いことがあるため、それぞれ存在確認してから復元する。
+  if (settings.parts) {
+    document.querySelectorAll('#part-group input').forEach((el) => {
+      el.checked = settings.parts.includes(el.dataset.part);
+    });
   }
+  if (settings.equipment) {
+    document.querySelectorAll('#equipment-group input').forEach((el) => {
+      el.checked = settings.equipment.includes(el.value);
+    });
+  }
+  if (settings.painAreas) {
+    document.querySelectorAll('#pain-group input').forEach((el) => {
+      el.checked = el.dataset.pain === 'none' ? settings.painAreas.length === 0 : settings.painAreas.includes(el.dataset.pain);
+    });
+  }
+  if (settings.minutes) document.getElementById('minutes-select').value = settings.minutes;
+  if (settings.level) document.getElementById('level-select').value = settings.level;
+  if (settings.goal) document.getElementById('goal-select').value = settings.goal;
+  if (settings.bodyWeightKg) setBodyWeightKg(settings.bodyWeightKg, false);
 }
 
 function init() {

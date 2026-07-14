@@ -313,6 +313,30 @@ function formatShortDate(iso) {
 
 // 記録画面：種目カードに出す小さな推移スパークライン。装飾的な一目確認用で、
 // 軸やツールチップは持たず、直近値だけを右にテキストで直接ラベル表示する。
+// 種目のタイプ(保持時間系／自重／重量設定あり)によって、進捗グラフで何を見せるかを決める。
+function progressMetricInfo(exerciseMeta) {
+  if (exerciseMeta.holdBased) {
+    return {
+      title: '保持時間の推移（直近12回）',
+      caption: '保持時間',
+      valueFormatter: (v) => formatDuration(v),
+    };
+  }
+  if (isBodyweightLoadExercise(exerciseMeta)) {
+    return {
+      title: '回数の推移（直近12回）',
+      caption: '回数',
+      valueFormatter: (v) => `${Math.round(v)}回`,
+    };
+  }
+  return {
+    title: '重量の推移（直近12回）',
+    caption: '重量',
+    valueFormatter: (v) => `${Math.round(v)}kg`,
+    detailFormatter: (p) => `${p.reps}回`,
+  };
+}
+
 function buildProgressSparklineHtml(points, valueFormatter, caption) {
   if (points.length < 2) return '';
   const width = 120;
@@ -466,11 +490,14 @@ function renderLog(session) {
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       ${buildPrefatigueNoteHtml(session, exIndex)}
-      ${buildProgressSparklineHtml(
-        exerciseProgressSeries(ex.exerciseId, ex.holdBased, 8),
-        (v) => (ex.holdBased ? `${formatDuration(v)}` : `${Math.round(v)}kg`),
-        ex.holdBased ? '保持時間' : '推定1RM',
-      )}
+      ${(() => {
+        const metricInfo = progressMetricInfo(ex);
+        return buildProgressSparklineHtml(
+          exerciseProgressSeries(ex.exerciseId, ex, 8),
+          metricInfo.valueFormatter,
+          metricInfo.caption,
+        );
+      })()}
       <div class="ex-reps-progression" data-ex-reps-progression="${exIndex}">${buildRepsProgressionText(ex.sets, ex.holdBased)}</div>
       ${(() => {
         let warmupN = 0;
@@ -590,16 +617,17 @@ function renderExerciseProgressChart(exerciseId) {
     return;
   }
   const exercise = EXERCISES.find((ex) => ex.id === exerciseId);
-  const holdBased = exercise ? exercise.holdBased : false;
-  const series = exerciseProgressSeries(exerciseId, holdBased, 12);
+  if (!exercise) {
+    container.innerHTML = '';
+    return;
+  }
+  const metricInfo = progressMetricInfo(exercise);
+  const series = exerciseProgressSeries(exerciseId, exercise, 12);
   const chartHtml = buildProgressTrendChartHtml(series, {
-    title: holdBased ? '保持時間の推移（直近12回）' : '推定1RMの推移（直近12回）',
-    valueFormatter: (v) => (holdBased ? formatDuration(v) : `${Math.round(v)}kg`),
-    detailFormatter: holdBased ? null : (p) => `${p.weight}kg×${p.reps}回`,
+    title: metricInfo.title,
+    valueFormatter: metricInfo.valueFormatter,
+    detailFormatter: metricInfo.detailFormatter,
   });
-  const captionHtml = holdBased
-    ? ''
-    : '<p class="chart-caption">推定1RM(Epley式、計算式: 重量 ×（1 ＋ 回数 ÷ 30）): その日のベストセットから「今の実力なら理論上何kg挙げられるか」を算出したもの。回数と重量の組み合わせが変わっても比較しやすい指標。タップすると実際の重量×回数も見られます。</p>';
-  container.innerHTML = (chartHtml ? captionHtml + chartHtml : '')
+  container.innerHTML = chartHtml
     || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
 }
