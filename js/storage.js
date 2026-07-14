@@ -34,6 +34,11 @@ function saveSession(session) {
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
 }
 
+// トレーニング記録だけを削除する（お気に入り・体重などの設定は残す）。
+function clearHistory() {
+  localStorage.removeItem(STORAGE_KEYS.history);
+}
+
 // 指定した種目の直近の記録（最後に行ったセット内容）を返す。無ければnull。
 function findLastPerformance(exerciseId) {
   const history = loadHistory();
@@ -90,7 +95,7 @@ function recentExerciseIds(limit) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    loadSettings, saveSettings, loadHistory, saveSession, findLastPerformance,
+    loadSettings, saveSettings, loadHistory, saveSession, clearHistory, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
   };
 }

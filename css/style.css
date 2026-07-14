@@ -889,6 +889,51 @@ select {
   z-index: 1;
 }
 
+.danger-zone {
+  margin-top: 28px;
+}
+.danger-zone summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  list-style: none;
+}
+.danger-zone summary::-webkit-details-marker { display: none; }
+
+.danger-zone[open] .danger-link-btn {
+  display: block;
+}
+
+.danger-link-btn {
+  margin-top: 10px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: underline;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.reset-history-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.reset-history-actions button { flex: 1; }
+
+.danger-btn {
+  padding: 14px;
+  background: #a3312a;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .history-item {
   background: var(--surface);
   border: 1px solid var(--border);

@@ -155,6 +155,10 @@
     <section id="screen-history" class="screen">
       <h2>これまでの記録</h2>
       <div id="history-content"></div>
+      <details class="danger-zone">
+        <summary>その他の設定</summary>
+        <button type="button" id="reset-history-btn" class="danger-link-btn">記録データをすべて削除する</button>
+      </details>
     </section>
 
     <!-- ===== グラフ画面 ===== -->
@@ -226,6 +230,18 @@
         <div class="rpe-row rpe-7"><span class="rpe-num">RPE 7</span><span class="rpe-desc">あと3回はできそう（まずはここを目安に）</span></div>
         <div class="rpe-row rpe-6"><span class="rpe-num">RPE 6</span><span class="rpe-desc">あと4回以上できる。余裕あり</span></div>
         <div class="rpe-row rpe-5"><span class="rpe-num">RPE 5以下</span><span class="rpe-desc">かなり軽い。ウォームアップ向き</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="reset-history-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-reset-history-close></div>
+    <div class="demo-modal-content">
+      <h3 style="margin:0 0 8px;">記録をすべて削除しますか？</h3>
+      <p style="font-size:13px; color:var(--text-dim); margin:0 0 16px; line-height:1.6;">これまでのトレーニング記録がすべて消え、元に戻せません。お気に入りや体重などの設定はそのまま残ります。</p>
+      <div class="reset-history-actions">
+        <button type="button" class="secondary-btn" data-reset-history-close>キャンセル</button>
+        <button type="button" id="reset-history-confirm" class="danger-btn">削除する</button>
       </div>
     </div>
   </div>

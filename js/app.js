@@ -706,11 +706,25 @@ function init() {
   document.getElementById('rpe-info-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
+  document.getElementById('reset-history-btn').addEventListener('click', () => {
+    document.getElementById('reset-history-modal').classList.add('open');
+  });
+  document.getElementById('reset-history-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-reset-history-close]')) {
+      document.getElementById('reset-history-modal').classList.remove('open');
+    }
+  });
+  document.getElementById('reset-history-confirm').addEventListener('click', () => {
+    clearHistory();
+    document.getElementById('reset-history-modal').classList.remove('open');
+    renderHistory();
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeDemoModal();
       closeExercisePicker();
       closeRpeInfoModal();
+      document.getElementById('reset-history-modal').classList.remove('open');
     }
   });
 
