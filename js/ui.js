@@ -1,5 +1,12 @@
 // DOM描画。状態(state)は持たず、渡されたデータをそのまま画面に反映するだけ。
 
+// テンプレート名などユーザーが自由入力した文字列をinnerHTMLに埋め込む前にエスケープする。
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
 function showScreen(name) {
   document.querySelectorAll('.screen').forEach((el) => el.classList.remove('active'));
   document.getElementById(`screen-${name}`).classList.add('active');
@@ -272,6 +279,30 @@ function renderCustomExerciseList(customExercises, customRestSec) {
       <button type="button" class="reorder-done-btn" data-reorder-done>完了</button>
     </div>
     ${itemsHtml}`;
+}
+
+// 「自分で作る」画面の上部、保存済みの種目組み合わせ一覧(折りたたみ内)。
+function renderCustomTemplateList(templates) {
+  const container = document.getElementById('custom-template-list');
+  if (!container) return;
+
+  if (templates.length === 0) {
+    container.innerHTML = '<p class="hint-text">まだ保存した組み合わせはありません。種目を選んだあと、下の「この組み合わせを保存」から追加できます。</p>';
+    return;
+  }
+
+  container.innerHTML = templates.map((t) => {
+    const date = new Date(t.createdAt);
+    const dateLabel = `${date.getMonth() + 1}/${date.getDate()}`;
+    return `
+    <div class="template-item">
+      <button type="button" class="template-item-main" data-template-load="${t.id}">
+        <div class="template-name">${escapeHtml(t.name)}</div>
+        <div class="template-meta">${t.exerciseIds.length}種目・${dateLabel}保存</div>
+      </button>
+      <button type="button" class="template-delete-btn" data-template-delete="${t.id}" aria-label="この組み合わせを削除">✕</button>
+    </div>`;
+  }).join('');
 }
 
 function renderExercisePicker(query, isSelectedFn, filterMode) {

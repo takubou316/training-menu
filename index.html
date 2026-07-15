@@ -116,6 +116,11 @@
     <section id="screen-custom" class="screen">
       <h2>自分でメニューを作る</h2>
 
+      <details class="wu-cd-toggle template-toggle" id="custom-template-toggle">
+        <summary>保存した組み合わせから読み込む</summary>
+        <div id="custom-template-list" class="menu-block"></div>
+      </details>
+
       <div id="custom-wu-cd"></div>
 
       <h3>種目（<span id="custom-exercise-count">0</span>個）</h3>
@@ -129,6 +134,10 @@
           <input type="range" id="bodyweight-slider-custom" min="30" max="150" step="0.5" value="60">
         </div>
       </fieldset>
+
+      <div class="template-save-row">
+        <button type="button" class="text-link-btn" id="custom-save-template-btn" hidden>この組み合わせを保存</button>
+      </div>
 
       <p class="error-text" id="custom-error"></p>
       <button class="primary-btn" id="custom-generate-btn">このメニューで進む</button>
@@ -230,6 +239,19 @@
         <div class="rpe-row rpe-7"><span class="rpe-num">RPE 7</span><span class="rpe-desc">あと3回はできそう（まずはここを目安に）</span></div>
         <div class="rpe-row rpe-6"><span class="rpe-num">RPE 6</span><span class="rpe-desc">あと4回以上できる。余裕あり</span></div>
         <div class="rpe-row rpe-5"><span class="rpe-num">RPE 5以下</span><span class="rpe-desc">かなり軽い。ウォームアップ向き</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="save-template-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-save-template-close></div>
+    <div class="demo-modal-content">
+      <h3 style="margin:0 0 8px;">組み合わせを保存</h3>
+      <input type="text" id="save-template-name" class="template-name-input" placeholder="名前（例: 胸・二頭の日）" maxlength="30">
+      <p class="error-text" id="save-template-error"></p>
+      <div class="reset-history-actions">
+        <button type="button" class="secondary-btn" data-save-template-close>キャンセル</button>
+        <button type="button" id="save-template-confirm" class="primary-btn">保存する</button>
       </div>
     </div>
   </div>

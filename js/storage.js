@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   settings: 'training-menu:settings',
   history: 'training-menu:history',
   favorites: 'training-menu:favorites',
+  customTemplates: 'training-menu:custom-templates',
 };
 
 function loadSettings() {
@@ -76,6 +77,29 @@ function toggleFavoriteExercise(exerciseId) {
   return favorites;
 }
 
+// 「自分で作る」で組んだ種目構成(種目の並び・休憩時間)を名前付きで保存しておき、後から呼び出せる。
+function loadCustomTemplates() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.customTemplates);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveCustomTemplate(template) {
+  const templates = loadCustomTemplates();
+  templates.unshift(template); // 新しいものを先頭に
+  localStorage.setItem(STORAGE_KEYS.customTemplates, JSON.stringify(templates));
+  return templates;
+}
+
+function deleteCustomTemplate(id) {
+  const templates = loadCustomTemplates().filter((t) => t.id !== id);
+  localStorage.setItem(STORAGE_KEYS.customTemplates, JSON.stringify(templates));
+  return templates;
+}
+
 // 記録履歴(新しい順)から、実施したことのある種目IDを直近順・重複なしで返す。
 function recentExerciseIds(limit) {
   const history = loadHistory();
@@ -97,5 +121,6 @@ if (typeof module !== 'undefined') {
   module.exports = {
     loadSettings, saveSettings, loadHistory, saveSession, clearHistory, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
+    loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
   };
 }

@@ -280,7 +280,47 @@ function recomputeCustomWarmupCooldown() {
 function renderCustomScreen() {
   recomputeCustomWarmupCooldown();
   renderCustomExerciseList(customExercises, customRestSec);
+  renderCustomTemplateList(loadCustomTemplates());
+  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0;
   if (customReorderController) customReorderController.reapplyAfterRender();
+}
+
+// 保存済みの組み合わせ(種目構成・休憩時間)を「自分で作る」画面に反映する。
+// 種目データが更新されて削除されたIDは無視する。
+function applyCustomTemplate(template) {
+  customExercises = template.exerciseIds.map((id) => findExerciseById(id)).filter(Boolean);
+  customRestSec = { ...template.restSec };
+  document.getElementById('custom-error').textContent = '';
+  renderCustomScreen();
+}
+
+function openSaveTemplateModal() {
+  document.getElementById('save-template-name').value = '';
+  document.getElementById('save-template-error').textContent = '';
+  document.getElementById('save-template-modal').classList.add('open');
+  document.getElementById('save-template-name').focus();
+}
+
+function closeSaveTemplateModal() {
+  document.getElementById('save-template-modal').classList.remove('open');
+}
+
+function confirmSaveTemplate() {
+  const nameInput = document.getElementById('save-template-name');
+  const name = nameInput.value.trim();
+  if (!name) {
+    document.getElementById('save-template-error').textContent = '名前を入力してください';
+    return;
+  }
+  saveCustomTemplate({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    createdAt: new Date().toISOString(),
+    exerciseIds: customExercises.map((ex) => ex.id),
+    restSec: { ...customRestSec },
+  });
+  closeSaveTemplateModal();
+  renderCustomTemplateList(loadCustomTemplates());
 }
 
 function addCustomExercise(id) {
@@ -335,6 +375,30 @@ function wireCustomScreen() {
       customCooldown.static.splice(Number(removeCooldown.dataset.customRemoveCooldown), 1);
       renderCustomWuCd(customWarmup, customCooldown);
     }
+  });
+
+  document.getElementById('custom-template-list').addEventListener('click', (e) => {
+    const del = e.target.closest('[data-template-delete]');
+    if (del) {
+      deleteCustomTemplate(del.dataset.templateDelete);
+      renderCustomTemplateList(loadCustomTemplates());
+      return;
+    }
+    const load = e.target.closest('[data-template-load]');
+    if (load) {
+      const template = loadCustomTemplates().find((t) => t.id === load.dataset.templateLoad);
+      if (template) applyCustomTemplate(template);
+      document.getElementById('custom-template-toggle').open = false;
+    }
+  });
+
+  document.getElementById('custom-save-template-btn').addEventListener('click', openSaveTemplateModal);
+  document.getElementById('save-template-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-save-template-close]')) closeSaveTemplateModal();
+  });
+  document.getElementById('save-template-confirm').addEventListener('click', confirmSaveTemplate);
+  document.getElementById('save-template-name').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmSaveTemplate();
   });
 
   document.getElementById('custom-generate-btn').addEventListener('click', () => {
@@ -762,6 +826,7 @@ function init() {
       closeExercisePicker();
       closeRpeInfoModal();
       document.getElementById('reset-history-modal').classList.remove('open');
+      closeSaveTemplateModal();
     }
   });
 
