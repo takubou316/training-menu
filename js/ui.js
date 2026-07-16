@@ -620,6 +620,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       <div class="slider-field">
         <div class="slider-label"><span>時間</span><span class="slider-value">${ex.duration}分</span></div>
         <input type="range" min="0" max="120" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+        <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
       </div>
       ${ex.hasDistance ? `
       <div class="slider-field">

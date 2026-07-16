@@ -697,6 +697,7 @@ function handleLogInput(e) {
 function handleFinishWorkout() {
   if (!currentSession) return;
   stopHoldTimer();
+  stopCardioTimer();
   endRestTimer();
   currentSession.durationSec = stopSessionTimer();
   finalizeSession(currentSession);
@@ -770,6 +771,8 @@ function init() {
     }
     const holdTimerTrigger = e.target.closest('[data-hold-timer]');
     if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
+    const cardioTimerTrigger = e.target.closest('[data-cardio-timer]');
+    if (cardioTimerTrigger) toggleCardioTimer(cardioTimerTrigger);
     const rpeInfoTrigger = e.target.closest('[data-rpe-info-toggle]');
     if (rpeInfoTrigger) openRpeInfoModal();
     const favTrigger = e.target.closest('[data-fav-toggle]');
@@ -836,6 +839,7 @@ function init() {
   document.getElementById('rest-timer-plus10').addEventListener('click', () => addRestTimerSeconds(10));
   document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
   document.getElementById('hold-timer-cancel').addEventListener('click', stopHoldTimer);
+  document.getElementById('cardio-timer-stop').addEventListener('click', stopCardioTimer);
 
   document.getElementById('progress-exercise-select').addEventListener('change', (e) => {
     renderExerciseProgressChart(e.target.value);
@@ -847,6 +851,7 @@ function init() {
       if (target === 'history') renderHistory();
       if (target === 'progress') renderProgressScreen();
       stopHoldTimer();
+      stopCardioTimer();
       endRestTimer();
       stopSessionTimer();
       showScreen(target);
