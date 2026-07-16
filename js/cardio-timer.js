@@ -6,6 +6,8 @@
 // 「休憩」で運動時間の計測を一時停止し、休憩時間だけを別に計測できる。休憩中は
 // 種目の「時間」スライダーは増えず、「再開」を押すと運動時間の計測に戻る。
 // 休憩の開始時刻・長さはexercise.restLogに記録として残し、記録画面・履歴で後から見られるようにする。
+// 一度でも休憩すると、以降は運動時間(上)と休憩時間(下)を同時に2段表示にする
+// (休憩から再開しても1段表示には戻さない。詳細はsetCardioTimerPhaseUi参照)。
 
 let activeCardioTimer = null;
 // { exIndex, phase: 'running'|'resting', accumulatedActiveMs, segmentStartedAt, restLog, intervalId }
@@ -32,13 +34,23 @@ function updateCardioRestSummaryDisplay(exIndex, restLog) {
   el.textContent = formatCardioRestSummary(restLog);
 }
 
+// 休憩を一度でも始めたら(今休憩中も含む)、以降はこのタイマーが終わるまで
+// 運動時間と休憩時間の2段表示のままにする(休憩から戻ってもまた1段表示には戻さない)。
+function hasCardioRestedAtLeastOnce() {
+  return !!activeCardioTimer && (activeCardioTimer.restLog.length > 0 || activeCardioTimer.phase === 'resting');
+}
+
 function setCardioTimerPhaseUi(phase) {
   const modal = document.getElementById('cardio-timer-modal');
   const labelEl = document.getElementById('cardio-timer-label');
   const restToggleBtn = document.getElementById('cardio-timer-rest-toggle');
+  const restRow = document.getElementById('cardio-timer-rest-row');
+  const dualMode = hasCardioRestedAtLeastOnce();
+
   if (modal) modal.classList.toggle('cardio-timer-resting', phase === 'resting');
-  if (labelEl) labelEl.textContent = phase === 'resting' ? '休憩中' : '計測中';
+  if (labelEl) labelEl.textContent = dualMode ? '運動時間' : '計測中';
   if (restToggleBtn) restToggleBtn.textContent = phase === 'resting' ? '再開' : '休憩';
+  if (restRow) restRow.hidden = !dualMode;
 }
 
 function toggleCardioTimer(button) {
@@ -79,10 +91,16 @@ function updateCardioTimer() {
   const { exIndex, phase, segmentStartedAt } = activeCardioTimer;
 
   const activeSec = Math.floor(currentActiveMs() / 1000);
-  // 休憩中は「休憩の経過時間」を、計測中は「運動の経過時間」を大きい数字に表示する
-  const displaySec = phase === 'resting' ? Math.floor((Date.now() - segmentStartedAt) / 1000) : activeSec;
+  // 運動時間は休憩を挟んでも常にこの表示を使う(休憩中はここで増えるのを止めているだけで、隠しはしない)
   const valueEl = document.getElementById('cardio-timer-value');
-  if (valueEl) valueEl.textContent = formatDuration(displaySec);
+  if (valueEl) valueEl.textContent = formatDuration(activeSec);
+
+  // 休憩時間は休憩中だけ数え、計測中は0のまま(次の休憩に備えてリセットした状態)にする
+  const restValueEl = document.getElementById('cardio-timer-rest-value');
+  if (restValueEl) {
+    const restSec = phase === 'resting' ? Math.floor((Date.now() - segmentStartedAt) / 1000) : 0;
+    restValueEl.textContent = formatDuration(restSec);
+  }
 
   const elapsedMin = Math.floor(activeSec / 60);
   const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);

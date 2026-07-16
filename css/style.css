@@ -717,6 +717,18 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.cardio-timer-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 休憩を一度でも始めたら運動時間の下に並べて表示する、休憩用の一回り小さいタイマー表示 */
+.timer-value-sub {
+  font-size: 40px;
+}
+
 .rest-timer-actions {
   display: flex;
   gap: 12px;
