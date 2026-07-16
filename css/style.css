@@ -804,9 +804,14 @@ select {
 }
 
 .rpe-reserve-hint {
-  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
   color: var(--accent);
-  margin-bottom: 4px;
+  padding: 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rpe-info-btn {
