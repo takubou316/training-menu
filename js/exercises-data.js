@@ -2,9 +2,12 @@
 // 各種目は「主動筋(primary)」「補助筋(secondary)」「種目カテゴリ」「必要器具」「動作パターン」「片側種目か」を持つ。
 // description は初心者向けのフォームのポイント・注意点の短い説明（iアイコンから表示）。
 // bodyweightLoadFactor は自重種目で実際に体のどれくらいの割合が負荷になっているかの推定値（体重×この値＝推定負荷）。
-// プッシュアップ系のみ研究値（Ebben et al., 2011, J Strength Cond Res「Kinetic Analysis of Several
-// Variations of Push-Up」）に基づく数値を設定し、根拠のある数値が見当たらない種目は未設定のまま
-// （その場合は体重100%をそのまま負荷とみなす）。
+// 通常プッシュアップ(0.64)・インクライン(0.5)・デクライン(0.7)は、Ebben et al., 2011
+// (J Strength Cond Res「Kinetic Analysis of Several Variations of Push-Up」)がフォースプレートで
+// 実測した「手/足を台に乗せた高さ違いのプッシュアップ」の%体重(手上げ約40〜55%・通常約65%・
+// 足上げ約70〜74%)に基づく数値。この研究で測定されていない種目(ダイヤモンドプッシュアップ、
+// マウンテンクライマー等)は無理に転用せず未設定のまま（その場合は体重100%をそのまま負荷とみなす。
+// これも精密な値ではない一般的な近似だが、少なくとも「研究値である」という誤った印象は与えない）。
 // 出典の考え方: JATI/NSCA/ACSMなど公的資格団体が共通して教える一般的な運動分類・筋肉部位の対応関係を基にした一般知識であり、
 // 特定の書籍・教材の文章をそのまま転記したものではない。数値基準(セット/レップ/休憩)は js/rules.js 側で管理する。
 
@@ -99,7 +102,7 @@ const EXERCISES = [
     description: 'ケーブルを使ったカール。ダンベルと違い上げきった位置でも負荷が抜けにくい。' },
   { id: 'bench_dip', name: 'ベンチディップス', primary: ['triceps'], secondary: ['chest', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'isolation', unilateral: false, riskAreas: ['肩', '手首'],
     description: 'ベンチに手をつき、肘を曲げてお尻を下ろしてから押し上げる。肩をすくめず、肘を体の後方に開きすぎないようにする。' },
-  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.64,
+  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'],
     description: '両手の親指と人差し指でダイヤモンド形を作って行う腕立て伏せ。通常より三頭筋への負荷が強く、手首への負担も増えるので注意。' },
   { id: 'db_triceps_extension', name: 'ダンベルトライセプスエクステンション', primary: ['triceps'], secondary: [], category: 'isolation', equipment: ['dumbbell'], pattern: 'isolation', unilateral: false, riskAreas: ['肩'],
     description: '頭上でダンベルを持ち、肘を支点にして後頭部側へ下ろしてから伸ばす。肘が左右に開かないよう固定する。' },
@@ -153,7 +156,7 @@ const EXERCISES = [
     description: '仰向けで膝を立て、肩甲骨が浮く程度に上体を丸める。首に力を入れて引っ張らないよう注意する。' },
   { id: 'leg_raise', name: 'レッグレイズ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰'],
     description: '仰向けで脚を伸ばしたまま上げ下げする。腰が床から浮いて反ってしまう場合は膝を軽く曲げて行う。' },
-  { id: 'mountain_climber', name: 'マウンテンクライマー', primary: ['abs'], secondary: ['shoulders'], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.64,
+  { id: 'mountain_climber', name: 'マウンテンクライマー', primary: ['abs'], secondary: ['shoulders'], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'],
     description: '腕立て伏せの姿勢から交互に膝を胸へ引きつける。お尻が上がりすぎないよう体幹を固定したまま行う。' },
   { id: 'cable_crunch', name: 'ケーブルクランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'core', unilateral: false, riskAreas: [],
     description: 'ケーブルを頭の後ろで持ち、股関節を動かさず背中を丸めるように上体を下げる。腕の力で引かないようにする。' },
@@ -161,9 +164,13 @@ const EXERCISES = [
     description: '膝立ちでローラーを前に転がし、体が伸びきる手前で戻す。腰が反ると負担が大きいので無理のない範囲で戻す。' },
 
   // ===== 有酸素 =====
-  // type:'cardio'の種目は「セット×回数×重量」ではなく「時間・距離・RPE」で記録する別UIを使う
+  // type:'cardio'の種目は「セット×回数×重量」ではなく「時間・距離」で記録する別UIを使う
   // （js/ui.jsのrenderLog内でtype==='cardio'を分岐）。metは2024 Adult Compendium of Physical
-  // Activities（Ainsworth et al.）に基づく中強度時の代表値。hasDistanceは距離入力欄を出すかどうか
+  // Activities（Herrmann et al., 2024, J Sport Health Sci）に基づく中強度時の代表値。
+  // 数値は同文献の速度別MET表と照合済み（例: ランニングmet9.3は「6.0-6.3mph(10分/マイル)」、
+  // 自転車met8.0は「12.0-13.9mph, leisure, moderate」に対応。descriptionの参考ペースは
+  // mph表記をkm/hに変換した数値で、以前mph表記のままkm/hのラベルを付けていた誤りを修正済み）。
+  // hasDistanceは距離入力欄を出すかどうか
   // （屋外で実際の距離が測れる種目のみtrue。エアロバイク等の室内マシンは時間・RPEのみで記録する）。
   // primary/patternは強度別の自動メニュー生成では使わない(自分で作る/今日のメニューへの手動追加のみ対応)が、
   // ウォームアップ・クールダウンの自動提案（動作パターン・使う筋肉ベース）とは連動する。
@@ -172,10 +179,10 @@ const EXERCISES = [
     description: '普通〜やや速歩のペース。背筋を伸ばし、かかとから着地してつま先で蹴り出すことを意識する。' },
   { id: 'running', name: 'ランニング', primary: ['quads', 'hamstrings', 'calves', 'glutes'], secondary: [], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: ['膝'],
     type: 'cardio', hasDistance: true, met: 9.3,
-    description: '時速6km前後の一定ペースを目安に。着地の衝撃が大きいので、膝や足首に違和感がある時は無理をしない。' },
+    description: '時速9〜10km前後(1kmあたり6分程度)の一定ペースを目安に。着地の衝撃が大きいので、膝や足首に違和感がある時は無理をしない。' },
   { id: 'outdoor_cycling', name: '自転車（屋外）', primary: ['quads', 'hamstrings', 'glutes'], secondary: ['calves'], category: 'cardio', equipment: ['cardio_outdoor'], pattern: 'cardio', unilateral: false, riskAreas: [],
     type: 'cardio', hasDistance: true, met: 8.0,
-    description: '時速12〜14km程度のペースを目安に。サドルの高さはペダルが一番下にきた時に膝が軽く曲がる程度に調整する。' },
+    description: '時速19〜22km程度のペースを目安に。サドルの高さはペダルが一番下にきた時に膝が軽く曲がる程度に調整する。' },
   { id: 'stationary_bike', name: 'エアロバイク（室内）', primary: ['quads', 'hamstrings', 'glutes'], secondary: ['calves'], category: 'cardio', equipment: ['cardio_machine'], pattern: 'cardio', unilateral: false, riskAreas: [],
     type: 'cardio', hasDistance: false, met: 6.8,
     description: '負荷を調整して一定のペースを保つ。天候に左右されず自宅で行える。サドル位置は屋外の自転車と同様に調整する。' },
