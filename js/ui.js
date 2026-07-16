@@ -661,7 +661,10 @@ function renderHistory() {
   container.innerHTML = history
     .map((session) => `
     <div class="history-item">
-      <div class="h-date">${formatDate(session.date)}</div>
+      <div class="h-header">
+        <div class="h-date">${formatDate(session.date)}</div>
+        <button type="button" class="h-delete-btn" data-history-delete="${session.id}" aria-label="この記録を削除">×</button>
+      </div>
       <div class="h-meta">${goalLabel(session.goal)}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
       <details>
         <summary>詳細を見る</summary>

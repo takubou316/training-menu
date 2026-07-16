@@ -40,6 +40,13 @@ function clearHistory() {
   localStorage.removeItem(STORAGE_KEYS.history);
 }
 
+// 記録一覧から特定の1回分だけを削除する（他の記録には影響しない）。
+function deleteSession(id) {
+  const history = loadHistory().filter((s) => s.id !== id);
+  localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+  return history;
+}
+
 // 指定した種目の直近の記録（最後に行ったセット内容）を返す。無ければnull。
 function findLastPerformance(exerciseId) {
   const history = loadHistory();
@@ -119,7 +126,7 @@ function recentExerciseIds(limit) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    loadSettings, saveSettings, loadHistory, saveSession, clearHistory, findLastPerformance,
+    loadSettings, saveSettings, loadHistory, saveSession, clearHistory, deleteSession, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
   };

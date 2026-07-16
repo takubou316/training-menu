@@ -25,6 +25,9 @@ let exercisePickerTarget = null;
 // 種目ピッカーの絞り込みモード('all' | 'favorites' | 'recent')
 let exercisePickerFilter = 'all';
 
+// 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
+let historyDeleteTargetId = null;
+
 // ===== 種目カードの長押し→ドラッグ並べ替え（スマホのホーム画面アイコンと同じ操作感） =====
 // 長押しで「入れ替えモード」に入り、カードがゆれる。ゆれている間はどのカードもそのまま
 // ドラッグして並べ替えできる（2つ目以降は長押し不要）。各カードの左上の×バッジで削除。
@@ -707,6 +710,21 @@ function handleFinishWorkout() {
   showScreen('history');
 }
 
+// targetIdがnullなら「すべて削除」、session.idを渡せばその1件だけの削除確認になる。
+function openResetHistoryModal(targetId) {
+  historyDeleteTargetId = targetId || null;
+  const titleEl = document.getElementById('reset-history-modal-title');
+  const descEl = document.getElementById('reset-history-modal-desc');
+  if (historyDeleteTargetId) {
+    titleEl.textContent = 'この記録を削除しますか？';
+    descEl.textContent = 'この回の記録だけが消え、元に戻せません。他の記録には影響しません。';
+  } else {
+    titleEl.textContent = '記録をすべて削除しますか？';
+    descEl.textContent = 'これまでのトレーニング記録がすべて消え、元に戻せません。お気に入りや体重などの設定はそのまま残ります。';
+  }
+  document.getElementById('reset-history-modal').classList.add('open');
+}
+
 function restoreLastSettings() {
   const settings = loadSettings();
   if (!settings) return;
@@ -813,8 +831,10 @@ function init() {
   document.getElementById('rpe-info-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
-  document.getElementById('reset-history-btn').addEventListener('click', () => {
-    document.getElementById('reset-history-modal').classList.add('open');
+  document.getElementById('reset-history-btn').addEventListener('click', () => openResetHistoryModal(null));
+  document.getElementById('history-content').addEventListener('click', (e) => {
+    const delBtn = e.target.closest('[data-history-delete]');
+    if (delBtn) openResetHistoryModal(delBtn.dataset.historyDelete);
   });
   document.getElementById('reset-history-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-reset-history-close]')) {
@@ -822,7 +842,12 @@ function init() {
     }
   });
   document.getElementById('reset-history-confirm').addEventListener('click', () => {
-    clearHistory();
+    if (historyDeleteTargetId) {
+      deleteSession(historyDeleteTargetId);
+    } else {
+      clearHistory();
+    }
+    historyDeleteTargetId = null;
     document.getElementById('reset-history-modal').classList.remove('open');
     renderHistory();
   });
