@@ -636,16 +636,14 @@ function handleCardioLogInput(e) {
   if (field !== 'done') {
     const valueEl = target.parentElement.querySelector('.slider-value');
     if (valueEl) {
-      valueEl.textContent = field === 'duration' ? `${target.value}分`
-        : field === 'distance' ? `${Number(target.value).toFixed(1)}km`
-          : `RPE ${target.value}`;
+      valueEl.textContent = field === 'duration' ? `${target.value}分` : `${Number(target.value).toFixed(1)}km`;
     }
   }
 
-  if (field === 'duration' || field === 'rpe') {
+  if (field === 'duration') {
     const calorieEl = document.querySelector(`[data-cardio-calorie="${exIndex}"]`);
     if (calorieEl) {
-      const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0, Number(ex.rpe) || 0);
+      const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0);
       calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
     }
   }

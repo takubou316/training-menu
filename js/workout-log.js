@@ -52,13 +52,14 @@ function buildSuggestion(planItem, bodyWeightKg) {
   };
 }
 
-// 有酸素種目1分あたりの消費カロリー目安。運動生理学でよく使われる簡易式
-// 「kcal = MET × 体重(kg) × 時間(h)」がベース（詳細はrules.jsのRPE_SCALE同様、
-// 出典はexercises-data.jsのコメント参照）。RPE(きつさ)による強度の上下は、そのMET値
-// (中強度の代表値)を基準に「軽ければ引き、きつければ足す」形で単純化した独自の補正。
-function estimateCardioCalories(met, bodyWeightKg, durationMinutes, rpe) {
-  const intensityMultiplier = 0.6 + (Number(rpe) || 0) * 0.08; // RPE1→0.68倍、RPE7→1.16倍、RPE10→1.4倍
-  return met * intensityMultiplier * bodyWeightKg * (Number(durationMinutes) / 60);
+// 有酸素種目の消費カロリー目安。運動生理学でよく使われる簡易式
+// 「kcal = MET × 体重(kg) × 時間(h)」（出典はexercises-data.jsのコメント参照）。
+// 以前はRPE(きつさ)による独自の強度補正を掛けていたが、根拠のない自作の式だった上、
+// レジスタンストレーニング向けのRPE(Reps in Reserveベース)を有酸素に流用すること自体が
+// 概念として合っていなかったため撤廃した。種目ごとのMET値の違い(ウォーキング/ランニング等)で
+// 強度差はある程度表現されている。
+function estimateCardioCalories(met, bodyWeightKg, durationMinutes) {
+  return met * bodyWeightKg * (Number(durationMinutes) / 60);
 }
 
 function createSessionFromMenu(menu, bodyWeightKg) {
@@ -80,7 +81,6 @@ function createSessionFromMenu(menu, bodyWeightKg) {
           demoMedia: item.demoMedia,
           duration: 0,
           distance: item.hasDistance ? 0 : null,
-          rpe: String(RPE_SCALE.default),
           done: false,
         };
       }

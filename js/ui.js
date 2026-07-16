@@ -591,11 +591,11 @@ function renderLog(session) {
   container.innerHTML = warmupHtml + exercisesHtml + cooldownHtml;
 }
 
-// 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)・
-// きつさ(RPE流用)を記録し、体重×MET×時間から推定消費カロリーを表示する。
+// 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)を
+// 記録し、体重×MET×時間から推定消費カロリーを表示する。
 function buildCardioExerciseCardHtml(ex, exIndex) {
   const bodyWeightKg = getBodyWeightKg();
-  const calories = estimateCardioCalories(ex.met, bodyWeightKg, Number(ex.duration) || 0, Number(ex.rpe) || 0);
+  const calories = estimateCardioCalories(ex.met, bodyWeightKg, Number(ex.duration) || 0);
   const metricInfo = progressMetricInfo(ex);
   const sparklineHtml = buildProgressSparklineHtml(
     exerciseProgressSeries(ex.exerciseId, ex, 8),
@@ -623,10 +623,6 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
         <div class="slider-label"><span>距離</span><span class="slider-value">${Number(ex.distance).toFixed(1)}km</span></div>
         <input type="range" min="0" max="20" step="0.1" value="${ex.distance}" data-cardio-ex="${exIndex}" data-cardio-field="distance">
       </div>` : ''}
-      <div class="slider-field">
-        <div class="slider-label"><span>きつさ <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span><span class="slider-value">RPE ${ex.rpe}</span></div>
-        <input type="range" min="${RPE_SCALE.min}" max="${RPE_SCALE.max}" step="${RPE_SCALE.step}" value="${ex.rpe}" data-cardio-ex="${exIndex}" data-cardio-field="rpe">
-      </div>
       <div class="ex-note" data-cardio-calorie="${exIndex}">推定消費カロリー: 約${Math.round(calories)}kcal</div>
       <label class="done-toggle">
         <input type="checkbox" ${ex.done ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="done">
@@ -658,7 +654,7 @@ function renderHistory() {
           .map((ex) => {
             if (ex.type === 'cardio') {
               const detail = ex.done
-                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${ex.rpe ? `(RPE${ex.rpe})` : ''}`
+                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}`
                 : '未記録';
               return `<div class="h-ex">${ex.name}: ${detail}</div>`;
             }
