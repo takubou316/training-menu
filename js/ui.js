@@ -181,9 +181,13 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
   const labelHtml = field === 'rpe'
     ? `<span>${label} <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span>`
     : `<span>${label}</span>`;
+  const rpeReserveHtml = field === 'rpe'
+    ? `<div class="rpe-reserve-hint" data-rpe-reserve="${exIndex}:${setIndex}">${rpeReserveText(value)}</div>`
+    : '';
   return `
         <div class="slider-field">
           <div class="slider-label">${labelHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
+          ${rpeReserveHtml}
           <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
           ${extraHtml || ''}
         </div>`;

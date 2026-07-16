@@ -47,6 +47,20 @@ function exerciseCountForTime(minutes) {
 // Repetitions in Reserve-based RPEスケールに基づく）。
 const RPE_SCALE = { min: 1, max: 10, step: 0.5, default: 7 };
 
+// RPEの値から「あと何回できそうか(Reps in Reserve)」の短い目安テキストを返す。
+// 整数値(10/9/8/7/6)は#rpe-info-modalの説明文と同じ言い回しに揃え、0.5刻みの中間値は
+// RIRベースのRPEスケールの考え方通り「あと2〜3回」のように前後の範囲で表現する。
+function rpeReserveText(rpe) {
+  const r = Number(rpe);
+  if (Number.isNaN(r)) return '';
+  if (r >= 10) return 'あと0回。限界';
+  if (r <= 5.5) return 'かなり軽い（ウォームアップ向き）';
+  if (r === 6) return 'あと4回以上できそう';
+  const rir = 10 - r;
+  if (Number.isInteger(rir)) return `あと${rir}回はできそう`;
+  return `あと${Math.floor(rir)}〜${Math.ceil(rir)}回はできそう`;
+}
+
 // 進捗（プログレッシブオーバーロード）の目安。
 // 直近セットが全て「目標レップ上限に到達 かつ RPE7以下（＝目標を達成しつつ限界(RPE8以上)ではない）」
 // なら、次回は重量を少し上げる提案をする。「レップ目標を上回り、かつ主観的にまだ限界でなければ
@@ -62,5 +76,5 @@ const PROGRESSION = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { GOALS, LEVELS, exerciseCountForTime, PROGRESSION, RPE_SCALE };
+  module.exports = { GOALS, LEVELS, exerciseCountForTime, PROGRESSION, RPE_SCALE, rpeReserveText };
 }

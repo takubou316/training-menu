@@ -667,6 +667,11 @@ function handleLogInput(e) {
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 
+  if (field === 'rpe') {
+    const reserveEl = target.parentElement.querySelector(`[data-rpe-reserve="${exIndex}:${setIndex}"]`);
+    if (reserveEl) reserveEl.textContent = rpeReserveText(target.value);
+  }
+
   if (field === 'reps' && !set.isWarmup) {
     const progressionEl = document.querySelector(`[data-ex-reps-progression="${exIndex}"]`);
     if (progressionEl) {
