@@ -839,6 +839,7 @@ function init() {
   document.getElementById('rest-timer-plus10').addEventListener('click', () => addRestTimerSeconds(10));
   document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
   document.getElementById('hold-timer-cancel').addEventListener('click', stopHoldTimer);
+  document.getElementById('cardio-timer-rest-toggle').addEventListener('click', toggleCardioRest);
   document.getElementById('cardio-timer-stop').addEventListener('click', stopCardioTimer);
 
   document.getElementById('progress-exercise-select').addEventListener('change', (e) => {

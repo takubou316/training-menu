@@ -699,7 +699,8 @@ select {
 }
 
 .rest-timer-modal.rest-timer-done,
-.rest-timer-modal.hold-timer-measuring {
+.rest-timer-modal.hold-timer-measuring,
+.rest-timer-modal.cardio-timer-resting {
   background: var(--accent-dim);
 }
 
@@ -745,14 +746,24 @@ select {
 
 /* 全画面計測タイマーの唯一の操作ボタンなので、他の休憩タイマーのボタンより
    ひとまわり大きく・押しやすくする */
-#hold-timer-cancel,
-#cardio-timer-stop {
+#hold-timer-cancel {
   padding: 24px 12px;
   font-size: 20px;
   border-radius: 14px;
   background: var(--accent);
   color: #0b1210;
   border-color: var(--accent);
+}
+
+/* 「計測を終わる」は「中断」より文字数が多く20pxだと折り返すため、少し小さめにする */
+#cardio-timer-stop {
+  padding: 16px 12px;
+  font-size: 15px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #0b1210;
+  border-color: var(--accent);
+  white-space: nowrap;
 }
 
 .set-row {

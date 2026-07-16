@@ -628,6 +628,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
         <input type="range" min="0" max="20" step="0.1" value="${ex.distance}" data-cardio-ex="${exIndex}" data-cardio-field="distance">
       </div>` : ''}
       <div class="ex-note" data-cardio-calorie="${exIndex}">推定消費カロリー: 約${Math.round(calories)}kcal</div>
+      <div class="ex-note" data-cardio-rest-summary="${exIndex}" ${(ex.restLog && ex.restLog.length) ? '' : 'hidden'}>${formatCardioRestSummary(ex.restLog)}</div>
       <label class="done-toggle">
         <input type="checkbox" ${ex.done ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="done">
         完了
@@ -657,8 +658,9 @@ function renderHistory() {
         ${session.exercises
           .map((ex) => {
             if (ex.type === 'cardio') {
+              const restSummary = formatCardioRestSummary(ex.restLog);
               const detail = ex.done
-                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}`
+                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
                 : '未記録';
               return `<div class="h-ex">${ex.name}: ${detail}</div>`;
             }

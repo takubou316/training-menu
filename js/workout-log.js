@@ -81,6 +81,7 @@ function createSessionFromMenu(menu, bodyWeightKg) {
           demoMedia: item.demoMedia,
           duration: 0,
           distance: item.hasDistance ? 0 : null,
+          restLog: [], // cardio-timer.jsの「休憩」で記録される休憩区間(開始時刻・秒数)の履歴
           done: false,
         };
       }
@@ -147,7 +148,7 @@ function finalizeSession(session) {
         type: 'cardio',
         duration: e.duration,
         distance: e.distance,
-        rpe: e.rpe,
+        restLog: e.restLog || [],
         met: e.met,
         done: e.done,
       }
