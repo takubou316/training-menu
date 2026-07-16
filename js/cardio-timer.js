@@ -35,17 +35,21 @@ function updateCardioRestSummaryDisplay(exIndex, restLog) {
 }
 
 // タイマーの全画面モーダル内に、これまでの休憩を1回ごとの小さな履歴として表示する。
+// 「何回目」の一覧は4行を超えるとその欄だけスクロールし、合計は常に固定表示のまま。
 function updateCardioTimerRestHistory(restLog) {
-  const el = document.getElementById('cardio-timer-rest-history');
-  if (!el) return;
+  const container = document.getElementById('cardio-timer-rest-history');
+  const listEl = document.getElementById('cardio-timer-rest-history-list');
+  const totalEl = document.getElementById('cardio-timer-rest-history-total');
+  if (!container || !listEl || !totalEl) return;
   if (!restLog || restLog.length === 0) {
-    el.hidden = true;
-    el.innerHTML = '';
+    container.hidden = true;
+    listEl.innerHTML = '';
+    totalEl.textContent = '';
     return;
   }
-  el.hidden = false;
-  const rows = restLog.map((r, i) => `<div>${i + 1}回目 ${formatDuration(r.durationSec)}</div>`).join('');
-  el.innerHTML = `${rows}<div class="cardio-timer-rest-history-total">合計 ${formatDuration(cardioRestTotalSec(restLog))}</div>`;
+  container.hidden = false;
+  listEl.innerHTML = restLog.map((r, i) => `<div>${i + 1}回目 ${formatDuration(r.durationSec)}</div>`).join('');
+  totalEl.textContent = `合計 ${formatDuration(cardioRestTotalSec(restLog))}`;
 }
 
 // 休憩を一度でも始めたら(今休憩中も含む)、以降はこのタイマーが終わるまで

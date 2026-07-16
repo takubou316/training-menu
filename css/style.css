@@ -729,15 +729,20 @@ select {
   font-size: 40px;
 }
 
-/* 休憩履歴・合計を小さく表示する欄。数が多くなっても画面からはみ出さないようスクロールにする */
+/* 休憩履歴・合計を小さく表示する欄。「何回目」の一覧だけを4行分でスクロールにし、
+   合計は常にその下に固定表示する(一覧と同じ場所でスクロールさせると件数が増えた時に
+   合計まで見えなくなってしまうため、別要素に分けている)。 */
 .cardio-timer-rest-history {
-  max-height: 96px;
-  overflow-y: auto;
   font-size: 12px;
   color: var(--text-dim);
   text-align: center;
-  line-height: 1.7;
   font-variant-numeric: tabular-nums;
+}
+
+.cardio-timer-rest-history-list {
+  max-height: calc(1.7em * 4);
+  overflow-y: auto;
+  line-height: 1.7;
 }
 
 .cardio-timer-rest-history-total {
