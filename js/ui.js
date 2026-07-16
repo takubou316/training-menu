@@ -47,10 +47,12 @@ function openDemoModal(url) {
 
 function openRpeInfoModal() {
   document.getElementById('rpe-info-modal').classList.add('open');
+  lockBodyScroll();
 }
 
 function closeRpeInfoModal() {
   document.getElementById('rpe-info-modal').classList.remove('open');
+  unlockBodyScroll();
 }
 
 function closeDemoModal() {

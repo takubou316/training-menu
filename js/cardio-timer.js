@@ -93,7 +93,7 @@ function toggleCardioTimer(button) {
 
   const modal = document.getElementById('cardio-timer-modal');
   if (modal) modal.hidden = false;
-  document.body.classList.add('cardio-timer-open');
+  lockBodyScroll();
   setCardioTimerPhaseUi('running');
   updateCardioTimer();
   activeCardioTimer.intervalId = setInterval(updateCardioTimer, 1000);
@@ -202,6 +202,6 @@ function stopCardioTimer() {
     modal.hidden = true;
     modal.classList.remove('cardio-timer-resting');
   }
-  document.body.classList.remove('cardio-timer-open');
+  unlockBodyScroll();
   activeCardioTimer = null;
 }

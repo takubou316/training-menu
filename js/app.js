@@ -1,5 +1,20 @@
 // エントリポイント。画面遷移とイベント配線のみを担当する。
 
+// 全画面モーダル(種目ピッカー・RPE説明・有酸素タイマー等)を開いている間、背面ページの
+// スクロールを止めるための共有ロック。カウンタ方式にしているのは、内部に独自スクロール領域
+// (種目ピッカーの一覧、RPE説明の長い表など)を持つモーダルで、背面ページのスクロールと
+// 競合してタッチ操作がどちらに取られるか曖昧になり、本来スクロールしたい方が操作できなくなる
+// 不具合があったため。1つでも開いていればロックし、全部閉じたら解除する。
+let bodyScrollLockCount = 0;
+function lockBodyScroll() {
+  bodyScrollLockCount += 1;
+  document.body.classList.add('modal-open');
+}
+function unlockBodyScroll() {
+  bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+  if (bodyScrollLockCount === 0) document.body.classList.remove('modal-open');
+}
+
 const PART_TO_MUSCLES = {
   fullbody: ['fullbody'],
   chest: ['chest'],
@@ -438,6 +453,15 @@ function renderExercisePickerNow() {
   renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter);
 }
 
+// 絞り込み(フィルター切り替え・検索)で表示される一覧そのものが変わる時に呼ぶ。
+// 一覧のスクロール位置を先頭に戻さないと、長い一覧を下の方までスクロールした状態で
+// 短い一覧(例:お気に入り)に切り替えた時、スクロール位置だけ残ってしまい
+// 実際にはある種目が画面外(スクロールした先の空白)に隠れて何も表示されないように見えるバグがあった。
+function renderExercisePickerAndResetScroll() {
+  renderExercisePickerNow();
+  document.getElementById('exercise-picker-list').scrollTop = 0;
+}
+
 function openExercisePicker(target) {
   exercisePickerTarget = target;
   exercisePickerFilter = 'all';
@@ -446,13 +470,15 @@ function openExercisePicker(target) {
   });
   const searchInput = document.getElementById('exercise-picker-search');
   searchInput.value = '';
-  renderExercisePickerNow();
+  renderExercisePickerAndResetScroll();
   document.getElementById('exercise-picker-modal').hidden = false;
+  lockBodyScroll();
 }
 
 function closeExercisePicker() {
   document.getElementById('exercise-picker-modal').hidden = true;
   exercisePickerTarget = null;
+  unlockBodyScroll();
 }
 
 function handleExercisePickerSelect(id) {
@@ -469,13 +495,13 @@ function handleExercisePickerSelect(id) {
 }
 
 function wireExercisePicker() {
-  document.getElementById('exercise-picker-search').addEventListener('input', renderExercisePickerNow);
+  document.getElementById('exercise-picker-search').addEventListener('input', renderExercisePickerAndResetScroll);
   document.getElementById('exercise-picker-close').addEventListener('click', closeExercisePicker);
   document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       exercisePickerFilter = btn.dataset.pickerFilter;
       document.querySelectorAll('.picker-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
-      renderExercisePickerNow();
+      renderExercisePickerAndResetScroll();
     });
   });
   document.getElementById('exercise-picker-list').addEventListener('click', (e) => {
