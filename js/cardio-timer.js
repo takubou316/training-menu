@@ -34,6 +34,20 @@ function updateCardioRestSummaryDisplay(exIndex, restLog) {
   el.textContent = formatCardioRestSummary(restLog);
 }
 
+// タイマーの全画面モーダル内に、これまでの休憩を1回ごとの小さな履歴として表示する。
+function updateCardioTimerRestHistory(restLog) {
+  const el = document.getElementById('cardio-timer-rest-history');
+  if (!el) return;
+  if (!restLog || restLog.length === 0) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
+  const rows = restLog.map((r, i) => `<div>${i + 1}回目 ${formatDuration(r.durationSec)}</div>`).join('');
+  el.innerHTML = `${rows}<div class="cardio-timer-rest-history-total">合計 ${formatDuration(cardioRestTotalSec(restLog))}</div>`;
+}
+
 // 休憩を一度でも始めたら(今休憩中も含む)、以降はこのタイマーが終わるまで
 // 運動時間と休憩時間の2段表示のままにする(休憩から戻ってもまた1段表示には戻さない)。
 function hasCardioRestedAtLeastOnce() {
@@ -71,6 +85,7 @@ function toggleCardioTimer(button) {
     intervalId: null,
   };
   button.classList.add('active');
+  updateCardioTimerRestHistory([]); // 前回このモーダルを使った時の休憩履歴が一瞬見えないようにリセット
 
   // スライダーのstep(0.25分=15秒刻み、手でドラッグする時用)のままだと、値を代入した時点で
   // ブラウザが最寄りのstepに丸めてしまい、計測中の秒単位の実測値が反映できない。
@@ -161,6 +176,7 @@ function finalizeCurrentRestSegment() {
   const exercise = currentSession && currentSession.exercises[exIndex];
   if (exercise) exercise.restLog = restLog;
   updateCardioRestSummaryDisplay(exIndex, restLog);
+  updateCardioTimerRestHistory(restLog);
 }
 
 function stopCardioTimer() {

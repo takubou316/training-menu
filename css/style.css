@@ -729,6 +729,23 @@ select {
   font-size: 40px;
 }
 
+/* 休憩履歴・合計を小さく表示する欄。数が多くなっても画面からはみ出さないようスクロールにする */
+.cardio-timer-rest-history {
+  max-height: 96px;
+  overflow-y: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+
+.cardio-timer-rest-history-total {
+  margin-top: 4px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .rest-timer-actions {
   display: flex;
   gap: 12px;
