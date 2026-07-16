@@ -168,9 +168,12 @@ function resumeCardioTimerFromRest() {
 }
 
 // 進行中の休憩区間をrestLogに記録として積む(exercise.restLogにも反映して記録画面・履歴用に残す)。
+// 秒への丸めは、ライブ表示(updateCardioTimerのrestSec)や他のタイマー(session-timer.js等)と
+// 同じMath.floorに揃える。ここだけMath.roundにしていると、表示は「1秒」のまま止まっているのに
+// 実際に記録される値は「2秒」になる、という表示と記録のズレが起きてしまう。
 function finalizeCurrentRestSegment() {
   const now = Date.now();
-  const durationSec = Math.round((now - activeCardioTimer.segmentStartedAt) / 1000);
+  const durationSec = Math.floor((now - activeCardioTimer.segmentStartedAt) / 1000);
   if (durationSec > 0) {
     activeCardioTimer.restLog.push({
       startedAt: new Date(activeCardioTimer.segmentStartedAt).toISOString(),
