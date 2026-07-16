@@ -636,7 +636,7 @@ function handleCardioLogInput(e) {
   if (field !== 'done') {
     const valueEl = target.parentElement.querySelector('.slider-value');
     if (valueEl) {
-      valueEl.textContent = field === 'duration' ? `${target.value}分` : `${Number(target.value).toFixed(1)}km`;
+      valueEl.textContent = field === 'duration' ? formatMinSec(target.value) : `${Number(target.value).toFixed(1)}km`;
     }
   }
 

@@ -72,6 +72,12 @@ function toggleCardioTimer(button) {
   };
   button.classList.add('active');
 
+  // スライダーのstep(0.25分=15秒刻み、手でドラッグする時用)のままだと、値を代入した時点で
+  // ブラウザが最寄りのstepに丸めてしまい、計測中の秒単位の実測値が反映できない。
+  // 計測中だけ細かいstepに一時的に変更し、手放したら元のstepに戻す(stopCardioTimer参照)。
+  const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
+  if (slider) slider.step = '0.001';
+
   const modal = document.getElementById('cardio-timer-modal');
   if (modal) modal.hidden = false;
   setCardioTimerPhaseUi('running');
@@ -102,7 +108,9 @@ function updateCardioTimer() {
     restValueEl.textContent = formatDuration(restSec);
   }
 
-  const elapsedMin = Math.floor(activeSec / 60);
+  // スライダーのstepは0.25分(15秒)刻みだが、タイマー計測中は秒単位の実測値をそのまま反映する
+  // (stepへの丸めはユーザーが手でドラッグする時だけ働けばよい)。
+  const elapsedMin = activeSec / 60;
   const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
   if (slider) {
     slider.value = Math.min(elapsedMin, Number(slider.max));
@@ -163,10 +171,17 @@ function stopCardioTimer() {
     activeCardioTimer.accumulatedActiveMs += Date.now() - activeCardioTimer.segmentStartedAt;
     activeCardioTimer.segmentStartedAt = Date.now();
   }
+
+  const { exIndex } = activeCardioTimer;
+  // 手でドラッグする時用のstepに先に戻してから最後の反映を行う。stepを変えた後に
+  // 値を直接書き換えると、ブラウザがその場でstepの倍数に丸めてしまうため、順番を
+  // 逆にする(先にstepを戻す→最後にupdateCardioTimerで反映)と、つまみの位置・
+  // ラベル・保存される時間が食い違わずに済む(最終的な値は15秒刻みに丸められる)。
+  const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
+  if (slider) slider.step = '0.25';
   updateCardioTimer(); // 停止した瞬間までの経過時間を反映してから止める
 
   clearInterval(activeCardioTimer.intervalId);
-  const { exIndex } = activeCardioTimer;
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
   if (button) {
     button.textContent = '▶ 計測';

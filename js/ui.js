@@ -170,6 +170,15 @@ const WEIGHT_RANGE_BY_EQUIPMENT = {
   machine: { max: 150, step: 2.5 },
 };
 
+// 有酸素の「時間」のように分未満の端数(秒)も持つ値を「X分Y秒」で表示する。
+// ちょうど分の時は「Y秒」を省略する(例: 12分、12分30秒)。
+function formatMinSec(totalMinutes) {
+  const totalSec = Math.round(Number(totalMinutes) * 60);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return s > 0 ? `${m}分${s}秒` : `${m}分`;
+}
+
 function formatSliderValue(field, value, holdBased) {
   if (field === 'weight') return `${value} kg`;
   if (field === 'reps') return holdBased ? `${value} 秒` : `${value} 回`;
@@ -365,8 +374,8 @@ function formatShortDate(iso) {
 function progressMetricInfo(exerciseMeta) {
   if (exerciseMeta.type === 'cardio') {
     return exerciseMeta.hasDistance
-      ? { title: '距離の推移（直近12回）', caption: '距離', valueFormatter: (v) => `${v.toFixed(1)}km`, detailFormatter: (p) => `${p.duration}分` }
-      : { title: '時間の推移（直近12回）', caption: '時間', valueFormatter: (v) => `${Math.round(v)}分` };
+      ? { title: '距離の推移（直近12回）', caption: '距離', valueFormatter: (v) => `${v.toFixed(1)}km`, detailFormatter: (p) => formatMinSec(p.duration) }
+      : { title: '時間の推移（直近12回）', caption: '時間', valueFormatter: (v) => formatMinSec(v) };
   }
   if (exerciseMeta.holdBased) {
     return {
@@ -618,8 +627,8 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       ${sparklineHtml}
       <div class="slider-field">
-        <div class="slider-label"><span>時間</span><span class="slider-value">${ex.duration}分</span></div>
-        <input type="range" min="0" max="120" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+        <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>
+        <input type="range" min="0" max="120" step="0.25" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
         <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
       </div>
       ${ex.hasDistance ? `
@@ -660,7 +669,7 @@ function renderHistory() {
             if (ex.type === 'cardio') {
               const restSummary = formatCardioRestSummary(ex.restLog);
               const detail = ex.done
-                ? `${ex.duration || 0}分${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
+                ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
                 : '未記録';
               return `<div class="h-ex">${ex.name}: ${detail}</div>`;
             }
