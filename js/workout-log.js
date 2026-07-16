@@ -58,8 +58,8 @@ function buildSuggestion(planItem, bodyWeightKg) {
 // レジスタンストレーニング向けのRPE(Reps in Reserveベース)を有酸素に流用すること自体が
 // 概念として合っていなかったため撤廃した。種目ごとのMET値の違い(ウォーキング/ランニング等)で
 // 強度差はある程度表現されている。
-function estimateCardioCalories(met, bodyWeightKg, durationMinutes) {
-  return met * bodyWeightKg * (Number(durationMinutes) / 60);
+function estimateCardioCalories(met, bodyWeightKg, durationSec) {
+  return met * bodyWeightKg * (Number(durationSec) / 3600);
 }
 
 function createSessionFromMenu(menu, bodyWeightKg) {

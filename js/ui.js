@@ -170,10 +170,10 @@ const WEIGHT_RANGE_BY_EQUIPMENT = {
   machine: { max: 150, step: 2.5 },
 };
 
-// 有酸素の「時間」のように分未満の端数(秒)も持つ値を「X分Y秒」で表示する。
+// 有酸素の「時間」(秒単位で持つ)を「X分Y秒」で表示する。
 // ちょうど分の時は「Y秒」を省略する(例: 12分、12分30秒)。
-function formatMinSec(totalMinutes) {
-  const totalSec = Math.round(Number(totalMinutes) * 60);
+function formatMinSec(totalSeconds) {
+  const totalSec = Math.round(Number(totalSeconds));
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return s > 0 ? `${m}分${s}秒` : `${m}分`;
@@ -604,7 +604,8 @@ function renderLog(session) {
 }
 
 // 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)を
-// 記録し、体重×MET×時間から推定消費カロリーを表示する。
+// 記録し、体重×MET×時間から推定消費カロリーを表示する。ex.durationは秒単位(1秒刻み)で持つ
+// (以前は分単位・15秒刻みだったが、計測タイマーとの丸め誤差が出るため秒単位に統一した)。
 function buildCardioExerciseCardHtml(ex, exIndex) {
   const bodyWeightKg = getBodyWeightKg();
   const calories = estimateCardioCalories(ex.met, bodyWeightKg, Number(ex.duration) || 0);
@@ -628,7 +629,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       ${sparklineHtml}
       <div class="slider-field">
         <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>
-        <input type="range" min="0" max="120" step="0.25" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+        <input type="range" min="0" max="7200" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
         <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
       </div>
       ${ex.hasDistance ? `
