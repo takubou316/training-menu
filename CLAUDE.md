@@ -28,8 +28,10 @@
 
 コンパウンド種目には`js/rules.js`の`LEVELS[level].warmupSets`に応じたウォームアップセットを本セットの前に追加する
 （`js/workout-log.js`の`createSessionFromMenu`で`isWarmup: true`のセットとして生成、提案重量の50%目安）。
-記録画面ではセット番号が「W1」のように表示され、履歴・前回実績・総挙上量の計算からは除外される
-（`js/storage.js`の`findLastPerformance`と`js/workout-log.js`の`computeSessionVolume`で`isWarmup`を除外）。
+記録画面ではセット番号の代わりに「軽い動作で数回」という案内文を表示し（以前は「W1」と
+番号だけ出していたが、何をすればいいか分かりにくいとの指摘で変更した）、履歴・前回実績・
+総挙上量の計算からは除外される（`js/storage.js`の`findLastPerformance`と`js/workout-log.js`の
+`computeSessionVolume`で`isWarmup`を除外）。
 
 ## 自重種目の重量について
 

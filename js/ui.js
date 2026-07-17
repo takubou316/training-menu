@@ -564,11 +564,10 @@ function renderLog(session) {
       })()}
       <div class="ex-reps-progression" data-ex-reps-progression="${exIndex}">${buildRepsProgressionText(ex.sets, ex.holdBased)}</div>
       ${(() => {
-        let warmupN = 0;
         let workingN = 0;
         return ex.sets
           .map((s, setIndex) => {
-            const label = s.isWarmup ? `W${(warmupN += 1)}` : `${(workingN += 1)}`;
+            const label = s.isWarmup ? '軽い動作で数回' : `${(workingN += 1)}`;
             const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
             const weightField = ex.holdBased || !weightRange
               ? ''
