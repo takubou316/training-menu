@@ -62,6 +62,7 @@ function toggleHoldTimer(button) {
     modal.classList.remove('hold-timer-measuring');
     modal.hidden = false;
   }
+  lockBodyScroll();
   updateHoldTimerModal();
   activeHoldTimer.intervalId = setInterval(updateHoldTimerModal, 100);
 }
@@ -136,5 +137,6 @@ function stopHoldTimer() {
     modal.hidden = true;
     modal.classList.remove('hold-timer-measuring');
   }
+  unlockBodyScroll();
   activeHoldTimer = null;
 }

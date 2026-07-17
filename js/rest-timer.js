@@ -45,6 +45,7 @@ function startRestTimer(seconds) {
   if (!modal) return;
   modal.hidden = false;
   modal.classList.remove('rest-timer-done');
+  lockBodyScroll();
   updateRestTimerDisplay();
   if (restTimerInterval) clearInterval(restTimerInterval);
   restTimerInterval = setInterval(updateRestTimerDisplay, 250);
@@ -100,4 +101,5 @@ function endRestTimer() {
     modal.hidden = true;
     modal.classList.remove('rest-timer-done');
   }
+  unlockBodyScroll();
 }
