@@ -816,8 +816,15 @@ body.modal-open {
 }
 .set-row:last-child { margin-bottom: 0; }
 
-.set-row-warmup { opacity: 0.85; }
-.set-row-warmup .set-idx { color: var(--accent); font-weight: 600; }
+/* 本セットと見間違えないよう、色つきの背景・左のライン・太字ラベルで
+   はっきり見た目を変える(以前はopacityで薄くするだけだったが、本セットと
+   誤認しやすいとの指摘があったため強調する方向に変更した)。 */
+.set-row-warmup {
+  border-left: 3px solid var(--accent);
+  padding-left: 9px;
+  background: rgba(79, 209, 165, 0.1);
+}
+.set-row-warmup .set-idx { color: var(--accent); font-weight: 700; }
 
 .set-row-head {
   display: flex;
