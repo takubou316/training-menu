@@ -678,9 +678,17 @@ function renderHistory() {
                 : '未記録';
               return `<div class="h-ex">${ex.name}: ${detail}</div>`;
             }
+            // 保持時間系(プランク等)は「重量」という概念自体がなく(記録画面でも重量スライダーは
+            // 表示していない)、setsのreps欄には回数ではなく保持秒数が入っている。ここで
+            // holdBasedを考慮せず一律「weight||0」kg表記にしていたため、体重を使わない
+            // 保持時間種目まで「0kg×◯回」という無意味な表示になってしまっていた。
+            const exerciseMeta = findExerciseById(ex.exerciseId);
+            const holdBased = exerciseMeta && exerciseMeta.holdBased;
             return `<div class="h-ex">${ex.name}: ${ex.sets
               .filter((s) => s.done && !s.isWarmup)
-              .map((s) => `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`)
+              .map((s) => (holdBased
+                ? `${s.reps || 0}秒${s.rpe ? `(RPE${s.rpe})` : ''}`
+                : `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`))
               .join(', ') || '未記録'}</div>`;
           })
           .join('')}

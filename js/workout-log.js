@@ -26,6 +26,22 @@ function buildSuggestion(planItem, bodyWeightKg) {
     };
   }
 
+  // 保持時間系(プランク等)は「重量」という概念自体がなく(記録画面でも重量スライダーは
+  // 表示していない)、重量ベースの提案文をそのまま使うと「前回0kg×45秒。同じ重量で...」の
+  // ように意味のない「0kg」が出てしまうため、保持秒数だけを見て提案する専用の分岐にする。
+  if (planItem.holdBased) {
+    const lastHold = findLastPerformance(planItem.exerciseId);
+    if (!lastHold) {
+      return { text: '初回記録です。フォームを優先し、無理のない時間から始めましょう。', weight: null };
+    }
+    const secList = lastHold.sets.map((s) => s.reps).join('/');
+    const bestSec = Math.max(...lastHold.sets.map((s) => Number(s.reps) || 0));
+    return {
+      text: `前回 ${secList}秒。今回は${bestSec}秒以上を目指しましょう。`,
+      weight: null,
+    };
+  }
+
   const last = findLastPerformance(planItem.exerciseId);
   if (!last) {
     return { text: '初回記録です。フォームを優先し、無理のない重量から始めましょう。', weight: null };
