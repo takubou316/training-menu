@@ -554,13 +554,6 @@ select {
 }
 .ex-reps-progression:empty { margin: 0; }
 
-.chart-caption {
-  font-size: 11px;
-  color: var(--text-dim);
-  line-height: 1.5;
-  margin: 0 0 10px;
-}
-
 .ex-info-panel {
   margin: 0 0 8px;
 }
