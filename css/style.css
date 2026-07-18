@@ -701,8 +701,13 @@ select {
 /* 種目ピッカーの一覧・有酸素タイマーの休憩履歴・RPE説明の表のように、モーダル内に
    独自スクロール領域がある間は、背面のページ自体はスクロールさせない(2つのスクロール
    領域が競合して、一覧の方をスクロールしたい操作がページ全体のスクロールに奪われるのを
-   防ぐ)。js/app.jsのlockBodyScroll/unlockBodyScroll参照。 */
+   防ぐ)。js/app.jsのlockBodyScroll/unlockBodyScroll参照。
+   position:fixedにしているのは、overflow:hiddenだけだとiOS Safariで解除時に
+   スクロール位置が一番上に戻ってしまう問題があるため(topはJS側で現在のスクロール量を
+   マイナス値で設定し、解除時にwindow.scrollToで元の位置へ戻す)。 */
 body.modal-open {
+  position: fixed;
+  width: 100%;
   overflow: hidden;
 }
 

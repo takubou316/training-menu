@@ -84,6 +84,13 @@
 （増分カウント方式だと止まっていた分がそのまま失われる）。OSがアプリのプロセスごと終了させた
 場合は他の記録同様にリセットされる点は変わらない。
 
+全画面タイマー(rest-timer/hold-timer)表示中は`js/app.js`の`lockBodyScroll`/`unlockBodyScroll`で
+背面ページのスクロールをロックしている。単純に`overflow:hidden`を付けるだけだと、特にiOS Safariで
+ロック解除時にスクロール位置が一番上に戻ってしまう既知の問題があるため、ロック時に`window.scrollY`を
+覚えておき、bodyを`position:fixed`＋`top:-スクロール量`で固定し、解除時に`window.scrollTo`で
+元の位置へ戻す方式にしている（`body.modal-open`、CSS側は`position:fixed`/`width:100%`のみ担当し、
+`top`の値はJS側で毎回動的に設定する）。
+
 上記の全画面タイマー(rest-timer/hold-timer/cardio-timer)は表示中、`js/app.js`の
 `lockBodyScroll`/`unlockBodyScroll`で背面ページのスクロールを止めている。全画面表示とはいえ
 背面のページ自体は`position:fixed`の影響を受けず素通しでスクロール可能なままなので、ロックして

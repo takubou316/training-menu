@@ -5,14 +5,25 @@
 // (種目ピッカーの一覧、RPE説明の長い表など)を持つモーダルで、背面ページのスクロールと
 // 競合してタッチ操作がどちらに取られるか曖昧になり、本来スクロールしたい方が操作できなくなる
 // 不具合があったため。1つでも開いていればロックし、全部閉じたら解除する。
+// 単純にoverflow:hiddenを付けるだけだと、特にiOS Safariでロック解除時に
+// スクロール位置が一番上に戻ってしまう既知の問題があるため、ロック時の
+// スクロール位置を覚えておき、bodyをposition:fixedでその位置に固定→
+// 解除時にwindow.scrollToで元の位置へ戻す方式にしている。
 let bodyScrollLockCount = 0;
+let bodyScrollLockSavedY = 0;
 function lockBodyScroll() {
   bodyScrollLockCount += 1;
+  if (bodyScrollLockCount > 1) return; // 既にロック中なら何もしない
+  bodyScrollLockSavedY = window.scrollY;
   document.body.classList.add('modal-open');
+  document.body.style.top = `-${bodyScrollLockSavedY}px`;
 }
 function unlockBodyScroll() {
   bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
-  if (bodyScrollLockCount === 0) document.body.classList.remove('modal-open');
+  if (bodyScrollLockCount > 0) return;
+  document.body.classList.remove('modal-open');
+  document.body.style.top = '';
+  window.scrollTo(0, bodyScrollLockSavedY);
 }
 
 const PART_TO_MUSCLES = {
