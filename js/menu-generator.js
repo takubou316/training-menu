@@ -70,6 +70,15 @@ function filterByPainAreas(exercises, painAreas) {
   return exercises.filter((ex) => !(ex.riskAreas || []).some((area) => painAreas.includes(area)));
 }
 
+// レベルが技術難度に見合わない種目(exercises-data.jsのminLevel参照)を除外する。
+// 「レベル」は今までセット数・休憩時間にしか反映されておらず、初心者を選んでも
+// バーベルスクワット・懸垂のような技術難度の高い種目がそのまま選ばれることがあった。
+const LEVEL_RANK = { beginner: 0, intermediate: 1, advanced: 2 };
+function filterByLevel(exercises, level) {
+  const rank = LEVEL_RANK[level] != null ? LEVEL_RANK[level] : 0;
+  return exercises.filter((ex) => LEVEL_RANK[ex.minLevel || 'beginner'] <= rank);
+}
+
 function buildSetPlan(exercise, level, goal) {
   const levelInfo = LEVELS[level];
   const goalInfo = GOALS[goal];
@@ -132,26 +141,35 @@ function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
   const selected = [];
   const usedIds = new Set();
   const perMuscleCandidates = {};
+  const perMuscleIndex = {};
   muscleGroups.forEach((muscle) => {
     perMuscleCandidates[muscle] = pool
       .filter((ex) => ex.primary.includes(muscle))
       .sort((a, b) => (a.category === 'compound' ? -1 : 1) - (b.category === 'compound' ? -1 : 1));
+    perMuscleIndex[muscle] = 0;
   });
 
-  let round = 0;
-  while (selected.length < exerciseCount) {
-    let addedInRound = false;
+  // 各部位ごとに専用のポインタ(perMuscleIndex)を進める。以前は全部位共通の
+  // ラウンド番号をそのままインデックスに使っていたが、他の部位と主動筋が重なる
+  // 種目が使用済みになって配列から欠けると、ラウンド番号とインデックスがズレて
+  // まだ選べるはずの候補を飛ばしてしまうバグがあった。
+  let addedInRound = true;
+  while (selected.length < exerciseCount && addedInRound) {
+    addedInRound = false;
     for (const muscle of muscleGroups) {
       if (selected.length >= exerciseCount) break;
-      const candidates = perMuscleCandidates[muscle].filter((ex) => !usedIds.has(ex.id));
-      if (candidates[round]) {
-        selected.push(candidates[round]);
-        usedIds.add(candidates[round].id);
+      const candidates = perMuscleCandidates[muscle];
+      while (perMuscleIndex[muscle] < candidates.length && usedIds.has(candidates[perMuscleIndex[muscle]].id)) {
+        perMuscleIndex[muscle] += 1;
+      }
+      if (perMuscleIndex[muscle] < candidates.length) {
+        const ex = candidates[perMuscleIndex[muscle]];
+        selected.push(ex);
+        usedIds.add(ex.id);
+        perMuscleIndex[muscle] += 1;
         addedInRound = true;
       }
     }
-    round += 1;
-    if (!addedInRound) break; // どの部位ももう候補が無い
   }
   return selected;
 }
@@ -223,6 +241,7 @@ function buildCustomCardioPlan(exercise) {
 function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
   let pool = filterByEquipment(EXERCISES, equipment);
   pool = filterByPainAreas(pool, painAreas);
+  pool = filterByLevel(pool, level);
   const exerciseCount = exerciseCountForTime(minutes);
   const isFullBody = parts.includes('fullbody');
 
@@ -239,6 +258,9 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
     cooldown,
     generatedAt: new Date().toISOString(),
     params: { parts, equipment, minutes, level, goal, painAreas },
+    // 条件(器具・レベル・痛み等)が絞られすぎて本来の目安種目数(exerciseCount)に届かなかった場合、
+    // js/ui.jsのrenderMenuで理由を添えた注記を出すために保持しておく。
+    requestedCount: exerciseCount,
   };
 }
 

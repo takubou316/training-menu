@@ -121,6 +121,10 @@ function renderMenu(menu) {
     ? `<div class="menu-block"><div class="ex-note">気になる部位（${menu.params.painAreas.join('・')}）に負担がかかりやすい種目は除外して作成しています。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</div></div>`
     : '';
 
+  const shortfallNoteHtml = menu.requestedCount && menu.main.length < menu.requestedCount
+    ? `<div class="menu-block"><div class="ex-note">選んだ条件（器具・レベル・部位など）に合う種目が少なく、目安の${menu.requestedCount}種目に対して${menu.main.length}種目のメニューになりました。器具を増やす、レベルを上げる、鍛えたい部位を広げるなどすると種目を増やせます。</div></div>`
+    : '';
+
   const warmupHtml = buildWarmupHtml(menu.warmup);
 
   const mainItemsHtml = menu.main
@@ -156,6 +160,7 @@ function renderMenu(menu) {
   container.innerHTML = `
     ${goalBlockHtml}
     ${painNoteHtml}
+    ${shortfallNoteHtml}
     ${warmupHtml}
     <h3 style="margin-top:16px;">本編（${menu.main.length}種目）</h3>
     ${mainHtml}

@@ -10,6 +10,11 @@
 // これも精密な値ではない一般的な近似だが、少なくとも「研究値である」という誤った印象は与えない）。
 // 出典の考え方: JATI/NSCA/ACSMなど公的資格団体が共通して教える一般的な運動分類・筋肉部位の対応関係を基にした一般知識であり、
 // 特定の書籍・教材の文章をそのまま転記したものではない。数値基準(セット/レップ/休憩)は js/rules.js 側で管理する。
+// minLevel: 'intermediate' を付けた種目は「要望から作る」で初心者(beginner)を選んだ時は候補から除外する
+// （中級者・上級者には引き続き提案する）。技術習得の難度が高いバーベル種目(スクワット・デッドリフト・
+// 前傾姿勢での引く種目)、大半の初心者が1回もできない懸垂、種目の説明文自体が「まず自重で慣れてから」
+// 等と難度の高さに触れている種目のみを対象にした、控えめな基準（「自分で作る」は種目を自分で選ぶ
+// モードなので対象外、level自体を使わない）。
 
 const MUSCLE_GROUPS = {
   chest: '胸',
@@ -34,7 +39,7 @@ const EXERCISES = [
     demoMedia: 'media/exercises/pushup.mp4' },
   { id: 'incline_pushup', name: 'インクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首'], bodyweightLoadFactor: 0.5, note: '初心者向け・負荷を下げたい時',
     description: '台や椅子に手をついて行う腕立て伏せ。角度が急なほど負荷が下がるので、通常のプッシュアップがきつい人はここから。' },
-  { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.7, note: '上級者向け・負荷を上げたい時',
+  { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.7, note: '上級者向け・負荷を上げたい時', minLevel: 'intermediate',
     description: '足を台に乗せて行う腕立て伏せ。上半身側が下がる分、通常より負荷が上がる。体幹が反らないよう腹に力を入れる。' },
   { id: 'db_bench_press', name: 'ダンベルベンチプレス', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['dumbbell'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['肩'],
     description: 'ベンチに仰向けになり、ダンベルを胸の横まで下ろしてから押し上げる。肩をすくめず、肩甲骨をベンチに寄せて固定する。' },
@@ -54,7 +59,7 @@ const EXERCISES = [
     description: '背中をパッドにつけたまま、腕を胸の前で閉じる。反動を使わずゆっくり戻すことで胸への負荷を保てる。' },
 
   // ===== 背中 =====
-  { id: 'pullup', name: '懸垂（プルアップ）', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_vertical', unilateral: false, riskAreas: ['肩'], note: '要バー',
+  { id: 'pullup', name: '懸垂（プルアップ）', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_vertical', unilateral: false, riskAreas: ['肩'], note: '要バー', minLevel: 'intermediate',
     description: '肩幅よりやや広めにバーを握り、顎がバーを超えるまで体を引き上げる。反動を使わず肩甲骨を下げてから引くとフォームが安定する。' },
   { id: 'inverted_row', name: 'インバーテッドロウ（テーブル/バーを使う）', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_horizontal', unilateral: false, riskAreas: ['肩'],
     description: '固定したバーや頑丈なテーブルの下に入り、体を一直線に保ったまま胸をバーに近づける。角度で負荷を調整できる。' },
@@ -62,7 +67,7 @@ const EXERCISES = [
     description: '片手・片膝をベンチにつき、上体を床と平行に保ってダンベルを腰に引き寄せる。体を捻らず肘を後方に引くのがポイント。' },
   { id: 'db_row_both', name: 'ダンベルベントオーバーロウ', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['dumbbell'], pattern: 'pull_horizontal', unilateral: false, riskAreas: ['腰'],
     description: '股関節から上体を前傾させ、背中を丸めずにダンベルを腹の方へ引く。腰への負担が大きいので前傾角度を無理に深くしすぎない。' },
-  { id: 'barbell_row', name: 'バーベルベントオーバーロウ', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['barbell'], pattern: 'pull_horizontal', unilateral: false, riskAreas: ['腰'],
+  { id: 'barbell_row', name: 'バーベルベントオーバーロウ', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['barbell'], pattern: 'pull_horizontal', unilateral: false, riskAreas: ['腰'], minLevel: 'intermediate',
     description: '前傾姿勢でバーをへそのあたりに引く。腰が丸まると怪我のリスクが上がるため、背中は常に真っ直ぐを意識する。' },
   { id: 'lat_pulldown', name: 'ラットプルダウン', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['machine'], pattern: 'pull_vertical', unilateral: false, riskAreas: ['肩'],
     description: 'バーを鎖骨の少し下あたりまで引き下げる。体を大きく反らして反動を使わず、広背筋で引く意識を持つ。' },
@@ -102,7 +107,7 @@ const EXERCISES = [
     description: 'ケーブルを使ったカール。ダンベルと違い上げきった位置でも負荷が抜けにくい。' },
   { id: 'bench_dip', name: 'ベンチディップス', primary: ['triceps'], secondary: ['chest', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'isolation', unilateral: false, riskAreas: ['肩', '手首'],
     description: 'ベンチに手をつき、肘を曲げてお尻を下ろしてから押し上げる。肩をすくめず、肘を体の後方に開きすぎないようにする。' },
-  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'],
+  { id: 'diamond_pushup', name: 'ダイヤモンドプッシュアップ', primary: ['triceps'], secondary: ['chest'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], minLevel: 'intermediate',
     description: '両手の親指と人差し指でダイヤモンド形を作って行う腕立て伏せ。通常より三頭筋への負荷が強く、手首への負担も増えるので注意。' },
   { id: 'db_triceps_extension', name: 'ダンベルトライセプスエクステンション', primary: ['triceps'], secondary: [], category: 'isolation', equipment: ['dumbbell'], pattern: 'isolation', unilateral: false, riskAreas: ['肩'],
     description: '頭上でダンベルを持ち、肘を支点にして後頭部側へ下ろしてから伸ばす。肘が左右に開かないよう固定する。' },
@@ -116,11 +121,11 @@ const EXERCISES = [
     description: '足は肩幅程度に開き、お尻を後ろに引きながら膝を曲げる。膝がつま先より内側に入らないよう、太ももが床と平行になるくらいまで下ろす。' },
   { id: 'split_squat', name: 'スプリットスクワット', primary: ['quads'], secondary: ['glutes'], category: 'compound', equipment: ['bodyweight'], pattern: 'squat', unilateral: true, riskAreas: ['膝'],
     description: '前後に足を大きく開き、その場で上下する片脚寄りのスクワット。前膝がつま先より大きく前に出すぎないよう注意。' },
-  { id: 'bulgarian_split_squat', name: 'ブルガリアンスプリットスクワット', primary: ['quads'], secondary: ['glutes'], category: 'compound', equipment: ['dumbbell'], pattern: 'squat', unilateral: true, riskAreas: ['膝'],
+  { id: 'bulgarian_split_squat', name: 'ブルガリアンスプリットスクワット', primary: ['quads'], secondary: ['glutes'], category: 'compound', equipment: ['dumbbell'], pattern: 'squat', unilateral: true, riskAreas: ['膝'], minLevel: 'intermediate',
     description: '後ろ足を台に乗せて行うスプリットスクワット。バランスが難しいので、まず自重で慣れてからダンベルを持つとよい。' },
   { id: 'db_goblet_squat', name: 'ダンベルゴブレットスクワット', primary: ['quads'], secondary: ['glutes'], category: 'compound', equipment: ['dumbbell'], pattern: 'squat', unilateral: false, riskAreas: ['膝'],
     description: 'ダンベルを胸の前で両手で抱えて行うスクワット。重りが体の近くにあるためバランスを取りやすく、フォーム習得に向く。' },
-  { id: 'barbell_back_squat', name: 'バーベルスクワット', primary: ['quads'], secondary: ['glutes', 'hamstrings'], category: 'compound', equipment: ['barbell'], pattern: 'squat', unilateral: false, riskAreas: ['膝', '腰'],
+  { id: 'barbell_back_squat', name: 'バーベルスクワット', primary: ['quads'], secondary: ['glutes', 'hamstrings'], category: 'compound', equipment: ['barbell'], pattern: 'squat', unilateral: false, riskAreas: ['膝', '腰'], minLevel: 'intermediate',
     description: 'バーを僧帽筋の上に担いでしゃがむ。高重量を扱うため、ラックのセーフティバーの高さを必ず調整してから行う。' },
   { id: 'leg_press', name: 'レッグプレス', primary: ['quads'], secondary: ['glutes'], category: 'compound', equipment: ['machine'], pattern: 'squat', unilateral: false, riskAreas: ['膝'],
     description: 'シートに座り足でプレートを押す。腰が座面から浮くほど深く曲げすぎない範囲で可動域をとる。' },
@@ -128,9 +133,9 @@ const EXERCISES = [
     description: '座った状態で膝を伸ばしパッドを蹴り上げる。反動をつけず、下ろす時もゆっくりコントロールする。' },
   { id: 'db_romanian_deadlift', name: 'ダンベルルーマニアンデッドリフト', primary: ['hamstrings'], secondary: ['glutes'], category: 'compound', equipment: ['dumbbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'],
     description: '膝を軽く曲げたまま、お尻を後ろに引いてダンベルをすねの前あたりまで下ろす。背中は丸めず、ハムストリングスが伸びる感覚を意識する。' },
-  { id: 'barbell_romanian_deadlift', name: 'バーベルルーマニアンデッドリフト', primary: ['hamstrings'], secondary: ['glutes'], category: 'compound', equipment: ['barbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'],
+  { id: 'barbell_romanian_deadlift', name: 'バーベルルーマニアンデッドリフト', primary: ['hamstrings'], secondary: ['glutes'], category: 'compound', equipment: ['barbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'], minLevel: 'intermediate',
     description: 'バーを体に沿わせながら股関節を後ろに引いて下ろす。背中の丸まりが最も怪我につながりやすいので特に注意する。' },
-  { id: 'barbell_deadlift', name: 'バーベルデッドリフト', primary: ['hamstrings'], secondary: ['glutes', 'back'], category: 'compound', equipment: ['barbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰', '膝'],
+  { id: 'barbell_deadlift', name: 'バーベルデッドリフト', primary: ['hamstrings'], secondary: ['glutes', 'back'], category: 'compound', equipment: ['barbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰', '膝'], minLevel: 'intermediate',
     description: '床のバーを股関節と膝を同時に使って引き上げる全身種目。背中を丸めないフォームが最重要。初めては軽い重量からフォーム習得を優先する。' },
   { id: 'leg_curl_machine', name: 'レッグカールマシン', primary: ['hamstrings'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'isolation', unilateral: false, riskAreas: ['膝'],
     description: 'うつ伏せまたは座った状態で膝を曲げてパッドを引きつける。腰が反りすぎないよう腹に軽く力を入れる。' },
@@ -160,7 +165,7 @@ const EXERCISES = [
     description: '腕立て伏せの姿勢から交互に膝を胸へ引きつける。お尻が上がりすぎないよう体幹を固定したまま行う。' },
   { id: 'cable_crunch', name: 'ケーブルクランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'core', unilateral: false, riskAreas: [],
     description: 'ケーブルを頭の後ろで持ち、股関節を動かさず背中を丸めるように上体を下げる。腕の力で引かないようにする。' },
-  { id: 'ab_wheel', name: 'アブローラー', primary: ['abs'], secondary: ['shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰', '肩', '手首'], note: '中級者以上向け',
+  { id: 'ab_wheel', name: 'アブローラー', primary: ['abs'], secondary: ['shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰', '肩', '手首'], note: '中級者以上向け', minLevel: 'intermediate',
     description: '膝立ちでローラーを前に転がし、体が伸びきる手前で戻す。腰が反ると負担が大きいので無理のない範囲で戻す。' },
 
   // ===== 有酸素 =====
