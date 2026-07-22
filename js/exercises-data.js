@@ -61,6 +61,8 @@ const EXERCISES = [
   // ===== 背中 =====
   { id: 'pullup', name: '懸垂（プルアップ）', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_vertical', unilateral: false, riskAreas: ['肩'], note: '要バー', minLevel: 'intermediate',
     description: '肩幅よりやや広めにバーを握り、顎がバーを超えるまで体を引き上げる。反動を使わず肩甲骨を下げてから引くとフォームが安定する。' },
+  { id: 'chinup', name: 'チンアップ（逆手懸垂）', primary: ['biceps'], secondary: ['back'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_vertical', unilateral: false, riskAreas: ['肩'], note: '要バー', minLevel: 'intermediate',
+    description: '手のひらを自分の顔側に向ける逆手でバーを握り、顎がバーを超えるまで体を引き上げる。順手の懸垂より二頭筋の関与が大きいのが特徴。反動を使わず肩甲骨を下げてから引く。' },
   { id: 'inverted_row', name: 'インバーテッドロウ（テーブル/バーを使う）', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['bodyweight'], pattern: 'pull_horizontal', unilateral: false, riskAreas: ['肩'],
     description: '固定したバーや頑丈なテーブルの下に入り、体を一直線に保ったまま胸をバーに近づける。角度で負荷を調整できる。' },
   { id: 'db_row', name: 'ダンベルワンハンドロウ', primary: ['back'], secondary: ['biceps'], category: 'compound', equipment: ['dumbbell'], pattern: 'pull_horizontal', unilateral: true, riskAreas: ['腰'],
@@ -115,6 +117,8 @@ const EXERCISES = [
     description: '上体を前傾させ、肘を体の横に固定したまま前腕だけを後方に伸ばす。肘の位置が動かないよう意識する。' },
   { id: 'cable_pushdown', name: 'ケーブルプッシュダウン', primary: ['triceps'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'isolation', unilateral: false, riskAreas: [],
     description: '肘を体の横に固定し、バーやロープを下に押し下げる。肘が前後に動くと負荷が逃げるので固定を意識する。' },
+  { id: 'barbell_skull_crusher', name: 'バーベルライイングトライセプスエクステンション', primary: ['triceps'], secondary: [], category: 'isolation', equipment: ['barbell'], pattern: 'isolation', unilateral: false, riskAreas: ['肩'],
+    description: 'ベンチに仰向けになり、バーを額の少し上まで下ろしてから肘を伸ばして戻す。肘が外側に開かないよう固定し、顔に当たらない軌道を意識する。' },
 
   // ===== 脚（大腿四頭筋・ハムストリングス・臀筋・ふくらはぎ） =====
   { id: 'bodyweight_squat', name: 'スクワット（自重）', primary: ['quads'], secondary: ['glutes', 'hamstrings'], category: 'compound', equipment: ['bodyweight'], pattern: 'squat', unilateral: false, riskAreas: ['膝'],
@@ -139,10 +143,12 @@ const EXERCISES = [
     description: '床のバーを股関節と膝を同時に使って引き上げる全身種目。背中を丸めないフォームが最重要。初めては軽い重量からフォーム習得を優先する。' },
   { id: 'leg_curl_machine', name: 'レッグカールマシン', primary: ['hamstrings'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'isolation', unilateral: false, riskAreas: ['膝'],
     description: 'うつ伏せまたは座った状態で膝を曲げてパッドを引きつける。腰が反りすぎないよう腹に軽く力を入れる。' },
+  { id: 'towel_leg_curl', name: 'タオルレッグカール（自重）', primary: ['hamstrings'], secondary: ['glutes'], category: 'isolation', equipment: ['bodyweight'], pattern: 'isolation', unilateral: false, riskAreas: ['膝'],
+    description: 'フローリングなど滑りやすい床にタオルや靴下を敷いてかかとを乗せ、仰向けで腰を浮かせたまま膝を曲げてかかとを体に引き寄せてから戻す。腰が落ちないよう保つ。' },
   { id: 'glute_bridge', name: 'グルートブリッジ', primary: ['glutes'], secondary: ['hamstrings'], category: 'compound', equipment: ['bodyweight'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'],
     description: '仰向けで膝を立て、お尻を締めながら腰を持ち上げる。腰を反りすぎず、お尻の力で持ち上げる意識を持つ。' },
-  { id: 'hip_thrust', name: 'ヒップスラスト', primary: ['glutes'], secondary: ['hamstrings'], category: 'compound', equipment: ['dumbbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'],
-    description: '肩甲骨をベンチに乗せ、ダンベルを腰の上に乗せて腰を突き上げる。臀筋にしっかり効かせるため、一番上でお尻を締める。' },
+  { id: 'hip_thrust', name: 'ヒップスラスト', primary: ['glutes'], secondary: ['hamstrings'], category: 'compound', equipment: ['dumbbell', 'barbell'], pattern: 'hinge', unilateral: false, riskAreas: ['腰'],
+    description: '肩甲骨をベンチに乗せ、ダンベルやバーベルを腰の上に乗せて腰を突き上げる。臀筋にしっかり効かせるため、一番上でお尻を締める。バーベルを使う場合は骨盤に当たって痛くないようパッドやタオルを挟む。' },
   { id: 'hip_abduction_machine', name: 'ヒップアブダクションマシン', primary: ['glutes'], secondary: [], category: 'isolation', equipment: ['machine'], pattern: 'isolation', unilateral: false, riskAreas: [],
     description: '座った状態で両膝を外側に開く。反動をつけず、お尻の外側の筋肉で開く意識を持つ。' },
   { id: 'calf_raise', name: 'カーフレイズ（自重）', primary: ['calves'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'isolation', unilateral: false, riskAreas: [],

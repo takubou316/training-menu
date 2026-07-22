@@ -137,22 +137,22 @@ function pickFullBodyExercises(pool, exerciseCount) {
   return selected;
 }
 
-function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
-  const selected = [];
-  const usedIds = new Set();
+// 部位を優先度順(muscleGroups)にラウンドロビンで回しながら、matchFnに一致する候補で
+// selected/usedIdsをexerciseCountまで埋める(pickTargetedExercisesの内部処理)。
+// 部位ごとに専用のインデックス(idx)を進めるのがポイントで、全部位共通のラウンド番号を
+// そのままインデックスに使うと、他の部位と主動筋が重なる種目が使用済みになって配列から
+// 欠けた時にラウンド番号とインデックスがズレ、まだ選べるはずの候補を飛ばしてしまう
+// バグがあった。
+function fillTargetedRoundRobin(selected, usedIds, pool, muscleGroups, matchFn, exerciseCount) {
   const perMuscleCandidates = {};
   const perMuscleIndex = {};
   muscleGroups.forEach((muscle) => {
     perMuscleCandidates[muscle] = pool
-      .filter((ex) => ex.primary.includes(muscle))
+      .filter((ex) => matchFn(ex, muscle) && !usedIds.has(ex.id))
       .sort((a, b) => (a.category === 'compound' ? -1 : 1) - (b.category === 'compound' ? -1 : 1));
     perMuscleIndex[muscle] = 0;
   });
 
-  // 各部位ごとに専用のポインタ(perMuscleIndex)を進める。以前は全部位共通の
-  // ラウンド番号をそのままインデックスに使っていたが、他の部位と主動筋が重なる
-  // 種目が使用済みになって配列から欠けると、ラウンド番号とインデックスがズレて
-  // まだ選べるはずの候補を飛ばしてしまうバグがあった。
   let addedInRound = true;
   while (selected.length < exerciseCount && addedInRound) {
     addedInRound = false;
@@ -171,6 +171,22 @@ function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
       }
     }
   }
+}
+
+function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
+  const selected = [];
+  const usedIds = new Set();
+
+  // まず主動筋(primary)が一致する種目から埋める
+  fillTargetedRoundRobin(selected, usedIds, pool, muscleGroups, (ex, muscle) => ex.primary.includes(muscle), exerciseCount);
+
+  // 主動筋だけでは目安数に届かない場合、補助筋(secondary)として関与する種目も候補に加える
+  // (例: 上腕二頭筋を狙いたい時、二頭筋が補助的に働くローイング系種目も候補に含める)。
+  // 器具やレベルを絞った時に種目数が1〜2個まで減ってしまうのを防ぐためのフォールバック。
+  if (selected.length < exerciseCount) {
+    fillTargetedRoundRobin(selected, usedIds, pool, muscleGroups, (ex, muscle) => ex.secondary.includes(muscle), exerciseCount);
+  }
+
   return selected;
 }
 

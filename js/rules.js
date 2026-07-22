@@ -27,9 +27,10 @@ const LEVELS = {
   advanced: { label: '上級者', setsCompound: 4, setsIsolation: 3, warmupSets: 2 },
 };
 
-// 利用時間(分)ごとに、種目数の目安（ウォームアップ/クールダウンを除いた本編の種目数）
+// 利用時間(分)ごとに、種目数の目安（ウォームアップ/クールダウンを除いた本編の種目数）。
+// 15分でも最低3種目は確保したいので、下限を2から3に上げてある。
 const TIME_TO_EXERCISE_COUNT = [
-  { maxMinutes: 15, count: 2 },
+  { maxMinutes: 15, count: 3 },
   { maxMinutes: 30, count: 4 },
   { maxMinutes: 45, count: 6 },
   { maxMinutes: 60, count: 8 },
