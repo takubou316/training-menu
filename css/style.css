@@ -79,6 +79,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
 .mode-card:active {
   border-color: var(--accent);
 }
+.mode-card { margin: 0; }
 
 .mode-card-title {
   font-size: 16px;
@@ -1259,44 +1260,105 @@ body.modal-open {
 .weekly-day-part-group { margin-bottom: 4px; }
 .weekly-day-part-group[hidden] { display: none; }
 
-/* ===== モード選択画面の「今日の予定」バナー・週間プランへのリンク ===== */
+/* ===== モード選択画面の「週間プラン」セクション ===== */
 
-.today-plan-banner {
+/* .mode-choice内のカード間(gap:12px)と揃える。#weekly-plan-sectionは中身が
+   空状態のmode-cardボタン/使用中プランのmenu-blockパネルで変わるため、
+   どちらでも同じに見えるようコンテナ自体に上余白を持たせる。 */
+#weekly-plan-section { margin-top: 12px; }
+
+#weekly-day-template-row select { margin-bottom: 4px; }
+
+/* ===== モード選択画面の「週間プラン」セクション（複数プリセット） ===== */
+
+.weekly-plan-panel { margin-top: 0; }
+
+.weekly-plan-active-name {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+/* 主役は中身。曜日ラベル+内容を1行ずつ、はっきり読めるサイズで並べる */
+.weekly-plan-days {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.weekly-plan-day-row {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 今日の行だけ軽くハイライトし、以前あった専用バナーの代わりに
+   「始める」導線をここに統合する（バナー単体はうるさいという指摘で撤廃した）。 */
+.weekly-plan-day-row-today {
   background: var(--accent-dim);
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  padding: 14px;
-  margin-bottom: 16px;
-}
-.today-plan-banner[hidden] { display: none; }
-
-.today-plan-banner-icon { font-size: 20px; flex-shrink: 0; }
-
-.today-plan-banner-text {
-  flex: 1;
-  font-size: 14px;
-  color: #fff;
-  line-height: 1.4;
+  margin: 0 -10px;
+  padding: 4px 10px;
+  border-radius: 8px;
 }
 
-.today-plan-banner-btn {
+.weekly-plan-day-label {
   flex-shrink: 0;
-  padding: 8px 14px;
+  width: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.weekly-plan-day-row-today .weekly-plan-day-label { color: #fff; }
+
+.weekly-plan-day-content {
+  flex: 1;
+  font-size: 15px;
+  color: var(--text);
+}
+.weekly-plan-day-row-today .weekly-plan-day-content { color: #fff; font-weight: 600; }
+
+.weekly-plan-day-start-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
   border: none;
   border-radius: 999px;
   background: var(--accent);
   color: #0b1210;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
 
-.weekly-plan-link-row {
-  text-align: center;
-  margin-top: 16px;
+.weekly-plan-summary-empty {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0 0 4px;
 }
 
-#weekly-day-template-row select { margin-bottom: 4px; }
+/* 操作は控えめなテキストリンクに留め、内容より目立たせない */
+.weekly-plan-links {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.weekly-plan-others-toggle { margin-top: 12px; }
+.weekly-plan-others-toggle .menu-block { margin-bottom: 0; }
+
+/* ===== 週間プラン画面：プラン名・空の状態 ===== */
+
+.weekly-editor-plan-name {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: -8px 0 16px;
+}
+
+.weekly-empty-state {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.weekly-empty-state .hint-text { margin: 0 0 12px; }
+.weekly-empty-state[hidden] { display: none; }

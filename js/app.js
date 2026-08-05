@@ -54,8 +54,9 @@ let exercisePickerFilter = 'all';
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
 
-// 週間プラン（曜日ごとの割り当て）。画面を開くまでlocalStorageから読み込まない遅延ロード。
-let weeklyPlan = null;
+// 週間プラン画面(screen-weekly)が今どのプリセット(id)を編集中か。nullなら未作成/未選択
+// （その場合は画面側が「まだ作られていません」の空の状態を出す）。
+let weeklyPlanEditingId = null;
 // 週間プランの曜日編集モーダルが今どの曜日(0=月〜6=日)を対象にしているか
 let weeklyDayEditIndex = null;
 
@@ -592,21 +593,61 @@ function wireMenuScreen() {
 }
 
 // ===== 週間プラン画面 =====
+// 週間プランは「自分で作る」の保存済み組み合わせと同じ考え方で、名前付きの複数プリセットとして
+// 持てる。screen-weekly（この節）は常に「今どれを編集中か(weeklyPlanEditingId)」を1つだけ持ち、
+// 使用中(active)のプリセットはモード選択画面の表示に使う別概念（wireModeWeeklyPlanSection以下）。
 
-function ensureWeeklyPlanLoaded() {
-  if (!weeklyPlan) weeklyPlan = loadWeeklyPlan();
-  return weeklyPlan;
+// 今、使用中(active)のプリセット本体を返す。無ければnull。
+function getActiveWeeklyPlan() {
+  const id = getActiveWeeklyPlanId();
+  if (!id) return null;
+  return loadWeeklyPlans().find((p) => p.id === id) || null;
 }
 
-function renderWeeklyScreen() {
-  renderWeeklyPlan(ensureWeeklyPlanLoaded(), loadCustomTemplates());
+// 今、週間プラン画面(screen-weekly)で編集中のプリセット本体を返す。無ければnull
+// （1つも作られていない、または編集中に削除された場合）。
+function getEditingWeeklyPlan() {
+  if (!weeklyPlanEditingId) return null;
+  return loadWeeklyPlans().find((p) => p.id === weeklyPlanEditingId) || null;
+}
+
+function renderWeeklyEditorScreen() {
+  const plan = getEditingWeeklyPlan();
+  const hasPlan = !!plan;
+  document.getElementById('weekly-empty-state').hidden = hasPlan;
+  document.getElementById('weekly-editor-content').hidden = !hasPlan;
+  document.getElementById('weekly-editor-plan-name').textContent = hasPlan ? `「${plan.name}」を編集中` : '';
+  if (hasPlan) renderWeeklyPlan(plan.days, loadCustomTemplates());
+}
+
+// 指定したプリセットを編集対象にして週間プラン画面を表示する。
+function openWeeklyPlanEditor(planId) {
+  weeklyPlanEditingId = planId;
+  renderWeeklyEditorScreen();
+  showScreen('weekly');
+}
+
+// ボトムナビ「週間プラン」からの入場。使用中(active)のプリセットがあればそれを、
+// 無くても何かプリセットがあれば先頭のものを編集対象にする(使用中も追従させる)。
+// 1つも無ければ編集対象なしのまま→画面側が空の状態を出す。
+function enterWeeklyScreenFromNav() {
+  const plans = loadWeeklyPlans();
+  let plan = plans.find((p) => p.id === getActiveWeeklyPlanId());
+  if (!plan && plans.length > 0) {
+    [plan] = plans;
+    setActiveWeeklyPlanId(plan.id);
+  }
+  weeklyPlanEditingId = plan ? plan.id : null;
+  renderWeeklyEditorScreen();
 }
 
 function applyAutoWeeklySplit() {
+  const plan = getEditingWeeklyPlan();
+  if (!plan) return;
   const days = Number(document.getElementById('weekly-auto-days').value);
-  weeklyPlan = proposeWeeklySplit(days);
-  saveWeeklyPlan(weeklyPlan);
-  renderWeeklyScreen();
+  plan.days = proposeWeeklySplit(days);
+  updateWeeklyPlanDays(plan.id, plan.days);
+  renderWeeklyEditorScreen();
 }
 
 function updateWeeklyDayModalVisibility(kind) {
@@ -615,8 +656,10 @@ function updateWeeklyDayModalVisibility(kind) {
 }
 
 function openWeeklyDayModal(dayIndex) {
+  const plan = getEditingWeeklyPlan();
+  if (!plan) return;
   weeklyDayEditIndex = dayIndex;
-  const day = ensureWeeklyPlanLoaded()[dayIndex] || { kind: 'rest' };
+  const day = plan.days[dayIndex] || { kind: 'rest' };
   const kind = day.kind || 'rest';
 
   document.getElementById('weekly-day-modal-title').textContent = `${WEEKDAY_LABELS[dayIndex]}曜日の内容`;
@@ -649,6 +692,8 @@ function closeWeeklyDayModal() {
 
 function confirmWeeklyDaySave() {
   if (weeklyDayEditIndex == null) return;
+  const plan = getEditingWeeklyPlan();
+  if (!plan) return;
   const errorEl = document.getElementById('weekly-day-error');
   const checkedKind = document.querySelector('#weekly-day-kind-group input:checked');
   const kind = checkedKind ? checkedKind.value : 'rest';
@@ -673,14 +718,23 @@ function confirmWeeklyDaySave() {
   }
 
   errorEl.textContent = '';
-  const plan = ensureWeeklyPlanLoaded();
-  plan[weeklyDayEditIndex] = entry;
-  saveWeeklyPlan(plan);
+  plan.days[weeklyDayEditIndex] = entry;
+  updateWeeklyPlanDays(plan.id, plan.days);
   closeWeeklyDayModal();
-  renderWeeklyScreen();
+  renderWeeklyEditorScreen();
+}
+
+function deleteEditingWeeklyPlan() {
+  if (!weeklyPlanEditingId) return;
+  deleteWeeklyPlan(weeklyPlanEditingId);
+  weeklyPlanEditingId = null;
+  renderModeWeeklyPlanSection();
+  showScreen('mode');
 }
 
 function wireWeeklyScreen() {
+  document.getElementById('weekly-empty-create-btn').addEventListener('click', openWeeklyPlanNameModal);
+  document.getElementById('weekly-editor-delete-btn').addEventListener('click', deleteEditingWeeklyPlan);
   document.getElementById('weekly-auto-btn').addEventListener('click', applyAutoWeeklySplit);
 
   document.getElementById('weekly-day-list').addEventListener('click', (e) => {
@@ -712,19 +766,25 @@ function wireWeeklyScreen() {
   document.getElementById('weekly-day-save').addEventListener('click', confirmWeeklyDaySave);
 }
 
-// モード選択画面の「今日は◯◯の日です」バナー。screen-modeを表示するたびに再計算する
-// (週間プランをその場で編集した直後に戻ってきても最新の内容を反映するため)。
-function renderModeTodayBanner() {
-  renderTodayPlanBanner(ensureWeeklyPlanLoaded(), loadCustomTemplates());
+// ===== モード選択画面：「週間プラン」セクション =====
+// 使用中(active)のプリセットを参照する。今日にあたる曜日の行はセクション内で
+// ハイライト＋「始める」表示される(js/ui.jsのweeklyPlanDaysHtml)。screen-modeを
+// 表示するたびに再計算する(週間プランをその場で編集・切り替えた直後に戻ってきても
+// 最新の内容を反映するため)。専用バナーを別途置いていたが「うるさい」との指摘で撤廃し、
+// このセクションに統合した。
+
+function renderModeWeeklyPlanSection() {
+  renderWeeklyPlanSection(loadWeeklyPlans(), getActiveWeeklyPlanId(), loadCustomTemplates());
 }
 
-// バナーの「この内容で始める」。部位割り当てなら①鍛えたい部位のチェックを合わせて
-// 設定画面へ、保存済みの組み合わせ割り当てなら自分で作る画面にそのまま読み込む。
+// 週間プランセクションの今日の行にある「始める」。部位割り当てなら①鍛えたい部位のチェックを
+// 合わせて設定画面へ、保存済みの組み合わせ割り当てなら自分で作る画面にそのまま読み込む。
 // どちらも既存の画面に乗せるだけで、ここから直接メニューを生成はしない
 // （器具・時間などその日の状況を必ず確認してから進める既存の流れを崩さないため）。
-function handleTodayPlanBannerStart() {
-  const plan = ensureWeeklyPlanLoaded();
-  const entry = plan[todayWeekdayIndex()];
+function startTodayFromActivePlan() {
+  const active = getActiveWeeklyPlan();
+  if (!active) return;
+  const entry = active.days[todayWeekdayIndex()];
   if (!entry) return;
 
   if (entry.kind === 'template') {
@@ -740,11 +800,65 @@ function handleTodayPlanBannerStart() {
   }
 }
 
-function wireModeTodayBanner() {
-  document.getElementById('today-plan-banner-btn').addEventListener('click', handleTodayPlanBannerStart);
-  document.getElementById('weekly-plan-link-btn').addEventListener('click', () => {
-    renderWeeklyScreen();
-    showScreen('weekly');
+function openWeeklyPlanNameModal() {
+  document.getElementById('weekly-plan-name-input').value = '';
+  document.getElementById('weekly-plan-name-error').textContent = '';
+  document.getElementById('weekly-plan-name-modal').classList.add('open');
+  document.getElementById('weekly-plan-name-input').focus();
+}
+
+function closeWeeklyPlanNameModal() {
+  document.getElementById('weekly-plan-name-modal').classList.remove('open');
+}
+
+// 新しいプリセットを名前付きで作成し、使用中にした上で編集画面を開く。
+function confirmWeeklyPlanName() {
+  const input = document.getElementById('weekly-plan-name-input');
+  const name = input.value.trim();
+  if (!name) {
+    document.getElementById('weekly-plan-name-error').textContent = '名前を入力してください';
+    return;
+  }
+  const plan = createWeeklyPlan(name);
+  setActiveWeeklyPlanId(plan.id);
+  closeWeeklyPlanNameModal();
+  openWeeklyPlanEditor(plan.id);
+}
+
+function wireModeWeeklyPlanSection() {
+  document.getElementById('weekly-plan-section').addEventListener('click', (e) => {
+    if (e.target.closest('#weekly-plan-create-btn, #weekly-plan-new-btn')) {
+      openWeeklyPlanNameModal();
+      return;
+    }
+    if (e.target.closest('[data-weekly-plan-start-today]')) {
+      startTodayFromActivePlan();
+      return;
+    }
+    const editBtn = e.target.closest('[data-weekly-plan-edit]');
+    if (editBtn) {
+      openWeeklyPlanEditor(editBtn.dataset.weeklyPlanEdit);
+      return;
+    }
+    const useBtn = e.target.closest('[data-weekly-plan-use]');
+    if (useBtn) {
+      setActiveWeeklyPlanId(useBtn.dataset.weeklyPlanUse);
+      renderModeWeeklyPlanSection();
+      return;
+    }
+    const delBtn = e.target.closest('[data-weekly-plan-delete]');
+    if (delBtn) {
+      deleteWeeklyPlan(delBtn.dataset.weeklyPlanDelete);
+      renderModeWeeklyPlanSection();
+    }
+  });
+
+  document.getElementById('weekly-plan-name-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-weekly-plan-name-close]')) closeWeeklyPlanNameModal();
+  });
+  document.getElementById('weekly-plan-name-confirm').addEventListener('click', confirmWeeklyPlanName);
+  document.getElementById('weekly-plan-name-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmWeeklyPlanName();
   });
 }
 
@@ -958,9 +1072,9 @@ function init() {
   wireExercisePicker();
   wireMenuScreen();
   wireWeeklyScreen();
-  wireModeTodayBanner();
+  wireModeWeeklyPlanSection();
   restoreLastSettings();
-  renderModeTodayBanner();
+  renderModeWeeklyPlanSection();
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
@@ -973,7 +1087,7 @@ function init() {
 
   document.getElementById('generate-btn').addEventListener('click', handleGenerate);
   document.getElementById('regenerate-btn').addEventListener('click', () => {
-    renderModeTodayBanner();
+    renderModeWeeklyPlanSection();
     showScreen('mode');
   });
   document.getElementById('start-workout-btn').addEventListener('click', handleStartWorkout);
@@ -1064,6 +1178,7 @@ function init() {
       document.getElementById('reset-history-modal').classList.remove('open');
       closeSaveTemplateModal();
       closeWeeklyDayModal();
+      closeWeeklyPlanNameModal();
     }
   });
 
@@ -1080,10 +1195,10 @@ function init() {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
-      if (target === 'mode') renderModeTodayBanner();
+      if (target === 'mode') renderModeWeeklyPlanSection();
       if (target === 'history') renderHistory();
       if (target === 'progress') renderProgressScreen();
-      if (target === 'weekly') renderWeeklyScreen();
+      if (target === 'weekly') enterWeeklyScreenFromNav();
       stopHoldTimer();
       stopCardioTimer();
       endRestTimer();

@@ -89,34 +89,6 @@ function todayWeekdayIndex() {
   return (new Date().getDay() + 6) % 7;
 }
 
-// モード選択画面の「今日は◯◯の日です」バナー。休みの日・プラン未設定・
-// 割り当て先のテンプレートが削除済みの場合は何も始められないので出さない。
-function renderTodayPlanBanner(plan, templates) {
-  const banner = document.getElementById('today-plan-banner');
-  if (!banner) return;
-  const entry = plan[todayWeekdayIndex()];
-
-  if (entry && entry.kind === 'template') {
-    const t = templates.find((tpl) => tpl.id === entry.templateId);
-    if (!t) {
-      banner.hidden = true;
-      return;
-    }
-    document.getElementById('today-plan-banner-text').textContent = `今日は「${t.name}」の日です`;
-    banner.hidden = false;
-    return;
-  }
-
-  if (entry && entry.kind === 'parts' && entry.parts && entry.parts.length > 0) {
-    const label = entry.parts.map((p) => PART_LABELS[p] || p).join('・');
-    document.getElementById('today-plan-banner-text').textContent = `今日は「${label}」の日です`;
-    banner.hidden = false;
-    return;
-  }
-
-  banner.hidden = true;
-}
-
 function renderWeeklyPlan(plan, templates) {
   const container = document.getElementById('weekly-day-list');
   if (!container) return;
@@ -129,6 +101,89 @@ function renderWeeklyPlan(plan, templates) {
       <button type="button" class="weekly-day-edit-btn" data-weekly-day-edit="${i}">変更</button>
     </div>`;
   }).join('');
+}
+
+// プリセットの保存日を「8/5」のような短い表記にする(自分で作るの保存済み組み合わせと同じ書式)。
+function shortSavedDateLabel(isoString) {
+  const d = new Date(isoString);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// 週間プランの中身を、休みの曜日を省いた「曜日：内容」の行リストにする（モード選択画面用）。
+// 主役は中身なので、1行に詰め込まず曜日ごとに見やすく並べる。1件も割り当てが無ければ
+// まだ何もしていないと分かる文言だけを返す。
+// 今日にあたる行は軽くハイライトし、始められる内容(部位、または削除されていないテンプレート)
+// なら「始める」を添える。専用バナーを別途置くとうるさいという指摘を受けてここに統合した。
+function weeklyPlanDaysHtml(days, templates) {
+  const todayIdx = todayWeekdayIndex();
+  const rows = days
+    .map((day, i) => ({ day, i }))
+    .filter(({ day }) => day && day.kind !== 'rest');
+  if (rows.length === 0) {
+    return '<p class="weekly-plan-summary-empty">まだ何も割り当てていません</p>';
+  }
+  return `<div class="weekly-plan-days">${rows.map(({ day, i }) => {
+    const isToday = i === todayIdx;
+    const actionable = isToday && (
+      (day.kind === 'parts' && day.parts && day.parts.length > 0)
+      || (day.kind === 'template' && templates.some((t) => t.id === day.templateId))
+    );
+    return `
+    <div class="weekly-plan-day-row${isToday ? ' weekly-plan-day-row-today' : ''}">
+      <span class="weekly-plan-day-label">${WEEKDAY_LABELS[i]}</span>
+      <span class="weekly-plan-day-content">${escapeHtml(weeklyDayContentText(day, templates))}</span>
+      ${actionable ? '<button type="button" class="weekly-plan-day-start-btn" data-weekly-plan-start-today>始める</button>' : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+// モード選択画面の「週間プラン」セクション。プリセットが1つも無ければ他の2つのモードカードと
+// 揃えた見た目の「作成カード」を、既にあれば使用中(active)のものを大きく＋他は折りたたみ一覧で出す。
+function renderWeeklyPlanSection(plans, activeId, templates) {
+  const container = document.getElementById('weekly-plan-section');
+  if (!container) return;
+
+  if (plans.length === 0) {
+    container.innerHTML = `
+    <button type="button" class="mode-card" id="weekly-plan-create-btn">
+      <div class="mode-card-title">週間プラン</div>
+      <div class="mode-card-desc">曜日ごとに鍛える部位や組み合わせを決めておけます</div>
+    </button>`;
+    return;
+  }
+
+  const active = plans.find((p) => p.id === activeId) || plans[0];
+  const others = plans.filter((p) => p.id !== active.id);
+  const daysHtml = weeklyPlanDaysHtml(active.days, templates);
+
+  const othersHtml = others.length > 0 ? `
+    <details class="wu-cd-toggle weekly-plan-others-toggle">
+      <summary>ほかのプランを見る（${others.length}件）</summary>
+      <div class="menu-block">
+        ${others.map((p) => `
+        <div class="template-item">
+          <button type="button" class="template-item-main" data-weekly-plan-use="${p.id}">
+            <div class="template-name">${escapeHtml(p.name)}</div>
+            <div class="template-meta">${shortSavedDateLabel(p.createdAt)}保存</div>
+          </button>
+          <button type="button" class="template-delete-btn" data-weekly-plan-delete="${p.id}" aria-label="このプランを削除">✕</button>
+        </div>`).join('')}
+      </div>
+    </details>` : '';
+
+  // 主役は「何が入っているか」なので、操作(編集する／＋新しいプランを作る)は控えめな
+  // テキストリンクにして、内容のほうが目立つようにする。
+  container.innerHTML = `
+  <div class="menu-block weekly-plan-panel">
+    <h3>週間プラン</h3>
+    <div class="weekly-plan-active-name">📌 ${escapeHtml(active.name)}</div>
+    ${daysHtml}
+    <div class="weekly-plan-links">
+      <button type="button" class="text-link-btn" data-weekly-plan-edit="${active.id}">編集する</button>
+      <button type="button" class="text-link-btn" id="weekly-plan-new-btn">＋ 新しいプランを作る</button>
+    </div>
+    ${othersHtml}
+  </div>`;
 }
 
 function buildWarmupHtml(warmup) {

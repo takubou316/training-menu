@@ -21,12 +21,6 @@
     <section id="screen-mode" class="screen active">
       <h2>今日のメニューを作る</h2>
 
-      <div id="today-plan-banner" class="today-plan-banner" hidden>
-        <div class="today-plan-banner-icon">📅</div>
-        <div class="today-plan-banner-text" id="today-plan-banner-text"></div>
-        <button type="button" class="today-plan-banner-btn" id="today-plan-banner-btn">この内容で始める</button>
-      </div>
-
       <div class="mode-choice">
         <button type="button" class="mode-card" id="mode-request-btn">
           <div class="mode-card-title">要望から作る</div>
@@ -38,9 +32,7 @@
         </button>
       </div>
 
-      <div class="weekly-plan-link-row">
-        <button type="button" class="text-link-btn" id="weekly-plan-link-btn">📆 週間プランを見る</button>
-      </div>
+      <div id="weekly-plan-section"></div>
     </section>
 
     <!-- ===== 設定画面（要望から作る） ===== -->
@@ -195,26 +187,40 @@
     <!-- ===== 週間プラン画面 ===== -->
     <section id="screen-weekly" class="screen">
       <h2>週間プラン</h2>
-      <p class="hint-text">曜日ごとに鍛える部位や組み合わせを決めておけます。ここではまだ予定を組むだけで、記録画面とは連動していません。</p>
+      <p class="weekly-editor-plan-name" id="weekly-editor-plan-name"></p>
 
-      <div class="weekly-auto-row">
-        <label for="weekly-auto-days" class="weekly-auto-label">週に何日トレーニングしますか</label>
-        <div class="weekly-auto-controls">
-          <select id="weekly-auto-days">
-            <option value="1">1日</option>
-            <option value="2">2日</option>
-            <option value="3" selected>3日</option>
-            <option value="4">4日</option>
-            <option value="5">5日</option>
-            <option value="6">6日</option>
-            <option value="7">7日</option>
-          </select>
-          <button type="button" class="secondary-btn weekly-auto-btn" id="weekly-auto-btn">自動で提案する</button>
-        </div>
-        <p class="hint-text">月曜から順に自動で部位を割り当てます（すでに決めた内容は上書きされます）。曜日ごとに「変更」から自由に調整できます。</p>
+      <div id="weekly-empty-state" class="weekly-empty-state" hidden>
+        <p class="hint-text">週間プランはまだ1つも作られていません。曜日ごとに鍛える部位や組み合わせを決めておける機能です。</p>
+        <button type="button" class="primary-btn" id="weekly-empty-create-btn">＋ 新しいプランを作る</button>
       </div>
 
-      <div id="weekly-day-list" class="weekly-day-list"></div>
+      <div id="weekly-editor-content">
+        <p class="hint-text weekly-editor-intro">曜日ごとに鍛える部位や組み合わせを決めておけます。ここではまだ予定を組むだけで、記録画面とは連動していません。</p>
+
+        <div class="weekly-auto-row">
+          <label for="weekly-auto-days" class="weekly-auto-label">週に何日トレーニングしますか</label>
+          <div class="weekly-auto-controls">
+            <select id="weekly-auto-days">
+              <option value="1">1日</option>
+              <option value="2">2日</option>
+              <option value="3" selected>3日</option>
+              <option value="4">4日</option>
+              <option value="5">5日</option>
+              <option value="6">6日</option>
+              <option value="7">7日</option>
+            </select>
+            <button type="button" class="secondary-btn weekly-auto-btn" id="weekly-auto-btn">自動で提案する</button>
+          </div>
+          <p class="hint-text">月曜から順に自動で部位を割り当てます（すでに決めた内容は上書きされます）。曜日ごとに「変更」から自由に調整できます。</p>
+        </div>
+
+        <div id="weekly-day-list" class="weekly-day-list"></div>
+
+        <details class="danger-zone">
+          <summary>その他の設定</summary>
+          <button type="button" id="weekly-editor-delete-btn" class="danger-link-btn">このプランを削除する</button>
+        </details>
+      </div>
     </section>
   </main>
 
@@ -308,6 +314,19 @@
       <div class="reset-history-actions">
         <button type="button" class="secondary-btn" data-save-template-close>キャンセル</button>
         <button type="button" id="save-template-confirm" class="primary-btn">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="weekly-plan-name-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-weekly-plan-name-close></div>
+    <div class="demo-modal-content">
+      <h3 style="margin:0 0 8px;">週間プランを作成</h3>
+      <input type="text" id="weekly-plan-name-input" class="template-name-input" placeholder="名前（例: 通常週）" maxlength="30">
+      <p class="error-text" id="weekly-plan-name-error"></p>
+      <div class="reset-history-actions">
+        <button type="button" class="secondary-btn" data-weekly-plan-name-close>キャンセル</button>
+        <button type="button" id="weekly-plan-name-confirm" class="primary-btn">作成する</button>
       </div>
     </div>
   </div>

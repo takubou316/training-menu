@@ -5,7 +5,8 @@ const STORAGE_KEYS = {
   history: 'training-menu:history',
   favorites: 'training-menu:favorites',
   customTemplates: 'training-menu:custom-templates',
-  weeklyPlan: 'training-menu:weekly-plan',
+  weeklyPlans: 'training-menu:weekly-plans',
+  activeWeeklyPlanId: 'training-menu:active-weekly-plan-id',
 };
 
 function loadSettings() {
@@ -125,25 +126,71 @@ function recentExerciseIds(limit) {
   return result;
 }
 
-// 週間プラン(曜日ごとの割り当て、月曜始まりで7要素固定)。未保存時は全曜日「休み」がデフォルト。
-// 各要素は { kind: 'rest' } | { kind: 'parts', parts: [...] } | { kind: 'template', templateId }。
-function defaultWeeklyPlan() {
+// 週間プランは「自分で作る」の保存済み組み合わせと同じ考え方で、名前付きの複数プリセットとして
+// 保存できる（例:「通常週」「旅行中の軽い週」）。1つは常に「使用中(active)」として選ばれており、
+// モード選択画面の「今日は◯◯の日です」バナー等はこれを参照する。
+// 各プリセットは { id, name, createdAt, days } で、daysは曜日ごとの割り当て(月曜始まりで7要素固定)。
+// days の各要素は { kind: 'rest' } | { kind: 'parts', parts: [...] } | { kind: 'template', templateId }。
+function defaultWeeklyPlanDays() {
   return Array.from({ length: 7 }, () => ({ kind: 'rest' }));
 }
 
-function loadWeeklyPlan() {
+function loadWeeklyPlans() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.weeklyPlan);
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (!Array.isArray(parsed) || parsed.length !== 7) return defaultWeeklyPlan();
-    return parsed;
+    const raw = localStorage.getItem(STORAGE_KEYS.weeklyPlans);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    return defaultWeeklyPlan();
+    return [];
   }
 }
 
-function saveWeeklyPlan(plan) {
-  localStorage.setItem(STORAGE_KEYS.weeklyPlan, JSON.stringify(plan));
+function saveWeeklyPlans(plans) {
+  localStorage.setItem(STORAGE_KEYS.weeklyPlans, JSON.stringify(plans));
+}
+
+// 名前を付けて新しいプリセットを作成し、一覧の先頭に追加する(他の保存済みデータと同じ新しい順)。
+// 曜日の割り当てはすべて「休み」の状態から始まり、週間プラン画面で組んでいく。
+function createWeeklyPlan(name) {
+  const plans = loadWeeklyPlans();
+  const plan = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    createdAt: new Date().toISOString(),
+    days: defaultWeeklyPlanDays(),
+  };
+  plans.unshift(plan);
+  saveWeeklyPlans(plans);
+  return plan;
+}
+
+function updateWeeklyPlanDays(id, days) {
+  const plans = loadWeeklyPlans();
+  const plan = plans.find((p) => p.id === id);
+  if (!plan) return plans;
+  plan.days = days;
+  saveWeeklyPlans(plans);
+  return plans;
+}
+
+// プリセットを削除する。削除したものが使用中(active)だった場合は、残りの先頭を新しい使用中にする
+// (残りが無ければ使用中なし)。
+function deleteWeeklyPlan(id) {
+  const plans = loadWeeklyPlans().filter((p) => p.id !== id);
+  saveWeeklyPlans(plans);
+  if (getActiveWeeklyPlanId() === id) {
+    setActiveWeeklyPlanId(plans.length > 0 ? plans[0].id : null);
+  }
+  return plans;
+}
+
+function getActiveWeeklyPlanId() {
+  return localStorage.getItem(STORAGE_KEYS.activeWeeklyPlanId);
+}
+
+function setActiveWeeklyPlanId(id) {
+  if (id) localStorage.setItem(STORAGE_KEYS.activeWeeklyPlanId, id);
+  else localStorage.removeItem(STORAGE_KEYS.activeWeeklyPlanId);
 }
 
 if (typeof module !== 'undefined') {
@@ -151,6 +198,7 @@ if (typeof module !== 'undefined') {
     loadSettings, saveSettings, loadHistory, saveSession, clearHistory, deleteSession, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
-    defaultWeeklyPlan, loadWeeklyPlan, saveWeeklyPlan,
+    defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
+    deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId,
   };
 }
