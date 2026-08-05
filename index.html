@@ -20,6 +20,13 @@
     <!-- ===== モード選択画面 ===== -->
     <section id="screen-mode" class="screen active">
       <h2>今日のメニューを作る</h2>
+
+      <div id="today-plan-banner" class="today-plan-banner" hidden>
+        <div class="today-plan-banner-icon">📅</div>
+        <div class="today-plan-banner-text" id="today-plan-banner-text"></div>
+        <button type="button" class="today-plan-banner-btn" id="today-plan-banner-btn">この内容で始める</button>
+      </div>
+
       <div class="mode-choice">
         <button type="button" class="mode-card" id="mode-request-btn">
           <div class="mode-card-title">要望から作る</div>
@@ -29,6 +36,10 @@
           <div class="mode-card-title">自分で作る</div>
           <div class="mode-card-desc">種目・休憩時間などを自分で細かく決められます</div>
         </button>
+      </div>
+
+      <div class="weekly-plan-link-row">
+        <button type="button" class="text-link-btn" id="weekly-plan-link-btn">📆 週間プランを見る</button>
       </div>
     </section>
 
@@ -180,10 +191,36 @@
         <div id="exercise-progress-content"></div>
       </div>
     </section>
+
+    <!-- ===== 週間プラン画面 ===== -->
+    <section id="screen-weekly" class="screen">
+      <h2>週間プラン</h2>
+      <p class="hint-text">曜日ごとに鍛える部位や組み合わせを決めておけます。ここではまだ予定を組むだけで、記録画面とは連動していません。</p>
+
+      <div class="weekly-auto-row">
+        <label for="weekly-auto-days" class="weekly-auto-label">週に何日トレーニングしますか</label>
+        <div class="weekly-auto-controls">
+          <select id="weekly-auto-days">
+            <option value="1">1日</option>
+            <option value="2">2日</option>
+            <option value="3" selected>3日</option>
+            <option value="4">4日</option>
+            <option value="5">5日</option>
+            <option value="6">6日</option>
+            <option value="7">7日</option>
+          </select>
+          <button type="button" class="secondary-btn weekly-auto-btn" id="weekly-auto-btn">自動で提案する</button>
+        </div>
+        <p class="hint-text">月曜から順に自動で部位を割り当てます（すでに決めた内容は上書きされます）。曜日ごとに「変更」から自由に調整できます。</p>
+      </div>
+
+      <div id="weekly-day-list" class="weekly-day-list"></div>
+    </section>
   </main>
 
   <nav class="bottom-nav">
     <button class="nav-btn active" data-nav="mode">メニュー作成</button>
+    <button class="nav-btn" data-nav="weekly">週間プラン</button>
     <button class="nav-btn" data-nav="history">記録一覧</button>
     <button class="nav-btn" data-nav="progress">グラフ</button>
   </nav>
@@ -271,6 +308,41 @@
       <div class="reset-history-actions">
         <button type="button" class="secondary-btn" data-save-template-close>キャンセル</button>
         <button type="button" id="save-template-confirm" class="primary-btn">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="weekly-day-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-weekly-day-close></div>
+    <div class="demo-modal-content">
+      <button class="demo-close" data-weekly-day-close aria-label="閉じる">×</button>
+      <h3 id="weekly-day-modal-title" style="margin:0 0 12px;">曜日の内容</h3>
+
+      <div class="chip-group weekly-day-kind-group" id="weekly-day-kind-group">
+        <label class="chip"><input type="radio" name="weekly-day-kind" value="rest"> 休み</label>
+        <label class="chip"><input type="radio" name="weekly-day-kind" value="parts"> 部位を選ぶ</label>
+        <label class="chip"><input type="radio" name="weekly-day-kind" value="template"> 保存した組み合わせ</label>
+      </div>
+
+      <div class="chip-group weekly-day-part-group" id="weekly-day-part-group" hidden>
+        <label class="chip"><input type="checkbox" value="fullbody" data-part="fullbody"> 全身</label>
+        <label class="chip"><input type="checkbox" value="chest" data-part="chest"> 胸</label>
+        <label class="chip"><input type="checkbox" value="back" data-part="back"> 背中</label>
+        <label class="chip"><input type="checkbox" value="shoulders" data-part="shoulders"> 肩</label>
+        <label class="chip"><input type="checkbox" value="arms" data-part="arms"> 腕</label>
+        <label class="chip"><input type="checkbox" value="legs" data-part="legs"> 脚</label>
+        <label class="chip"><input type="checkbox" value="core" data-part="core"> 体幹・腹筋</label>
+      </div>
+
+      <div id="weekly-day-template-row" hidden>
+        <select id="weekly-day-template-select"></select>
+        <p class="hint-text" id="weekly-day-template-empty" hidden>保存した組み合わせがまだありません。「自分で作る」画面で種目を選んだあと保存できます。</p>
+      </div>
+
+      <p class="error-text" id="weekly-day-error"></p>
+      <div class="reset-history-actions">
+        <button type="button" class="secondary-btn" data-weekly-day-close>キャンセル</button>
+        <button type="button" id="weekly-day-save" class="primary-btn">保存する</button>
       </div>
     </div>
   </div>

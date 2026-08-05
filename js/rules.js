@@ -76,6 +76,27 @@ const PROGRESSION = {
   rpeThresholdForWeightIncrease: 7,
 };
 
+// 週間プラン画面の曜日表示。月曜始まり(0=月〜6=日)で統一する。
+const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日'];
+
+// 週のトレーニング日数ごとの部位分割の目安（月曜始まりで先頭から順に割り当てる）。
+// 全身法・上下分割・プッシュプル脚(PPL)分割・部位別(bro split)など、JATI/NSCA等が
+// 教える一般的な分割の考え方（週の頻度が増えるほど1回あたりの部位を絞る）を参考にした
+// 簡易ローテーションであり、特定文献の丸写しではない。日数以外の並び順・組み合わせの
+// 最適性を厳密に検証したものではなく、あくまで自動提案のたたき台（手動で調整できる）。
+const WEEKLY_SPLIT_TEMPLATES = {
+  1: [['fullbody']],
+  2: [['chest', 'back', 'shoulders', 'arms'], ['legs', 'core']],
+  3: [['chest', 'shoulders'], ['back', 'arms'], ['legs', 'core']],
+  4: [['chest'], ['back'], ['legs'], ['shoulders', 'arms', 'core']],
+  5: [['chest'], ['back'], ['legs'], ['shoulders'], ['arms', 'core']],
+  6: [['chest', 'shoulders'], ['back'], ['legs'], ['chest', 'shoulders'], ['back'], ['legs', 'core']],
+  7: [['chest', 'shoulders'], ['back'], ['legs'], ['chest', 'shoulders'], ['back'], ['legs', 'core'], ['fullbody']],
+};
+
 if (typeof module !== 'undefined') {
-  module.exports = { GOALS, LEVELS, exerciseCountForTime, PROGRESSION, RPE_SCALE, rpeReserveText };
+  module.exports = {
+    GOALS, LEVELS, exerciseCountForTime, PROGRESSION, RPE_SCALE, rpeReserveText,
+    WEEKDAY_LABELS, WEEKLY_SPLIT_TEMPLATES,
+  };
 }

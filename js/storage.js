@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   history: 'training-menu:history',
   favorites: 'training-menu:favorites',
   customTemplates: 'training-menu:custom-templates',
+  weeklyPlan: 'training-menu:weekly-plan',
 };
 
 function loadSettings() {
@@ -124,10 +125,32 @@ function recentExerciseIds(limit) {
   return result;
 }
 
+// 週間プラン(曜日ごとの割り当て、月曜始まりで7要素固定)。未保存時は全曜日「休み」がデフォルト。
+// 各要素は { kind: 'rest' } | { kind: 'parts', parts: [...] } | { kind: 'template', templateId }。
+function defaultWeeklyPlan() {
+  return Array.from({ length: 7 }, () => ({ kind: 'rest' }));
+}
+
+function loadWeeklyPlan() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.weeklyPlan);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!Array.isArray(parsed) || parsed.length !== 7) return defaultWeeklyPlan();
+    return parsed;
+  } catch (e) {
+    return defaultWeeklyPlan();
+  }
+}
+
+function saveWeeklyPlan(plan) {
+  localStorage.setItem(STORAGE_KEYS.weeklyPlan, JSON.stringify(plan));
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     loadSettings, saveSettings, loadHistory, saveSession, clearHistory, deleteSession, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
+    defaultWeeklyPlan, loadWeeklyPlan, saveWeeklyPlan,
   };
 }

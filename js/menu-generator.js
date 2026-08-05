@@ -280,6 +280,18 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
   };
 }
 
+// 週のトレーニング日数から、曜日ごとの部位割り当て案(月曜始まり、7要素固定)を作る。
+// js/rules.jsのWEEKLY_SPLIT_TEMPLATESを先頭から詰めるだけの純粋関数で、余った曜日は休みにする。
+function proposeWeeklySplit(trainingDaysPerWeek) {
+  const days = Math.min(7, Math.max(1, Number(trainingDaysPerWeek) || 3));
+  const template = WEEKLY_SPLIT_TEMPLATES[days] || WEEKLY_SPLIT_TEMPLATES[3];
+  return Array.from({ length: 7 }, (_, i) => (
+    template[i] ? { kind: 'parts', parts: template[i].slice() } : { kind: 'rest' }
+  ));
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan };
+  module.exports = {
+    generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan, proposeWeeklySplit,
+  };
 }

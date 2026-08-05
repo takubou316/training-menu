@@ -54,6 +54,11 @@ let exercisePickerFilter = 'all';
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
 
+// 週間プラン（曜日ごとの割り当て）。画面を開くまでlocalStorageから読み込まない遅延ロード。
+let weeklyPlan = null;
+// 週間プランの曜日編集モーダルが今どの曜日(0=月〜6=日)を対象にしているか
+let weeklyDayEditIndex = null;
+
 // ===== 種目カードの長押し→ドラッグ並べ替え（スマホのホーム画面アイコンと同じ操作感） =====
 // 長押しで「入れ替えモード」に入り、カードがゆれる。ゆれている間はどのカードもそのまま
 // ドラッグして並べ替えできる（2つ目以降は長押し不要）。各カードの左上の×バッジで削除。
@@ -586,6 +591,163 @@ function wireMenuScreen() {
   });
 }
 
+// ===== 週間プラン画面 =====
+
+function ensureWeeklyPlanLoaded() {
+  if (!weeklyPlan) weeklyPlan = loadWeeklyPlan();
+  return weeklyPlan;
+}
+
+function renderWeeklyScreen() {
+  renderWeeklyPlan(ensureWeeklyPlanLoaded(), loadCustomTemplates());
+}
+
+function applyAutoWeeklySplit() {
+  const days = Number(document.getElementById('weekly-auto-days').value);
+  weeklyPlan = proposeWeeklySplit(days);
+  saveWeeklyPlan(weeklyPlan);
+  renderWeeklyScreen();
+}
+
+function updateWeeklyDayModalVisibility(kind) {
+  document.getElementById('weekly-day-part-group').hidden = kind !== 'parts';
+  document.getElementById('weekly-day-template-row').hidden = kind !== 'template';
+}
+
+function openWeeklyDayModal(dayIndex) {
+  weeklyDayEditIndex = dayIndex;
+  const day = ensureWeeklyPlanLoaded()[dayIndex] || { kind: 'rest' };
+  const kind = day.kind || 'rest';
+
+  document.getElementById('weekly-day-modal-title').textContent = `${WEEKDAY_LABELS[dayIndex]}曜日の内容`;
+  document.getElementById('weekly-day-error').textContent = '';
+
+  document.querySelectorAll('#weekly-day-kind-group input').forEach((el) => {
+    el.checked = el.value === kind;
+  });
+  document.querySelectorAll('#weekly-day-part-group input').forEach((el) => {
+    el.checked = kind === 'parts' && (day.parts || []).includes(el.dataset.part);
+  });
+
+  const templates = loadCustomTemplates();
+  const select = document.getElementById('weekly-day-template-select');
+  select.innerHTML = templates.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+  document.getElementById('weekly-day-template-empty').hidden = templates.length > 0;
+  select.hidden = templates.length === 0;
+  if (kind === 'template' && day.templateId) select.value = day.templateId;
+
+  updateWeeklyDayModalVisibility(kind);
+  document.getElementById('weekly-day-modal').classList.add('open');
+  lockBodyScroll();
+}
+
+function closeWeeklyDayModal() {
+  document.getElementById('weekly-day-modal').classList.remove('open');
+  weeklyDayEditIndex = null;
+  unlockBodyScroll();
+}
+
+function confirmWeeklyDaySave() {
+  if (weeklyDayEditIndex == null) return;
+  const errorEl = document.getElementById('weekly-day-error');
+  const checkedKind = document.querySelector('#weekly-day-kind-group input:checked');
+  const kind = checkedKind ? checkedKind.value : 'rest';
+
+  let entry;
+  if (kind === 'parts') {
+    const parts = Array.from(document.querySelectorAll('#weekly-day-part-group input:checked')).map((el) => el.dataset.part);
+    if (parts.length === 0) {
+      errorEl.textContent = '部位を1つ以上選んでください';
+      return;
+    }
+    entry = { kind: 'parts', parts };
+  } else if (kind === 'template') {
+    const select = document.getElementById('weekly-day-template-select');
+    if (!select.value) {
+      errorEl.textContent = '保存した組み合わせを選んでください';
+      return;
+    }
+    entry = { kind: 'template', templateId: select.value };
+  } else {
+    entry = { kind: 'rest' };
+  }
+
+  errorEl.textContent = '';
+  const plan = ensureWeeklyPlanLoaded();
+  plan[weeklyDayEditIndex] = entry;
+  saveWeeklyPlan(plan);
+  closeWeeklyDayModal();
+  renderWeeklyScreen();
+}
+
+function wireWeeklyScreen() {
+  document.getElementById('weekly-auto-btn').addEventListener('click', applyAutoWeeklySplit);
+
+  document.getElementById('weekly-day-list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-weekly-day-edit]');
+    if (btn) openWeeklyDayModal(Number(btn.dataset.weeklyDayEdit));
+  });
+
+  document.getElementById('weekly-day-kind-group').addEventListener('change', (e) => {
+    if (e.target.name === 'weekly-day-kind') updateWeeklyDayModalVisibility(e.target.value);
+  });
+
+  // 全身を選んだら他の部位は解除する（「要望から作る」画面の#part-groupと同じ排他ルール）
+  document.querySelectorAll('#weekly-day-part-group input').forEach((input) => {
+    input.addEventListener('change', () => {
+      if (input.dataset.part === 'fullbody' && input.checked) {
+        document.querySelectorAll('#weekly-day-part-group input').forEach((other) => {
+          if (other !== input) other.checked = false;
+        });
+      } else if (input.checked) {
+        const fullbodyInput = document.querySelector('#weekly-day-part-group input[data-part="fullbody"]');
+        if (fullbodyInput) fullbodyInput.checked = false;
+      }
+    });
+  });
+
+  document.getElementById('weekly-day-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-weekly-day-close]')) closeWeeklyDayModal();
+  });
+  document.getElementById('weekly-day-save').addEventListener('click', confirmWeeklyDaySave);
+}
+
+// モード選択画面の「今日は◯◯の日です」バナー。screen-modeを表示するたびに再計算する
+// (週間プランをその場で編集した直後に戻ってきても最新の内容を反映するため)。
+function renderModeTodayBanner() {
+  renderTodayPlanBanner(ensureWeeklyPlanLoaded(), loadCustomTemplates());
+}
+
+// バナーの「この内容で始める」。部位割り当てなら①鍛えたい部位のチェックを合わせて
+// 設定画面へ、保存済みの組み合わせ割り当てなら自分で作る画面にそのまま読み込む。
+// どちらも既存の画面に乗せるだけで、ここから直接メニューを生成はしない
+// （器具・時間などその日の状況を必ず確認してから進める既存の流れを崩さないため）。
+function handleTodayPlanBannerStart() {
+  const plan = ensureWeeklyPlanLoaded();
+  const entry = plan[todayWeekdayIndex()];
+  if (!entry) return;
+
+  if (entry.kind === 'template') {
+    const template = loadCustomTemplates().find((t) => t.id === entry.templateId);
+    if (!template) return;
+    applyCustomTemplate(template);
+    showScreen('custom');
+  } else if (entry.kind === 'parts') {
+    document.querySelectorAll('#part-group input').forEach((el) => {
+      el.checked = entry.parts.includes(el.dataset.part);
+    });
+    showScreen('setup');
+  }
+}
+
+function wireModeTodayBanner() {
+  document.getElementById('today-plan-banner-btn').addEventListener('click', handleTodayPlanBannerStart);
+  document.getElementById('weekly-plan-link-btn').addEventListener('click', () => {
+    renderWeeklyScreen();
+    showScreen('weekly');
+  });
+}
+
 function wirePartExclusivity() {
   document.querySelectorAll('#part-group input').forEach((input) => {
     input.addEventListener('change', () => {
@@ -795,7 +957,10 @@ function init() {
   wireCustomScreen();
   wireExercisePicker();
   wireMenuScreen();
+  wireWeeklyScreen();
+  wireModeTodayBanner();
   restoreLastSettings();
+  renderModeTodayBanner();
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
@@ -807,7 +972,10 @@ function init() {
   });
 
   document.getElementById('generate-btn').addEventListener('click', handleGenerate);
-  document.getElementById('regenerate-btn').addEventListener('click', () => showScreen('mode'));
+  document.getElementById('regenerate-btn').addEventListener('click', () => {
+    renderModeTodayBanner();
+    showScreen('mode');
+  });
   document.getElementById('start-workout-btn').addEventListener('click', handleStartWorkout);
   document.getElementById('log-content').addEventListener('input', handleLogInput);
   document.getElementById('log-content').addEventListener('change', handleLogInput);
@@ -895,6 +1063,7 @@ function init() {
       closeRpeInfoModal();
       document.getElementById('reset-history-modal').classList.remove('open');
       closeSaveTemplateModal();
+      closeWeeklyDayModal();
     }
   });
 
@@ -911,8 +1080,10 @@ function init() {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
+      if (target === 'mode') renderModeTodayBanner();
       if (target === 'history') renderHistory();
       if (target === 'progress') renderProgressScreen();
+      if (target === 'weekly') renderWeeklyScreen();
       stopHoldTimer();
       stopCardioTimer();
       endRestTimer();

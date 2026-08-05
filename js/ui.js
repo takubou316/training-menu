@@ -66,6 +66,71 @@ function closeDemoModal() {
 
 const PAIN_AREA_LABELS = { 肩: '肩', 腰: '腰', 膝: '膝', 手首: '手首' };
 
+// 週間プラン画面での部位表示名(#part-group/#weekly-day-part-groupのdata-part値に対応)。
+const PART_LABELS = { fullbody: '全身', chest: '胸', back: '背中', shoulders: '肩', arms: '腕', legs: '脚', core: '体幹・腹筋' };
+
+// 週間プランの1曜日分の内容を、一覧行に出す短いテキストにする。
+function weeklyDayContentText(day, templates) {
+  if (!day || day.kind === 'rest') return '休み';
+  if (day.kind === 'parts') {
+    if (!day.parts || day.parts.length === 0) return '休み';
+    return day.parts.map((p) => PART_LABELS[p] || p).join('・');
+  }
+  if (day.kind === 'template') {
+    const t = templates.find((tpl) => tpl.id === day.templateId);
+    return t ? `「${t.name}」` : '（削除された組み合わせ）';
+  }
+  return '休み';
+}
+
+// 今日の曜日を週間プランの並び(0=月〜6=日)に合わせたインデックスで返す。
+// Date.getDay()は0=日曜始まりなので、月曜始まりに変換する。
+function todayWeekdayIndex() {
+  return (new Date().getDay() + 6) % 7;
+}
+
+// モード選択画面の「今日は◯◯の日です」バナー。休みの日・プラン未設定・
+// 割り当て先のテンプレートが削除済みの場合は何も始められないので出さない。
+function renderTodayPlanBanner(plan, templates) {
+  const banner = document.getElementById('today-plan-banner');
+  if (!banner) return;
+  const entry = plan[todayWeekdayIndex()];
+
+  if (entry && entry.kind === 'template') {
+    const t = templates.find((tpl) => tpl.id === entry.templateId);
+    if (!t) {
+      banner.hidden = true;
+      return;
+    }
+    document.getElementById('today-plan-banner-text').textContent = `今日は「${t.name}」の日です`;
+    banner.hidden = false;
+    return;
+  }
+
+  if (entry && entry.kind === 'parts' && entry.parts && entry.parts.length > 0) {
+    const label = entry.parts.map((p) => PART_LABELS[p] || p).join('・');
+    document.getElementById('today-plan-banner-text').textContent = `今日は「${label}」の日です`;
+    banner.hidden = false;
+    return;
+  }
+
+  banner.hidden = true;
+}
+
+function renderWeeklyPlan(plan, templates) {
+  const container = document.getElementById('weekly-day-list');
+  if (!container) return;
+  container.innerHTML = plan.map((day, i) => {
+    const isRest = !day || day.kind === 'rest';
+    return `
+    <div class="weekly-day-row${isRest ? ' is-rest' : ''}">
+      <div class="weekly-day-label">${WEEKDAY_LABELS[i]}</div>
+      <div class="weekly-day-content">${escapeHtml(weeklyDayContentText(day, templates))}</div>
+      <button type="button" class="weekly-day-edit-btn" data-weekly-day-edit="${i}">変更</button>
+    </div>`;
+  }).join('');
+}
+
 function buildWarmupHtml(warmup) {
   const dynamicWarmupHtml = warmup.dynamic
     .map((d) => `
