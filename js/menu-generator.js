@@ -15,6 +15,17 @@ const DYNAMIC_WARMUP_BY_PATTERN = {
   cardio: { label: 'ごく軽いペースで3〜5分', description: '本来のペースの半分以下の軽さから入り、心拍と関節を徐々に慣らしてから本セットのペースに上げる。' },
 };
 
+// 気になる部位(painAreas、日本語表記)から、対応する静的ストレッチの部位キー(STATIC_STRETCH_BY_MUSCLEの
+// キー)への近似マッピング。クールダウンのストレッチ優先順位付け(buildWarmupAndCooldown)で使う。
+// 「腰」は専用の腰ストレッチが用意DBに無いため、姿勢に関連する背中・体幹のストレッチで代用する。
+// 「手首」は前腕〜二頭筋ストレッチ(手のひらを反らす動作)が実質的に手首のストレッチを兼ねるため対応させる。
+const PAIN_AREA_TO_STRETCH_MUSCLES = {
+  肩: ['shoulders'],
+  腰: ['back', 'abs'],
+  膝: ['quads', 'hamstrings', 'calves'],
+  手首: ['biceps'],
+};
+
 // 部位ごとの静的クールダウンストレッチ（保持時間20〜30秒が一般的な目安）
 const STATIC_STRETCH_BY_MUSCLE = {
   chest: {
@@ -58,6 +69,16 @@ const STATIC_STRETCH_BY_MUSCLE = {
     description: 'うつ伏せから腕で上体を軽く起こし、腰は反らしすぎない範囲でお腹の前面を伸ばす。痛みが出る場合は無理をしない。',
   },
 };
+
+// STATIC_STRETCH_BY_MUSCLEのエントリを、ウォームアップ用の短時間版(10秒)に変換する。
+// 『健康運動実践指導者 養成用テキスト』第8章Aによれば、ウォームアップの理想的な構成は
+// 「①軽い有酸素運動→②関節を動かす体操→③主要部位の10秒程度の短い静的 or 動的ストレッチ」
+// の3段階だが、以前はクールダウン用の本格的なストレッチ(20〜30秒保持)しか持っていなかった。
+// クールダウンと全く同じ内容・同じやり方で保持時間だけ短くする、という教科書の考え方に沿い、
+// 新規にストレッチ内容を作らずクールダウン用エントリを流用する(表記だけ「10秒」に変える)。
+function toWarmupShortStretch(entry) {
+  return { label: entry.label.replace('20〜30秒', '10秒'), description: entry.description };
+}
 
 function filterByEquipment(exercises, equipmentAvailable) {
   return exercises.filter((ex) => ex.equipment.some((e) => equipmentAvailable.includes(e)));
@@ -221,7 +242,9 @@ function sortByTrainingOrder(exercises) {
 
 // 選んだ種目一覧（EXERCISESの生データ）から、動作パターン・部位に応じたウォームアップ/クールダウンを組み立てる。
 // 「要望から作る」「自分で作る」どちらのモードからも同じロジックを使う。
-function buildWarmupAndCooldown(chosen) {
+// painAreas: 設定画面で選んだ「気になる部位」(肩/腰/膝/手首、日本語)。渡すとクールダウンの
+// ストレッチの並び順に反映される(下記参照)。省略時(自分で作るで未取得の場合など)は空扱い。
+function buildWarmupAndCooldown(chosen, painAreas = []) {
   const patternsUsed = new Set(chosen.map((ex) => ex.pattern));
   const musclesUsed = new Set(chosen.flatMap((ex) => ex.primary));
 
@@ -232,10 +255,34 @@ function buildWarmupAndCooldown(chosen) {
       const forExercises = chosen.filter((ex) => ex.pattern === p).map((ex) => ex.name);
       return { label: info.label, description: info.description, forExercises };
     }),
+    // ①有酸素→②動的な体操(上のdynamic)の後に行う、③主要部位の短い静的ストレッチ(10秒)。
+    // クールダウンと同じ部位を対象にするが、保持時間だけ短い表記に変えて流用する。
+    staticStretch: Array.from(musclesUsed).map((m) => STATIC_STRETCH_BY_MUSCLE[m]).filter(Boolean).map(toWarmupShortStretch),
   };
 
+  // クールダウンのストレッチの並び順(優先順位)。教科書は「疲労感の強い部位／傷害歴のある部位」を
+  // 優先すべきとしているため、以下の2段階で並べ替える(どちらも既存データからの近似・代理指標であり、
+  // 本人の主観申告に基づくものではない点に注意):
+  // 1. 気になる部位(painAreas)に近い部位のストレッチを最優先
+  //    (該当する種目自体はfilterByPainAreasで既に除外済みだが、周辺部位のケアとして優先する意図)
+  // 2. その次は、このセッションで主動筋として使われた回数が多い部位ほど先
+  //    (疲労感の強さを、実際に申告してもらう代わりに使用頻度で近似する)
+  const painMuscles = new Set(painAreas.flatMap((area) => PAIN_AREA_TO_STRETCH_MUSCLES[area] || []));
+  const muscleFrequency = {};
+  chosen.forEach((ex) => (ex.primary || []).forEach((m) => { muscleFrequency[m] = (muscleFrequency[m] || 0) + 1; }));
+
+  const cooldownStatic = Array.from(musclesUsed)
+    .map((m) => ({ muscle: m, entry: STATIC_STRETCH_BY_MUSCLE[m] }))
+    .filter((x) => x.entry)
+    .sort((a, b) => {
+      const painRank = (painMuscles.has(a.muscle) ? 0 : 1) - (painMuscles.has(b.muscle) ? 0 : 1);
+      if (painRank !== 0) return painRank;
+      return (muscleFrequency[b.muscle] || 0) - (muscleFrequency[a.muscle] || 0);
+    })
+    .map((x) => x.entry);
+
   const cooldown = {
-    static: Array.from(musclesUsed).map((m) => STATIC_STRETCH_BY_MUSCLE[m]).filter(Boolean),
+    static: cooldownStatic,
     general: '深呼吸を意識しながら1〜2分クールダウン',
   };
 
@@ -298,7 +345,7 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
   const chosen = sortByTrainingOrder(chosenRaw);
 
   const main = chosen.map((ex) => buildSetPlan(ex, level, goal));
-  const { warmup, cooldown } = buildWarmupAndCooldown(chosen);
+  const { warmup, cooldown } = buildWarmupAndCooldown(chosen, painAreas);
 
   return {
     warmup,

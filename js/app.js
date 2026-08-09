@@ -43,7 +43,7 @@ let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方の
 // 「自分で作る」モードの状態
 let customExercises = []; // EXERCISESの生データを追加順に並べたもの
 let customRestSec = {}; // exerciseId -> 休憩秒数
-let customWarmup = { general: '', dynamic: [] };
+let customWarmup = { general: '', dynamic: [], staticStretch: [] };
 let customCooldown = { static: [], general: '' };
 
 // 種目ピッカーが今どちらの画面から開かれているか('custom' | 'menu')
@@ -314,7 +314,11 @@ function wireBodyWeightSlider() {
 // ===== 「自分で作る」モード =====
 
 function recomputeCustomWarmupCooldown() {
-  const { warmup, cooldown } = buildWarmupAndCooldown(customExercises);
+  // 「自分で作る」画面には気になる部位の選択UIが無いが、設定画面(要望から作る)で選んだ内容は
+  // 一時的な条件ではなく本人の恒常的な特性に近いため、保存済みの設定から引き継いでクールダウンの
+  // ストレッチ優先順位付けに使う。
+  const painAreas = (loadSettings() || {}).painAreas || [];
+  const { warmup, cooldown } = buildWarmupAndCooldown(customExercises, painAreas);
   customWarmup = warmup;
   customCooldown = cooldown;
   renderCustomWuCd(customWarmup, customCooldown);
@@ -410,6 +414,12 @@ function wireCustomScreen() {
     const removeWarmup = e.target.closest('[data-custom-remove-warmup]');
     if (removeWarmup) {
       customWarmup.dynamic.splice(Number(removeWarmup.dataset.customRemoveWarmup), 1);
+      renderCustomWuCd(customWarmup, customCooldown);
+      return;
+    }
+    const removeStaticStretch = e.target.closest('[data-custom-remove-static-stretch]');
+    if (removeStaticStretch) {
+      customWarmup.staticStretch.splice(Number(removeStaticStretch.dataset.customRemoveStaticStretch), 1);
       renderCustomWuCd(customWarmup, customCooldown);
       return;
     }
@@ -576,7 +586,7 @@ function wireExercisePicker() {
 
 function recomputeMenuWarmupCooldown() {
   const rawExercises = currentMenu.main.map((item) => findExerciseById(item.exerciseId)).filter(Boolean);
-  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises);
+  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises, currentMenu.params.painAreas || []);
   currentMenu.warmup = warmup;
   currentMenu.cooldown = cooldown;
 }

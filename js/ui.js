@@ -205,6 +205,16 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
     </div>`)
     .join('');
 
+  // 体操の後に行う、主要部位の短い静的ストレッチ(10秒)。クールダウンの本格的なストレッチ(20〜30秒)と
+  // 内容は同じで、ウォームアップとしては短時間版として案内する(staticStretchが無い/古い形式のデータの
+  // 場合は表示しない。warmup.staticStretchは後から追加したフィールドのため、undefined時は空扱い)。
+  const staticStretchHtml = (warmup.staticStretch || [])
+    .map((s) => `
+    <div class="warmup-item">
+      <div class="ex-meta">${s.label}</div>
+    </div>`)
+    .join('');
+
   const warmupSetNoteHtml = hasStrengthExercise
     ? '<div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>'
     : '';
@@ -214,6 +224,7 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
       <h3>ウォームアップ</h3>
       <div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>
       ${dynamicWarmupHtml}
+      ${staticStretchHtml}
       ${warmupSetNoteHtml}
     </div>`;
 }
@@ -344,7 +355,8 @@ function renderCustomWuCd(warmup, cooldown) {
   const container = document.getElementById('custom-wu-cd');
   if (!container) return;
 
-  if (warmup.dynamic.length === 0 && cooldown.static.length === 0) {
+  const staticStretch = warmup.staticStretch || [];
+  if (warmup.dynamic.length === 0 && staticStretch.length === 0 && cooldown.static.length === 0) {
     container.innerHTML = '<p class="hint-text">種目を追加すると、内容に応じたウォームアップ・クールダウンが自動で表示されます。</p>';
     return;
   }
@@ -365,6 +377,18 @@ function renderCustomWuCd(warmup, cooldown) {
     </div>`)
     .join('');
 
+  const staticStretchItemsHtml = staticStretch
+    .map((s, i) => `
+    <div class="warmup-item">
+      <div class="ex-header">
+        <div class="ex-meta">${s.label}</div>
+        <div class="ex-icons">
+          <button type="button" class="custom-remove-btn" data-custom-remove-static-stretch="${i}" aria-label="この項目を外す">✕</button>
+        </div>
+      </div>
+    </div>`)
+    .join('');
+
   const cooldownItemsHtml = cooldown.static
     .map((s, i) => `
     <div class="warmup-item cd-item">
@@ -381,6 +405,7 @@ function renderCustomWuCd(warmup, cooldown) {
     <div class="menu-block">
       <h3>ウォームアップ（自動）</h3>
       ${warmupItemsHtml || '<p class="hint-text">自動提案なし</p>'}
+      ${staticStretchItemsHtml}
     </div>
     <div class="menu-block">
       <h3>クールダウン（自動）</h3>
