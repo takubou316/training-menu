@@ -186,7 +186,10 @@ function renderWeeklyPlanSection(plans, activeId, templates) {
   </div>`;
 }
 
-function buildWarmupHtml(warmup) {
+// hasStrengthExercise: 本編に有酸素以外(重量・ウォームアップセットの概念がある種目)が1つでもあるか。
+// 無ければ「軽い重量・回数で慣らしましょう」の案内は文脈に合わないため省く
+// （有酸素だけのメニューには重量もウォームアップセットも存在しないため）。
+function buildWarmupHtml(warmup, hasStrengthExercise) {
   const dynamicWarmupHtml = warmup.dynamic
     .map((d) => `
     <div class="warmup-item">
@@ -202,12 +205,16 @@ function buildWarmupHtml(warmup) {
     </div>`)
     .join('');
 
+  const warmupSetNoteHtml = hasStrengthExercise
+    ? '<div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>'
+    : '';
+
   return `
     <div class="menu-block">
       <h3>ウォームアップ</h3>
       <div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>
       ${dynamicWarmupHtml}
-      <div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>
+      ${warmupSetNoteHtml}
     </div>`;
 }
 
@@ -245,7 +252,7 @@ function renderMenu(menu) {
     ? `<div class="menu-block"><div class="ex-note">選んだ条件（器具・レベル・部位など）に合う種目が少なく、目安の${menu.requestedCount}種目に対して${menu.main.length}種目のメニューになりました。器具を増やす、レベルを上げる、鍛えたい部位を広げるなどすると種目を増やせます。</div></div>`
     : '';
 
-  const warmupHtml = buildWarmupHtml(menu.warmup);
+  const warmupHtml = buildWarmupHtml(menu.warmup, menu.main.some((item) => item.type !== 'cardio'));
 
   const mainItemsHtml = menu.main
     .map((item, i) => `
@@ -444,7 +451,10 @@ function renderCustomTemplateList(templates) {
   }).join('');
 }
 
-function renderExercisePicker(query, isSelectedFn, filterMode) {
+// equipmentFilter: 「要望から作る」で選んだ器具の配列(絞り込み対象外ならnull/undefined)。
+// 有酸素種目は器具の概念が別枠(cardio_outdoor等)で噛み合わないため、絞り込みの対象外にして
+// 常に表示する（有酸素はメニュー画面から手動追加できる仕様のため、消えてしまうと追加できなくなる）。
+function renderExercisePicker(query, isSelectedFn, filterMode, equipmentFilter) {
   const listEl = document.getElementById('exercise-picker-list');
   const q = (query || '').trim().toLowerCase();
   let pool = EXERCISES;
@@ -455,6 +465,9 @@ function renderExercisePicker(query, isSelectedFn, filterMode) {
     const recentIds = recentExerciseIds();
     const byId = Object.fromEntries(EXERCISES.map((ex) => [ex.id, ex]));
     pool = recentIds.map((id) => byId[id]).filter(Boolean);
+  }
+  if (equipmentFilter) {
+    pool = pool.filter((ex) => ex.type === 'cardio' || ex.equipment.some((e) => equipmentFilter.includes(e)));
   }
   const matches = pool.filter((ex) => !q || ex.name.toLowerCase().includes(q));
 
@@ -655,10 +668,12 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
 
 function renderLog(session) {
   const container = document.getElementById('log-content');
+  // ウォームアップは怪我予防に関わるため、記録画面を開いた時点で最初から展開しておく
+  // （クールダウンはセット記録が終わった後に見るものなので緊急度が違い、従来通り折りたたみのまま）。
   const warmupHtml = `
-    <details class="wu-cd-toggle">
+    <details class="wu-cd-toggle" open>
       <summary>ウォームアップを見る</summary>
-      ${buildWarmupHtml(session.warmup)}
+      ${buildWarmupHtml(session.warmup, session.exercises.some((ex) => ex.type !== 'cardio'))}
     </details>`;
   const cooldownHtml = `
     <details class="wu-cd-toggle">
@@ -791,7 +806,7 @@ function renderHistory() {
         <div class="h-date">${formatDate(session.date)}</div>
         <button type="button" class="h-delete-btn" data-history-delete="${session.id}" aria-label="この記録を削除">×</button>
       </div>
-      <div class="h-meta">${goalLabel(session.goal)}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
+      <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
       <details>
         <summary>詳細を見る</summary>
         ${session.exercises
@@ -809,11 +824,15 @@ function renderHistory() {
             // 保持時間種目まで「0kg×◯回」という無意味な表示になってしまっていた。
             const exerciseMeta = findExerciseById(ex.exerciseId);
             const holdBased = exerciseMeta && exerciseMeta.holdBased;
+            // 自重負荷の種目(体重×係数で推定した「kg」)は、外部重量と見分けがつくよう
+            // 「(体重換算)」を添える。記録時には推定の説明が出るが、後から履歴だけ見返すと
+            // バーベル等の実重量と区別がつかなくなるため。
+            const isBodyweightLoad = exerciseMeta && isBodyweightLoadExercise(exerciseMeta);
             return `<div class="h-ex">${ex.name}: ${ex.sets
               .filter((s) => s.done && !s.isWarmup)
               .map((s) => (holdBased
                 ? `${s.reps || 0}秒${s.rpe ? `(RPE${s.rpe})` : ''}`
-                : `${s.weight || 0}kg×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`))
+                : `${s.weight || 0}kg${isBodyweightLoad ? '(体重換算)' : ''}×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`))
               .join(', ') || '未記録'}</div>`;
           })
           .join('')}

@@ -88,8 +88,8 @@
       <fieldset class="field-group">
         <legend>④ レベル</legend>
         <select id="level-select">
-          <option value="beginner">初心者</option>
-          <option value="intermediate" selected>中級者</option>
+          <option value="beginner" selected>初心者</option>
+          <option value="intermediate">中級者</option>
           <option value="advanced">上級者</option>
         </select>
       </fieldset>
@@ -284,6 +284,10 @@
       <button type="button" class="picker-filter-btn active" data-picker-filter="all">すべて</button>
       <button type="button" class="picker-filter-btn" data-picker-filter="favorites">★ お気に入り</button>
       <button type="button" class="picker-filter-btn" data-picker-filter="recent">最近やった</button>
+    </div>
+    <div id="exercise-picker-equipment-note" class="exercise-picker-equipment-note" hidden>
+      <span id="exercise-picker-equipment-note-text"></span>
+      <button type="button" id="exercise-picker-equipment-toggle" class="text-link-btn"></button>
     </div>
     <div id="exercise-picker-list"></div>
   </div>

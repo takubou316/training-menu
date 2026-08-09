@@ -50,6 +50,11 @@ let customCooldown = { static: [], general: '' };
 let exercisePickerTarget = null;
 // 種目ピッカーの絞り込みモード('all' | 'favorites' | 'recent')
 let exercisePickerFilter = 'all';
+// 種目ピッカーの器具絞り込み。「要望から作る」のメニュー画面から開いた時だけ、その時
+// 選んだ器具の配列が入る(「自分で作る」からは常にnull＝絞り込みなし)。
+let exercisePickerEquipmentFilter = null;
+// 上記の絞り込みを今実際に適用しているか(ピッカー内のトグルでON/OFFを切り替えられる)
+let exercisePickerEquipmentFilterActive = true;
 
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
@@ -467,7 +472,8 @@ function isExercisePickerSelected(id) {
 }
 
 function renderExercisePickerNow() {
-  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter);
+  const equipmentFilter = exercisePickerEquipmentFilterActive ? exercisePickerEquipmentFilter : null;
+  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter, equipmentFilter);
 }
 
 // 絞り込み(フィルター切り替え・検索)で表示される一覧そのものが変わる時に呼ぶ。
@@ -479,14 +485,38 @@ function renderExercisePickerAndResetScroll() {
   document.getElementById('exercise-picker-list').scrollTop = 0;
 }
 
+// 器具絞り込みの案内＋トグルボタンの表示を更新する。絞り込み対象外(自分で作る、
+// または要望から作るでも器具を1つも選んでいない等)なら何も出さない。
+function updateExercisePickerEquipmentNote() {
+  const note = document.getElementById('exercise-picker-equipment-note');
+  if (!exercisePickerEquipmentFilter) {
+    note.hidden = true;
+    return;
+  }
+  note.hidden = false;
+  document.getElementById('exercise-picker-equipment-note-text').textContent = exercisePickerEquipmentFilterActive
+    ? '②で選んだ器具のみ表示中（有酸素は除く）'
+    : 'すべての器具の種目を表示中';
+  document.getElementById('exercise-picker-equipment-toggle').textContent = exercisePickerEquipmentFilterActive
+    ? 'すべて表示する'
+    : '器具で絞り込む';
+}
+
 function openExercisePicker(target) {
   exercisePickerTarget = target;
   exercisePickerFilter = 'all';
+  // 「要望から作る」で生成したメニュー画面からの追加時だけ、その時選んだ器具で絞り込む
+  // （「自分で作る」は元々器具条件を選んでいないモードなので対象外）。
+  exercisePickerEquipmentFilter = (target === 'menu' && currentMenu && !currentMenu.params.custom && currentMenu.params.equipment)
+    ? currentMenu.params.equipment
+    : null;
+  exercisePickerEquipmentFilterActive = true;
   document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.pickerFilter === 'all');
   });
   const searchInput = document.getElementById('exercise-picker-search');
   searchInput.value = '';
+  updateExercisePickerEquipmentNote();
   renderExercisePickerAndResetScroll();
   document.getElementById('exercise-picker-modal').hidden = false;
   lockBodyScroll();
@@ -520,6 +550,11 @@ function wireExercisePicker() {
       document.querySelectorAll('.picker-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
       renderExercisePickerAndResetScroll();
     });
+  });
+  document.getElementById('exercise-picker-equipment-toggle').addEventListener('click', () => {
+    exercisePickerEquipmentFilterActive = !exercisePickerEquipmentFilterActive;
+    updateExercisePickerEquipmentNote();
+    renderExercisePickerAndResetScroll();
   });
   document.getElementById('exercise-picker-list').addEventListener('click', (e) => {
     const favBtn = e.target.closest('[data-fav-toggle]');
@@ -827,7 +862,19 @@ function confirmWeeklyPlanName() {
 
 function wireModeWeeklyPlanSection() {
   document.getElementById('weekly-plan-section').addEventListener('click', (e) => {
-    if (e.target.closest('#weekly-plan-create-btn, #weekly-plan-new-btn')) {
+    if (e.target.closest('#weekly-plan-create-btn')) {
+      // 0件の状態からは名前モーダルをいきなり開かず、まず週間プラン画面の空状態
+      // （「まだ1つも作られていません。曜日ごとに...決めておける機能です」の説明）を経由させる。
+      // 複数プリセットを保存できる仕組みだと知らない初見ユーザーに、前置きなく
+      // 「名前を付けてください」だけ聞くと唐突なため。
+      weeklyPlanEditingId = null;
+      renderWeeklyEditorScreen();
+      showScreen('weekly');
+      return;
+    }
+    if (e.target.closest('#weekly-plan-new-btn')) {
+      // 既に1つ以上プランがある状態からの追加作成は、仕組みを知っている前提なので
+      // 従来通り直接名前モーダルを開く。
       openWeeklyPlanNameModal();
       return;
     }

@@ -272,6 +272,22 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   cursor: pointer;
 }
 
+.exercise-picker-equipment-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 10px 16px 0;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.exercise-picker-equipment-note[hidden] { display: none; }
+.exercise-picker-equipment-note .text-link-btn { flex-shrink: 0; font-size: 12px; }
+
 .picker-filter-btn.active {
   border-color: var(--accent);
   color: var(--accent);
