@@ -59,6 +59,9 @@ let exercisePickerEquipmentFilterActive = true;
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
 
+// 豆知識画面のカテゴリ絞り込み('all'またはKNOWLEDGE_CATEGORIESのいずれか)
+let knowledgeCategoryFilter = 'all';
+
 // 週間プラン画面(screen-weekly)が今どのプリセット(id)を編集中か。nullなら未作成/未選択
 // （その場合は画面側が「まだ作られていません」の空の状態を出す）。
 let weeklyPlanEditingId = null;
@@ -909,6 +912,29 @@ function wireModeWeeklyPlanSection() {
   });
 }
 
+// ===== 豆知識画面 =====
+
+function renderKnowledgeScreen() {
+  renderKnowledgeCategoryFilters();
+  renderKnowledgeTodayTip();
+  renderKnowledgeList(document.getElementById('knowledge-search').value, knowledgeCategoryFilter);
+}
+
+function wireKnowledgeScreen() {
+  document.getElementById('knowledge-search').addEventListener('input', () => {
+    renderKnowledgeList(document.getElementById('knowledge-search').value, knowledgeCategoryFilter);
+  });
+  document.getElementById('knowledge-category-filters').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-knowledge-category]');
+    if (!btn) return;
+    knowledgeCategoryFilter = btn.dataset.knowledgeCategory;
+    document.querySelectorAll('#knowledge-category-filters .picker-filter-btn').forEach((b) => {
+      b.classList.toggle('active', b === btn);
+    });
+    renderKnowledgeList(document.getElementById('knowledge-search').value, knowledgeCategoryFilter);
+  });
+}
+
 function wirePartExclusivity() {
   document.querySelectorAll('#part-group input').forEach((input) => {
     input.addEventListener('change', () => {
@@ -1120,6 +1146,7 @@ function init() {
   wireMenuScreen();
   wireWeeklyScreen();
   wireModeWeeklyPlanSection();
+  wireKnowledgeScreen();
   restoreLastSettings();
   renderModeWeeklyPlanSection();
 
@@ -1246,6 +1273,7 @@ function init() {
       if (target === 'history') renderHistory();
       if (target === 'progress') renderProgressScreen();
       if (target === 'weekly') enterWeeklyScreenFromNav();
+      if (target === 'knowledge') renderKnowledgeScreen();
       stopHoldTimer();
       stopCardioTimer();
       endRestTimer();

@@ -903,3 +903,57 @@ function renderExerciseProgressChart(exerciseId) {
   container.innerHTML = chartHtml
     || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
 }
+
+// ===== 豆知識画面 =====
+// LLMは使わず、あらかじめ用意したQ&A(KNOWLEDGE_ENTRIES)をキーワード一致で絞り込むだけの
+// 疑似的な質問応答。教科書由来の知識を「質問したら答えが返ってくる」体裁で見せる。
+
+function renderKnowledgeTodayTip() {
+  const container = document.getElementById('knowledge-today-tip');
+  if (!container) return;
+  const entry = todaysKnowledgeEntry();
+  container.innerHTML = `
+    <div class="knowledge-today-tip-label">💡 今日のヒント</div>
+    <div class="knowledge-q">${escapeHtml(entry.question)}</div>
+    <div class="knowledge-a">${escapeHtml(entry.answer)}</div>
+    <div class="knowledge-source">${escapeHtml(entry.source)}</div>`;
+}
+
+// カテゴリの絞り込みチップを初回だけ組み立てる(「すべて」はindex.htmlに静的に置いてあるので、
+// ここではKNOWLEDGE_CATEGORIESの分だけ追加する)。
+function renderKnowledgeCategoryFilters() {
+  const container = document.getElementById('knowledge-category-filters');
+  if (!container || container.dataset.built) return;
+  container.dataset.built = 'true';
+  const chipsHtml = KNOWLEDGE_CATEGORIES
+    .map((cat) => `<button type="button" class="picker-filter-btn" data-knowledge-category="${escapeHtml(cat)}">${escapeHtml(cat)}</button>`)
+    .join('');
+  container.insertAdjacentHTML('beforeend', chipsHtml);
+}
+
+function renderKnowledgeList(query, category) {
+  const container = document.getElementById('knowledge-list');
+  if (!container) return;
+  const q = (query || '').trim().toLowerCase();
+  let entries = KNOWLEDGE_ENTRIES;
+  if (category && category !== 'all') {
+    entries = entries.filter((e) => e.category === category);
+  }
+  if (q) {
+    entries = entries.filter((e) => e.question.toLowerCase().includes(q)
+      || e.answer.toLowerCase().includes(q)
+      || e.keywords.some((k) => k.toLowerCase().includes(q)));
+  }
+
+  if (entries.length === 0) {
+    container.innerHTML = '<p class="empty-text">見つかりませんでした。ほかのキーワードで試してみてください。</p>';
+    return;
+  }
+
+  container.innerHTML = entries.map((entry) => `
+    <div class="knowledge-item">
+      <div class="knowledge-q">${escapeHtml(entry.question)}</div>
+      <div class="knowledge-a">${escapeHtml(entry.answer)}</div>
+      <div class="knowledge-source">${escapeHtml(entry.source)}</div>
+    </div>`).join('');
+}

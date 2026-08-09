@@ -1378,3 +1378,69 @@ body.modal-open {
 }
 .weekly-empty-state .hint-text { margin: 0 0 12px; }
 .weekly-empty-state[hidden] { display: none; }
+
+/* ===== 豆知識画面 ===== */
+
+.knowledge-today-tip {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.knowledge-today-tip-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 8px;
+}
+
+.knowledge-today-tip .knowledge-q { color: #fff; }
+.knowledge-today-tip .knowledge-a { color: #fff; }
+.knowledge-today-tip .knowledge-source { color: rgba(255, 255, 255, 0.75); }
+
+#knowledge-search {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.knowledge-category-filters {
+  padding: 0 0 12px;
+  flex-wrap: wrap;
+}
+
+.knowledge-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.knowledge-q {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.knowledge-q::before { content: 'Q. '; color: var(--accent); }
+
+.knowledge-a {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  margin-bottom: 8px;
+}
+.knowledge-a::before { content: 'A. '; color: var(--text); font-weight: 600; }
+
+.knowledge-source {
+  font-size: 11px;
+  color: var(--text-dim);
+  opacity: 0.8;
+}

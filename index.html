@@ -222,6 +222,21 @@
         </details>
       </div>
     </section>
+
+    <!-- ===== 豆知識画面 ===== -->
+    <section id="screen-knowledge" class="screen">
+      <h2>豆知識</h2>
+      <p class="hint-text">教科書（JATIトレーニング指導者テキスト等）を参考にした、種目に限らない一般的な知識です。</p>
+
+      <div id="knowledge-today-tip" class="knowledge-today-tip"></div>
+
+      <input type="search" id="knowledge-search" placeholder="キーワードで検索（例: 呼吸、頻度、テンポ）">
+      <div class="exercise-picker-filters knowledge-category-filters" id="knowledge-category-filters">
+        <button type="button" class="picker-filter-btn active" data-knowledge-category="all">すべて</button>
+      </div>
+
+      <div id="knowledge-list"></div>
+    </section>
   </main>
 
   <nav class="bottom-nav">
@@ -229,6 +244,7 @@
     <button class="nav-btn" data-nav="weekly">週間プラン</button>
     <button class="nav-btn" data-nav="history">記録一覧</button>
     <button class="nav-btn" data-nav="progress">グラフ</button>
+    <button class="nav-btn" data-nav="knowledge">豆知識</button>
   </nav>
 
   <div id="demo-modal" class="demo-modal">
@@ -384,6 +400,7 @@
 </div>
 
 <script src="js/exercises-data.js"></script>
+<script src="js/knowledge-data.js"></script>
 <script src="js/rules.js"></script>
 <script src="js/menu-generator.js"></script>
 <script src="js/storage.js"></script>
