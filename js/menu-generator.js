@@ -281,13 +281,20 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
 }
 
 // 週のトレーニング日数から、曜日ごとの部位割り当て案(月曜始まり、7要素固定)を作る。
-// js/rules.jsのWEEKLY_SPLIT_TEMPLATESを先頭から詰めるだけの純粋関数で、余った曜日は休みにする。
+// js/rules.jsのWEEKLY_SPLIT_TEMPLATES(部位の分割内容)をWEEKLY_SPLIT_DAY_POSITIONS
+// (曜日への配置)に従って割り当てる純粋関数。以前は月曜から隙間なく詰めていたため、
+// 例えば3日なら月火水と3連続でトレーニングし木〜日が丸ごと休みになっていたが、
+// これは教科書(WEEKLY_SPLIT_DAY_POSITIONSのコメント参照)のどの実施例とも一致しないと
+// 分かったため、休みを挟んで分散配置するようになっている。
 function proposeWeeklySplit(trainingDaysPerWeek) {
   const days = Math.min(7, Math.max(1, Number(trainingDaysPerWeek) || 3));
   const template = WEEKLY_SPLIT_TEMPLATES[days] || WEEKLY_SPLIT_TEMPLATES[3];
-  return Array.from({ length: 7 }, (_, i) => (
-    template[i] ? { kind: 'parts', parts: template[i].slice() } : { kind: 'rest' }
-  ));
+  const positions = WEEKLY_SPLIT_DAY_POSITIONS[days] || WEEKLY_SPLIT_DAY_POSITIONS[3];
+  const plan = Array.from({ length: 7 }, () => ({ kind: 'rest' }));
+  positions.forEach((dayIndex, i) => {
+    if (template[i]) plan[dayIndex] = { kind: 'parts', parts: template[i].slice() };
+  });
+  return plan;
 }
 
 if (typeof module !== 'undefined') {
