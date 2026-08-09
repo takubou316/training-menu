@@ -291,7 +291,10 @@ function renderMenu(menu) {
     ${warmupHtml}
     <h3 style="margin-top:16px;">本編（${menu.main.length}種目）</h3>
     ${mainHtml}
-    <button type="button" class="secondary-btn" id="menu-add-exercise-btn">＋ 種目を追加</button>
+    <div class="button-row">
+      <button type="button" class="secondary-btn" id="menu-add-exercise-btn">＋ 種目を追加</button>
+      <button type="button" class="secondary-btn" id="menu-auto-sort-btn">↕ 並び順を自動で整える</button>
+    </div>
     <div style="height:16px;"></div>
     ${cooldownHtml}
   `;

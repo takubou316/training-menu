@@ -89,6 +89,8 @@ function buildSetPlan(exercise, level, goal) {
     name: exercise.name,
     category: exercise.category,
     primary: exercise.primary,
+    pattern: exercise.pattern,
+    minLevel: exercise.minLevel || null,
     unilateral: exercise.unilateral,
     sets,
     repsMin: goalInfo.repsRange[0],
@@ -190,6 +192,33 @@ function pickTargetedExercises(pool, muscleGroups, exerciseCount) {
   return selected;
 }
 
+// エクササイズの配列(並び順)の原則。出典: JATIトレーニング指導者テキスト［実践編］3章2節
+// 「エクササイズの配列」(p72〜73)の8原則のうち、選び終わった種目リストの並べ替えだけで
+// 反映できるものを実装。「どれを選ぶか」(pickFullBodyExercises/pickTargetedExercises)は
+// 変更せず、選んだ後の順番だけを直す（要望から作る専用。自分で作るは手動の並び順を尊重する
+// ため対象外）。
+// - 大筋群→小筋群、複合種目(多関節)→単関節: PATTERN_ORDER(squat/hinge/push/pull→core→
+//   isolation)の並び順が既にこの考え方に沿っているので、そのインデックスをそのまま順位に使う
+// - 姿勢支持筋(体幹)の種目は終盤に行う: pattern='core'または主動筋にabsを含む種目は最後尾
+// - 高度なテクニックが要求される種目は疲労していない状態(=前の方)で行う: minLevel='intermediate'
+//   （技術難度が高いとして初心者向けから除外している種目、exercises-data.jsの既存分類を流用した
+//   近似で、教科書の「高度なテクニック」の定義そのものではない）の種目を、同じ階層内では先に並べる
+function trainingOrderRank(ex) {
+  if (ex.pattern === 'core' || (ex.primary || []).includes('abs')) return PATTERN_ORDER.length;
+  const idx = PATTERN_ORDER.indexOf(ex.pattern);
+  return idx === -1 ? PATTERN_ORDER.length - 1 : idx;
+}
+
+function sortByTrainingOrder(exercises) {
+  return exercises.slice().sort((a, b) => {
+    const rankDiff = trainingOrderRank(a) - trainingOrderRank(b);
+    if (rankDiff !== 0) return rankDiff;
+    const aAdvanced = a.minLevel === 'intermediate' ? 0 : 1;
+    const bAdvanced = b.minLevel === 'intermediate' ? 0 : 1;
+    return aAdvanced - bAdvanced;
+  });
+}
+
 // 選んだ種目一覧（EXERCISESの生データ）から、動作パターン・部位に応じたウォームアップ/クールダウンを組み立てる。
 // 「要望から作る」「自分で作る」どちらのモードからも同じロジックを使う。
 function buildWarmupAndCooldown(chosen) {
@@ -221,6 +250,8 @@ function buildCustomSetPlan(exercise, restSec) {
     name: exercise.name,
     category: exercise.category,
     primary: exercise.primary,
+    pattern: exercise.pattern,
+    minLevel: exercise.minLevel || null,
     unilateral: exercise.unilateral,
     sets: 3,
     repsMin: 8,
@@ -261,9 +292,10 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
   const exerciseCount = exerciseCountForTime(minutes);
   const isFullBody = parts.includes('fullbody');
 
-  const chosen = isFullBody
+  const chosenRaw = isFullBody
     ? pickFullBodyExercises(pool, exerciseCount)
     : pickTargetedExercises(pool, parts, exerciseCount);
+  const chosen = sortByTrainingOrder(chosenRaw);
 
   const main = chosen.map((ex) => buildSetPlan(ex, level, goal));
   const { warmup, cooldown } = buildWarmupAndCooldown(chosen);
@@ -277,6 +309,10 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
     // 条件(器具・レベル・痛み等)が絞られすぎて本来の目安種目数(exerciseCount)に届かなかった場合、
     // js/ui.jsのrenderMenuで理由を添えた注記を出すために保持しておく。
     requestedCount: exerciseCount,
+    // ユーザーが長押しドラッグで手動並べ替えをしたかどうか。一度でも手動で並べ替えたら、
+    // それ以降「＋種目を追加」しても自動並べ替え(sortByTrainingOrder)はかけない
+    // （せっかく直した順番を、追加のたびに勝手に上書きしてしまわないため）。
+    userReordered: false,
   };
 }
 
@@ -300,5 +336,6 @@ function proposeWeeklySplit(trainingDaysPerWeek) {
 if (typeof module !== 'undefined') {
   module.exports = {
     generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan, proposeWeeklySplit,
+    sortByTrainingOrder,
   };
 }

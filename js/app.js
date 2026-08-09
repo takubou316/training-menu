@@ -460,6 +460,7 @@ function wireCustomScreen() {
       main,
       generatedAt: new Date().toISOString(),
       params: { custom: true },
+      userReordered: false,
     };
     renderMenuScreen();
     showScreen('menu');
@@ -596,6 +597,7 @@ function renderMenuScreen() {
 function reorderMenuMain(keyOrder) {
   const byKey = Object.fromEntries(currentMenu.main.map((item) => [item.exerciseId, item]));
   currentMenu.main = keyOrder.map((key) => byKey[key]).filter(Boolean);
+  currentMenu.userReordered = true; // 以後、種目を追加しても自動並べ替えをかけない
   renderMenuScreen();
 }
 
@@ -618,6 +620,13 @@ function toggleMenuExercise(id) {
         ? buildCustomSetPlan(ex, 90)
         : buildSetPlan(ex, currentMenu.params.level, currentMenu.params.goal);
     currentMenu.main.push(plan);
+    // 「要望から作る」のメニューは、追加した種目もエクササイズの配列原則(大筋群→小筋群、
+    // 体幹は終盤に、等)に沿った位置へ自動で並べ直す。「自分で作る」は手動の並び順を
+    // 尊重したいユーザー向けのモードなので対象外。また、一度でも長押しドラッグで手動並べ替え
+    // 済み(userReordered)なら、以後は追加のたびに勝手に並べ替えない。
+    if (!currentMenu.params.custom && !currentMenu.userReordered) {
+      currentMenu.main = sortByTrainingOrder(currentMenu.main);
+    }
   }
   recomputeMenuWarmupCooldown();
   renderMenuScreen();
@@ -626,7 +635,18 @@ function toggleMenuExercise(id) {
 function wireMenuScreen() {
   document.getElementById('menu-content').addEventListener('click', (e) => {
     const addBtn = e.target.closest('#menu-add-exercise-btn');
-    if (addBtn) openExercisePicker('menu');
+    if (addBtn) {
+      openExercisePicker('menu');
+      return;
+    }
+    const autoSortBtn = e.target.closest('#menu-auto-sort-btn');
+    if (autoSortBtn) {
+      // 手動で並べ替えた後でも、このボタンを押せばいつでも①のルール順に戻せる。
+      // 押した後は「手動並べ替え済み」状態を解除し、次に種目を追加した時も自動で並ぶようにする。
+      currentMenu.main = sortByTrainingOrder(currentMenu.main);
+      currentMenu.userReordered = false;
+      renderMenuScreen();
+    }
   });
 }
 
