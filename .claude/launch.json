@@ -4,8 +4,9 @@
     {
       "name": "training-menu",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8081"],
-      "port": 8081
+      "runtimeArgs": ["-c", "import http.server,os;PORT=int(os.environ.get('PORT','8081'));http.server.ThreadingHTTPServer.allow_reuse_address=True;http.server.ThreadingHTTPServer(('',PORT),http.server.SimpleHTTPRequestHandler).serve_forever()"],
+      "port": 8081,
+      "autoPort": true
     }
   ]
 }
