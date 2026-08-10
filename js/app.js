@@ -845,10 +845,14 @@ function renderModeWeeklyPlanSection() {
   renderWeeklyPlanSection(loadWeeklyPlans(), getActiveWeeklyPlanId(), loadCustomTemplates());
 }
 
-// 週間プランセクションの今日の行にある「始める」。部位割り当てなら①鍛えたい部位のチェックを
-// 合わせて設定画面へ、保存済みの組み合わせ割り当てなら自分で作る画面にそのまま読み込む。
-// どちらも既存の画面に乗せるだけで、ここから直接メニューを生成はしない
-// （器具・時間などその日の状況を必ず確認してから進める既存の流れを崩さないため）。
+// 週間プランセクションの今日の行にある「始める」。
+// 以前は①鍛えたい部位のチェックを合わせて設定画面を必ず経由していたが、器具・時間・レベル・
+// 目的は`restoreLastSettings()`で既に前回値が復元済みのため、「今日も同じ内容でいいですか？」を
+// 実質無言で毎回聞き直しているだけだった（値の再入力は不要なのに画面遷移・タップ数だけが
+// 増えていた）。知識があって毎回作るのが面倒な人ほど、この一手間が離脱の原因になりうるため、
+// 設定画面を経由せず生成済みのメニュー確認画面まで直接進めるようにした。
+// 「今日は器具が無い」等いつもと状況が違う時の調整は、メニュー確認画面の「条件を変える」から
+// 引き続きできる（安全弁として残す。生成自体を無条件に信用させきらない）。
 function startTodayFromActivePlan() {
   const active = getActiveWeeklyPlan();
   if (!active) return;
@@ -864,7 +868,13 @@ function startTodayFromActivePlan() {
     document.querySelectorAll('#part-group input').forEach((el) => {
       el.checked = entry.parts.includes(el.dataset.part);
     });
-    showScreen('setup');
+    // 設定画面のDOM値(器具・時間・レベル・目的等)は起動時のrestoreLastSettings()で
+    // 既に前回値が入っている状態なので、そのままhandleGenerate()を呼べば設定画面を
+    // 表示しなくても正しい内容で生成できる。器具0件などバリデーションに引っかかった
+    // 場合だけ、エラー文言を見せられる設定画面へフォールバックする。
+    if (!handleGenerate()) {
+      showScreen('setup');
+    }
   }
 }
 
@@ -998,6 +1008,10 @@ function wirePainExclusivity() {
   });
 }
 
+// 戻り値は生成に成功してscreen-menuまで進めたか(true)、バリデーションで止まったか(false)。
+// startTodayFromActivePlan()が、設定画面を経由しない生成を試みて失敗した時に
+// 設定画面へフォールバックするための判定に使う（画面遷移せず何も起きないまま
+// ユーザーが取り残されるのを防ぐ）。
 function handleGenerate() {
   const errorEl = document.getElementById('setup-error');
   const parts = getSelectedParts();
@@ -1005,11 +1019,11 @@ function handleGenerate() {
 
   if (parts.length === 0) {
     errorEl.textContent = '「① 鍛えたい部位」を1つ以上選んでください（事前確認の欄とは別です）';
-    return;
+    return false;
   }
   if (equipment.length === 0) {
     errorEl.textContent = '使える器具を1つ以上選んでください';
-    return;
+    return false;
   }
   errorEl.textContent = '';
 
@@ -1025,10 +1039,11 @@ function handleGenerate() {
   currentMenu = generateMenu({ parts: muscleGroups, equipment, minutes, level, goal, painAreas });
   if (currentMenu.main.length === 0) {
     errorEl.textContent = '選んだ条件に合う種目が見つかりませんでした。器具や部位を見直してください。';
-    return;
+    return false;
   }
   renderMenuScreen();
   showScreen('menu');
+  return true;
 }
 
 function handleStartWorkout() {
