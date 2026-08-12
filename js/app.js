@@ -1123,14 +1123,18 @@ function handleLogInput(e) {
     target.max = Number(target.max) + 10;
   }
 
-  if (field === 'done' && target.checked) {
-    const exercise = currentSession.exercises[exIndex];
-    const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
-    if (prBadge) prBadge.hidden = !isPersonalRecord(exercise, set);
-    startRestTimer(currentSession.exercises[exIndex].restSec);
-  } else if (field === 'done' && !target.checked) {
-    const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
-    if (prBadge) prBadge.hidden = true;
+  // チェックボックスはinput/changeの両方が発火するため、完了処理はchange時だけ行う。
+  // input時にも実行すると休憩タイマーのスクロールロックが二重にかかる。
+  if (e.type === 'change' && field === 'done') {
+    if (target.checked) {
+      const exercise = currentSession.exercises[exIndex];
+      const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
+      if (prBadge) prBadge.hidden = !isPersonalRecord(exercise, set);
+      startRestTimer(currentSession.exercises[exIndex].restSec);
+    } else {
+      const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
+      if (prBadge) prBadge.hidden = true;
+    }
   }
 }
 
