@@ -1124,7 +1124,13 @@ function handleLogInput(e) {
   }
 
   if (field === 'done' && target.checked) {
+    const exercise = currentSession.exercises[exIndex];
+    const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
+    if (prBadge) prBadge.hidden = !isPersonalRecord(exercise, set);
     startRestTimer(currentSession.exercises[exIndex].restSec);
+  } else if (field === 'done' && !target.checked) {
+    const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
+    if (prBadge) prBadge.hidden = true;
   }
 }
 

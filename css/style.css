@@ -852,6 +852,17 @@ body.modal-open {
 
 .set-row .set-idx { font-size: 13px; font-weight: 600; color: var(--text-dim); }
 
+.set-pr-badge {
+  margin: -2px 0 10px;
+  padding: 7px 10px;
+  border: 1px solid rgba(79, 209, 165, 0.45);
+  border-radius: 8px;
+  background: rgba(79, 209, 165, 0.12);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .done-toggle {
   display: flex;
   align-items: center;

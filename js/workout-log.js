@@ -223,6 +223,27 @@ function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
   return points.reverse();
 }
 
+// 記録画面で完了した本セットを、種目別の進捗グラフと同じ指標に変換する。
+// 過去最高そのものは exerciseProgressSeries から取得し、ここでは今回のセットの値だけを対応づける。
+function exerciseProgressValue(exerciseMeta, set) {
+  if (!exerciseMeta || exerciseMeta.type === 'cardio' || !set || set.isWarmup || !set.done) return null;
+  if (exerciseMeta.holdBased || isBodyweightLoadExercise(exerciseMeta)) {
+    return Number(set.reps) || 0;
+  }
+  return Number(set.weight) || 0;
+}
+
+// 保存済み履歴に対してのみ比較するため、初回記録は自己ベスト更新扱いにしない。
+// 有酸素種目とウォームアップセットは対象外。
+function isPersonalRecord(exercise, set) {
+  const currentValue = exerciseProgressValue(exercise, set);
+  if (currentValue === null) return false;
+  const previousPoints = exerciseProgressSeries(exercise.exerciseId, exercise, 0);
+  if (previousPoints.length === 0) return false;
+  const previousBest = Math.max(...previousPoints.map((point) => point.value));
+  return currentValue > previousBest;
+}
+
 // 直近セッションの総挙上量(volume)推移を古い→新しい順で返す（履歴画面の全体グラフ用）。
 function overallVolumeSeries(limit) {
   const history = loadHistory(); // 新しい順
@@ -233,6 +254,7 @@ function overallVolumeSeries(limit) {
 if (typeof module !== 'undefined') {
   module.exports = {
     createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion,
-    exerciseProgressSeries, overallVolumeSeries, estimateCardioCalories,
+    exerciseProgressSeries, exerciseProgressValue, isPersonalRecord,
+    overallVolumeSeries, estimateCardioCalories,
   };
 }

@@ -760,6 +760,7 @@ function renderLog(session) {
               完了
             </label>
           </div>
+          <div class="set-pr-badge" data-pr-badge="${exIndex}:${setIndex}" hidden>🏆 自己ベスト更新！</div>
           ${weightField}
           ${repsField}
           ${rpeField}
