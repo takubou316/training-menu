@@ -837,21 +837,24 @@ function renderTrainingStreak(history) {
   container.textContent = `🔥 ${streak.count}日連続`;
 }
 
-function renderHistory() {
-  const container = document.getElementById('history-content');
-  const history = loadHistory();
-  renderTrainingStreak(history);
-  if (history.length === 0) {
-    container.innerHTML = '<p class="empty-text">まだ記録がありません。メニューを作って始めましょう。</p>';
-    return;
-  }
-  container.innerHTML = history
-    .map((session) => `
-    <div class="history-item">
+let recordViewYear = new Date().getFullYear();
+let recordViewMonth = new Date().getMonth();
+let recordSelectedDateStr = localDateKey(new Date());
+let recordViewMode = 'calendar';
+let activeRecordTab = 'record';
+let showFullDetail = false;
+
+// 1セッション分の表示は履歴一覧・カレンダーの日詳細・リスト表示で共通に使う。
+// cardio / holdBased / 自重換算 / RPE / ウォームアップ除外の既存ロジックをここに集約する。
+function buildSessionCardHtml(session, { showDate = true } = {}) {
+  const dateHeader = `
       <div class="h-header">
-        <div class="h-date">${formatDate(session.date)}</div>
+        ${showDate ? `<div class="h-date">${formatDate(session.date)}</div>` : '<span></span>'}
         <button type="button" class="h-delete-btn" data-history-delete="${session.id}" aria-label="この記録を削除">×</button>
-      </div>
+      </div>`;
+  return `
+    <div class="history-item">
+      ${dateHeader}
       <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
       <details>
         <summary>詳細を見る</summary>
@@ -864,15 +867,8 @@ function renderHistory() {
                 : '未記録';
               return `<div class="h-ex">${ex.name}: ${detail}</div>`;
             }
-            // 保持時間系(プランク等)は「重量」という概念自体がなく(記録画面でも重量スライダーは
-            // 表示していない)、setsのreps欄には回数ではなく保持秒数が入っている。ここで
-            // holdBasedを考慮せず一律「weight||0」kg表記にしていたため、体重を使わない
-            // 保持時間種目まで「0kg×◯回」という無意味な表示になってしまっていた。
             const exerciseMeta = findExerciseById(ex.exerciseId);
             const holdBased = exerciseMeta && exerciseMeta.holdBased;
-            // 自重負荷の種目(体重×係数で推定した「kg」)は、外部重量と見分けがつくよう
-            // 「(体重換算)」を添える。記録時には推定の説明が出るが、後から履歴だけ見返すと
-            // バーベル等の実重量と区別がつかなくなるため。
             const isBodyweightLoad = exerciseMeta && isBodyweightLoadExercise(exerciseMeta);
             return `<div class="h-ex">${ex.name}: ${ex.sets
               .filter((s) => s.done && !s.isWarmup)
@@ -883,8 +879,203 @@ function renderHistory() {
           })
           .join('')}
       </details>
-    </div>`)
-    .join('');
+    </div>`;
+}
+
+function groupHistoryByDate(history) {
+  const grouped = new Map();
+  history.forEach((session) => {
+    const dateStr = localDateKey(session.date);
+    if (!dateStr) return;
+    if (!grouped.has(dateStr)) grouped.set(dateStr, []);
+    grouped.get(dateStr).push(session);
+  });
+  grouped.forEach((sessions) => {
+    sessions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  });
+  return grouped;
+}
+
+function recordDateFromKey(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function recordDateLabel(date) {
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+function recordWeekdayLabel(date) {
+  return ['月', '火', '水', '木', '金', '土', '日'][(date.getDay() + 6) % 7];
+}
+
+function buildRecordStampImg() {
+  return '<img class="cal-day-stamp" src="assets/stamp-record.svg" alt="" aria-hidden="true">';
+}
+
+function findNearestRecordDate(dateStr, direction, historyMap) {
+  const dates = Array.from(historyMap.keys()).sort();
+  if (direction < 0) {
+    const candidates = dates.filter((date) => date < dateStr);
+    return candidates.length ? candidates[candidates.length - 1] : null;
+  }
+  const candidates = dates.filter((date) => date > dateStr);
+  return candidates.length ? candidates[0] : null;
+}
+
+function buildRecordJumpLinks(dateStr, historyMap) {
+  const previous = findNearestRecordDate(dateStr, -1, historyMap);
+  const next = findNearestRecordDate(dateStr, 1, historyMap);
+  return `<div class="jump-links">
+    ${previous ? `<button type="button" class="text-link-btn" data-record-jump="${previous}">◀ 前回の記録へ（${recordDateLabel(recordDateFromKey(previous))}）</button>` : '<span></span>'}
+    ${next ? `<button type="button" class="text-link-btn" data-record-jump="${next}">次の記録へ（${recordDateLabel(recordDateFromKey(next))}）▶</button>` : ''}
+  </div>`;
+}
+
+function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true } = {}) {
+  const date = recordDateFromKey(dateStr);
+  const sessions = historyMap.get(dateStr) || [];
+  let bodyHtml;
+  if (sessions.length) {
+    bodyHtml = sessions.map((session) => buildSessionCardHtml(session, { showDate: false })).join('');
+  } else if (historyMap.size === 0) {
+    bodyHtml = `<div class="record-empty-state">
+      <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
+      <button type="button" class="primary-btn" id="empty-state-start-btn">＋ メニューを作る</button>
+    </div>`;
+  } else {
+    bodyHtml = `<p class="empty-text">この日は記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
+  }
+  return `<div class="day-detail-header">
+      ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-prev aria-label="前の日">◀</button>' : '<span></span>'}
+      <div><span class="day-detail-date">${recordDateLabel(date)}</span><span class="day-detail-weekday">${recordWeekdayLabel(date)}曜日</span></div>
+      ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-next aria-label="次の日">▶</button>' : '<span></span>'}
+    </div>
+    <div class="day-detail-body">${bodyHtml}</div>`;
+}
+
+function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
+  const label = document.getElementById('cal-month-label');
+  const grid = document.getElementById('cal-grid');
+  if (!label || !grid) return;
+  label.textContent = `${recordViewYear}年${recordViewMonth + 1}月`;
+  grid.innerHTML = '';
+  const firstOfMonth = new Date(recordViewYear, recordViewMonth, 1);
+  const leadingBlanks = (firstOfMonth.getDay() + 6) % 7;
+  const daysInMonth = new Date(recordViewYear, recordViewMonth + 1, 0).getDate();
+  for (let i = 0; i < leadingBlanks; i += 1) {
+    const blank = document.createElement('div');
+    blank.className = 'cal-day other-month';
+    grid.appendChild(blank);
+  }
+  const todayStr = localDateKey(new Date());
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(recordViewYear, recordViewMonth, day);
+    const dateStr = localDateKey(date);
+    const hasRecord = historyMap.has(dateStr);
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
+    cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}`);
+    cell.innerHTML = hasRecord ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>` : `${day}`;
+    cell.addEventListener('click', () => selectRecordDate(dateStr));
+    grid.appendChild(cell);
+  }
+}
+
+function renderRecordDayDetail(historyMap = groupHistoryByDate(loadHistory())) {
+  const container = document.getElementById('day-detail-inline-container');
+  if (!container || !recordSelectedDateStr) return;
+  container.innerHTML = `<div class="day-detail-inline">${buildRecordDayDetailHtml(recordSelectedDateStr, historyMap)}</div>`;
+}
+
+function selectRecordDate(dateStr) {
+  recordSelectedDateStr = dateStr;
+  showFullDetail = false;
+  const date = recordDateFromKey(dateStr);
+  recordViewYear = date.getFullYear();
+  recordViewMonth = date.getMonth();
+  const historyMap = groupHistoryByDate(loadHistory());
+  renderCalendar(historyMap);
+  renderRecordDayDetail(historyMap);
+}
+
+function moveSelectedRecordDay(deltaDays) {
+  const date = recordDateFromKey(recordSelectedDateStr || localDateKey(new Date()));
+  date.setDate(date.getDate() + deltaDays);
+  selectRecordDate(localDateKey(date));
+}
+
+function renderListView(historyMap = groupHistoryByDate(loadHistory())) {
+  const container = document.getElementById('list-view-container');
+  if (!container) return;
+  const dates = Array.from(historyMap.keys()).sort().reverse();
+  if (dates.length === 0) {
+    container.innerHTML = `<div class="record-empty-state">
+      <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
+      <button type="button" class="primary-btn" id="empty-state-start-btn">＋ メニューを作る</button>
+    </div>`;
+    return;
+  }
+  container.innerHTML = dates.map((dateStr) => `<div class="day-detail-inline">${buildRecordDayDetailHtml(dateStr, historyMap, { showNav: false })}</div>`).join('');
+}
+
+function setRecordViewMode(mode) {
+  recordViewMode = mode;
+  const calendarButton = document.getElementById('view-mode-calendar-btn');
+  const listButton = document.getElementById('view-mode-list-btn');
+  calendarButton.classList.toggle('active', mode === 'calendar');
+  listButton.classList.toggle('active', mode === 'list');
+  calendarButton.setAttribute('aria-pressed', String(mode === 'calendar'));
+  listButton.setAttribute('aria-pressed', String(mode === 'list'));
+  document.getElementById('calendar-view-container').hidden = mode !== 'calendar';
+  document.getElementById('list-view-container').hidden = mode !== 'list';
+  const historyMap = groupHistoryByDate(loadHistory());
+  if (mode === 'calendar') {
+    renderCalendar(historyMap);
+    renderRecordDayDetail(historyMap);
+  } else {
+    const dayDetailContainer = document.getElementById('day-detail-inline-container');
+    if (dayDetailContainer) dayDetailContainer.innerHTML = '';
+    renderListView(historyMap);
+  }
+}
+
+function setActiveRecordTab(tab) {
+  activeRecordTab = tab;
+  const recordButton = document.getElementById('tab-record-btn');
+  const graphButton = document.getElementById('tab-graph-btn');
+  recordButton.classList.toggle('active', tab === 'record');
+  graphButton.classList.toggle('active', tab === 'graph');
+  recordButton.setAttribute('aria-selected', String(tab === 'record'));
+  graphButton.setAttribute('aria-selected', String(tab === 'graph'));
+  document.getElementById('record-tab-content').hidden = tab !== 'record';
+  document.getElementById('graph-tab-content').hidden = tab !== 'graph';
+  if (tab === 'graph') renderProgressScreen();
+}
+
+function renderRecordScreen({ selectToday = false } = {}) {
+  const history = loadHistory();
+  renderTrainingStreak(history);
+  const historyMap = groupHistoryByDate(history);
+  if (selectToday) {
+    recordSelectedDateStr = localDateKey(new Date());
+    activeRecordTab = 'record';
+    recordViewMode = 'calendar';
+  }
+  if (!recordSelectedDateStr) recordSelectedDateStr = localDateKey(new Date());
+  const selectedDate = recordDateFromKey(recordSelectedDateStr);
+  recordViewYear = selectedDate.getFullYear();
+  recordViewMonth = selectedDate.getMonth();
+  if (history.length === 0) recordViewMode = 'list';
+  setActiveRecordTab(activeRecordTab);
+  setRecordViewMode(recordViewMode);
+  if (recordViewMode === 'calendar') {
+    renderCalendar(historyMap);
+    renderRecordDayDetail(historyMap);
+  } else {
+    renderListView(historyMap);
+  }
 }
 
 // ===== グラフ画面（記録一覧とは別画面。全体の総挙上量推移＋種目ごとの推移） =====

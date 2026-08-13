@@ -1147,8 +1147,8 @@ function handleFinishWorkout() {
   finalizeSession(currentSession);
   currentSession = null;
   currentMenu = null;
-  renderHistory();
-  showScreen('history');
+  renderRecordScreen({ selectToday: true });
+  showScreen('record');
 }
 
 // targetIdがnullなら「すべて削除」、session.idを渡せばその1件だけの削除確認になる。
@@ -1280,9 +1280,35 @@ function init() {
     if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
   document.getElementById('reset-history-btn').addEventListener('click', () => openResetHistoryModal(null));
-  document.getElementById('history-content').addEventListener('click', (e) => {
+  document.getElementById('screen-record').addEventListener('click', (e) => {
     const delBtn = e.target.closest('[data-history-delete]');
     if (delBtn) openResetHistoryModal(delBtn.dataset.historyDelete);
+    const emptyStartBtn = e.target.closest('#empty-state-start-btn');
+    if (emptyStartBtn) {
+      showScreen('mode');
+      renderModeWeeklyPlanSection();
+    }
+    const tabButton = e.target.closest('#tab-record-btn, #tab-graph-btn');
+    if (tabButton) {
+      setActiveRecordTab(tabButton.id === 'tab-graph-btn' ? 'graph' : 'record');
+    }
+    const viewModeButton = e.target.closest('#view-mode-calendar-btn, #view-mode-list-btn');
+    if (viewModeButton) {
+      setRecordViewMode(viewModeButton.id === 'view-mode-list-btn' ? 'list' : 'calendar');
+    }
+    const monthButton = e.target.closest('#cal-prev-month, #cal-next-month');
+    if (monthButton) {
+      recordViewMonth += monthButton.id === 'cal-prev-month' ? -1 : 1;
+      if (recordViewMonth < 0) { recordViewMonth = 11; recordViewYear -= 1; }
+      if (recordViewMonth > 11) { recordViewMonth = 0; recordViewYear += 1; }
+      const historyMap = groupHistoryByDate(loadHistory());
+      renderCalendar(historyMap);
+      renderRecordDayDetail(historyMap);
+    }
+    const dayButton = e.target.closest('[data-record-day-prev], [data-record-day-next]');
+    if (dayButton) moveSelectedRecordDay(dayButton.hasAttribute('data-record-day-prev') ? -1 : 1);
+    const jumpButton = e.target.closest('[data-record-jump]');
+    if (jumpButton) selectRecordDate(jumpButton.dataset.recordJump);
   });
   document.getElementById('reset-history-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-reset-history-close]')) {
@@ -1297,7 +1323,7 @@ function init() {
     }
     historyDeleteTargetId = null;
     document.getElementById('reset-history-modal').classList.remove('open');
-    renderHistory();
+    renderRecordScreen();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -1325,8 +1351,7 @@ function init() {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
       if (target === 'mode') renderModeWeeklyPlanSection();
-      if (target === 'history') renderHistory();
-      if (target === 'progress') renderProgressScreen();
+      if (target === 'record') renderRecordScreen();
       if (target === 'weekly') enterWeeklyScreenFromNav();
       if (target === 'knowledge') renderKnowledgeScreen();
       stopHoldTimer();

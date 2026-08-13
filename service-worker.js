@@ -1,11 +1,12 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v7';
+const CACHE_NAME = 'training-menu-v8';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './css/style.css',
+  './assets/stamp-record.svg',
   './js/exercises-data.js',
   './js/rules.js',
   './js/menu-generator.js',
