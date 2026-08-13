@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   customTemplates: 'training-menu:custom-templates',
   weeklyPlans: 'training-menu:weekly-plans',
   activeWeeklyPlanId: 'training-menu:active-weekly-plan-id',
+  streak: 'training-menu:streak',
 };
 
 function loadSettings() {
@@ -35,6 +36,75 @@ function saveSession(session) {
   const history = loadHistory();
   history.unshift(session); // 新しい記録を先頭に
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+}
+
+function loadTrainingStreak() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.streak);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed.last !== 'string' || !Number.isInteger(parsed.count) || parsed.count < 1) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveTrainingStreak(streak) {
+  localStorage.setItem(STORAGE_KEYS.streak, JSON.stringify(streak));
+}
+
+function localDateKey(dateInput) {
+  const date = new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function previousDateKey(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() - 1);
+  return localDateKey(date);
+}
+
+function calculateTrainingStreak(history) {
+  const dateKeys = [...new Set(history
+    .map((session) => localDateKey(session.date))
+    .filter(Boolean))]
+    .sort()
+    .reverse();
+  if (dateKeys.length === 0) return null;
+
+  let count = 1;
+  for (let i = 1; i < dateKeys.length; i += 1) {
+    if (dateKeys[i] !== previousDateKey(dateKeys[i - 1])) break;
+    count += 1;
+  }
+  return { last: dateKeys[0], count };
+}
+
+// 既存履歴がある状態で機能を追加した場合も、初回更新時に過去の連続日数を引き継ぐ。
+function getTrainingStreak() {
+  const saved = loadTrainingStreak();
+  if (saved) return saved;
+  const derived = calculateTrainingStreak(loadHistory());
+  if (derived) saveTrainingStreak(derived);
+  return derived;
+}
+
+// セッションを記録した日単位で継続日数を更新する。同日中の複数記録は1日として扱う。
+function updateTrainingStreak(sessionDate) {
+  const today = localDateKey(sessionDate);
+  if (!today) return loadTrainingStreak();
+
+  const current = getTrainingStreak();
+  if (current && current.last === today) return current;
+
+  const next = {
+    last: today,
+    count: current && current.last === previousDateKey(today) ? current.count + 1 : 1,
+  };
+  saveTrainingStreak(next);
+  return next;
 }
 
 // トレーニング記録だけを削除する（お気に入り・体重などの設定は残す）。
@@ -195,7 +265,8 @@ function setActiveWeeklyPlanId(id) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    loadSettings, saveSettings, loadHistory, saveSession, clearHistory, deleteSession, findLastPerformance,
+    loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, updateTrainingStreak,
+    clearHistory, deleteSession, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,

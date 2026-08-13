@@ -821,9 +821,26 @@ function formatDate(iso) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+function renderTrainingStreak(history) {
+  const container = document.getElementById('training-streak-summary');
+  if (!container) return;
+  const streak = getTrainingStreak();
+  const today = localDateKey(new Date());
+  const yesterday = previousDateKey(today);
+  const streakIsCurrent = streak && (streak.last === today || streak.last === yesterday);
+  if (!history.length || !streakIsCurrent) {
+    container.hidden = true;
+    container.textContent = '';
+    return;
+  }
+  container.hidden = false;
+  container.textContent = `🔥 ${streak.count}日連続`;
+}
+
 function renderHistory() {
   const container = document.getElementById('history-content');
   const history = loadHistory();
+  renderTrainingStreak(history);
   if (history.length === 0) {
     container.innerHTML = '<p class="empty-text">まだ記録がありません。メニューを作って始めましょう。</p>';
     return;

@@ -1181,6 +1181,19 @@ body.modal-open {
 
 .empty-text { color: var(--text-dim); font-size: 13px; text-align: center; padding: 24px 0; }
 
+.training-streak-summary {
+  display: inline-block;
+  margin: -4px 0 14px;
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+}
+.training-streak-summary[hidden] { display: none; }
+
 .bottom-nav {
   position: fixed;
   bottom: 0;

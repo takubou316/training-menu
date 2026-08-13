@@ -175,6 +175,7 @@ function finalizeSession(session) {
       })),
   };
   saveSession(record);
+  updateTrainingStreak(record.date);
   return record;
 }
 
