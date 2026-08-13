@@ -983,10 +983,20 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
   }
 }
 
+// アプリのヘッダー(.app-header、sticky top:0で常に画面上部に固定される)の実際の高さを測って、
+// 日詳細ヘッダーのsticky top位置(--sticky-header-offset)に反映する。ヘッダーの高さは環境
+// (safe-area-inset-top等)で変わるためJS側で動的に算出する。
+function updateStickyHeaderOffset() {
+  const appHeader = document.querySelector('.app-header');
+  const height = appHeader ? appHeader.getBoundingClientRect().height : 0;
+  document.documentElement.style.setProperty('--sticky-header-offset', `${height}px`);
+}
+
 function renderRecordDayDetail(historyMap = groupHistoryByDate(loadHistory())) {
   const container = document.getElementById('day-detail-inline-container');
   if (!container || !recordSelectedDateStr) return;
   container.innerHTML = `<div class="day-detail-inline">${buildRecordDayDetailHtml(recordSelectedDateStr, historyMap)}</div>`;
+  updateStickyHeaderOffset();
 }
 
 function selectRecordDate(dateStr) {

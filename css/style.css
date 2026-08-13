@@ -1674,6 +1674,17 @@ body.modal-open {
   margin: 0 -12px 10px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  /* 種目数が多いセッションだと本文が縦に長くなり、◀日付▶の移動ボタンがスクロールで
+     画面外に出てタップできなくなるため、ヘッダーだけposition:stickyで浮かせる。
+     topの値はjs/ui.jsのupdateStickyHeaderOffset()が.app-headerの実高さから動的に
+     設定する（safe-area-inset-top等で変わるため）。リスト表示側は下の
+     `#list-view-container .day-detail-header`で position:static に戻して無効化する
+     （◀▶ボタン自体が無く、sticky化する意味が無いため）。 */
+  position: sticky;
+  top: var(--sticky-header-offset, 0px);
+  z-index: 5;
+  background: var(--surface);
+  border-radius: 12px 12px 0 0;
 }
 
 .day-detail-date { font-size: 18px; font-weight: 700; }
