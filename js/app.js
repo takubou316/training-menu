@@ -1309,6 +1309,10 @@ function init() {
     if (dayButton) moveSelectedRecordDay(dayButton.hasAttribute('data-record-day-prev') ? -1 : 1);
     const jumpButton = e.target.closest('[data-record-jump]');
     if (jumpButton) selectRecordDate(jumpButton.dataset.recordJump);
+    const toggleDetailButton = e.target.closest('[data-toggle-detail]');
+    if (toggleDetailButton) toggleSessionDetail(toggleDetailButton.dataset.toggleDetail);
+    const graphExerciseButton = e.target.closest('[data-graph-exercise]');
+    if (graphExerciseButton) goToExerciseGraph(graphExerciseButton.dataset.graphExercise);
   });
   document.getElementById('reset-history-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-reset-history-close]')) {

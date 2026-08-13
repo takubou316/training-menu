@@ -842,44 +842,89 @@ let recordViewMonth = new Date().getMonth();
 let recordSelectedDateStr = localDateKey(new Date());
 let recordViewMode = 'calendar';
 let activeRecordTab = 'record';
-let showFullDetail = false;
+// 「セットの詳細を見る」を展開中のセッションid集合。日付ごとに複数セッションが
+// 同時に並ぶことがある(リスト表示・複数セッション同日)ため、単一のグローバルboolean
+// ではなくセッションid単位で管理する(1件だけ展開しても他のカードに影響しない)。
+const expandedSessionDetailIds = new Set();
+
+function toggleSessionDetail(sessionId) {
+  if (expandedSessionDetailIds.has(sessionId)) expandedSessionDetailIds.delete(sessionId);
+  else expandedSessionDetailIds.add(sessionId);
+  if (recordViewMode === 'list') {
+    renderListView();
+  } else {
+    renderRecordDayDetail();
+  }
+}
+
+// 1セット分の重量/回数/RPE表記。cardio/holdBased/自重換算の既存ロジックはそのまま踏襲する。
+function buildExerciseDetailHtml(ex) {
+  if (ex.type === 'cardio') {
+    const restSummary = formatCardioRestSummary(ex.restLog);
+    return ex.done
+      ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
+      : '未記録';
+  }
+  const exerciseMeta = findExerciseById(ex.exerciseId);
+  const holdBased = exerciseMeta && exerciseMeta.holdBased;
+  const isBodyweightLoad = exerciseMeta && isBodyweightLoadExercise(exerciseMeta);
+  return ex.sets
+    .filter((s) => s.done && !s.isWarmup)
+    .map((s) => {
+      const rpeSuffix = s.rpe ? `<span class="detail-annotation">(RPE${s.rpe})</span>` : '';
+      return holdBased
+        ? `${s.reps || 0}秒${rpeSuffix}`
+        : `${s.weight || 0}kg${isBodyweightLoad ? '<span class="detail-annotation">(体重換算)</span>' : ''}×${s.reps || 0}${rpeSuffix}`;
+    })
+    .join(', ') || '未記録';
+}
 
 // 1セッション分の表示は履歴一覧・カレンダーの日詳細・リスト表示で共通に使う。
-// cardio / holdBased / 自重換算 / RPE / ウォームアップ除外の既存ロジックをここに集約する。
+// デフォルトは種目名だけの軽い一覧（以前の「1行に重量・回数まで詰め込んだ文」は
+// 読みにくいという指摘があったため）。種目名の行はそのままタップするとグラフタブの
+// その種目の推移へ直接飛べる（`goToExerciseGraph`）。セットの重量・回数はカード上部の
+// 「セットの詳細を見る」で切り替える。
 function buildSessionCardHtml(session, { showDate = true } = {}) {
   const dateHeader = `
       <div class="h-header">
         ${showDate ? `<div class="h-date">${formatDate(session.date)}</div>` : '<span></span>'}
         <button type="button" class="h-delete-btn" data-history-delete="${session.id}" aria-label="この記録を削除">×</button>
       </div>`;
+  const expanded = expandedSessionDetailIds.has(session.id);
+  const exListHtml = session.exercises
+    .map((ex) => `
+        <li>
+          <button type="button" class="ex-name-row-btn" data-graph-exercise="${ex.exerciseId}">
+            <span>${ex.name}${expanded ? `<span class="ex-set-detail">${buildExerciseDetailHtml(ex)}</span>` : ''}</span>
+            <span class="ex-row-link-label">推移を見る ›</span>
+          </button>
+        </li>`)
+    .join('');
   return `
     <div class="history-item">
       ${dateHeader}
       <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
-      <details>
-        <summary>詳細を見る</summary>
-        ${session.exercises
-          .map((ex) => {
-            if (ex.type === 'cardio') {
-              const restSummary = formatCardioRestSummary(ex.restLog);
-              const detail = ex.done
-                ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
-                : '未記録';
-              return `<div class="h-ex">${ex.name}: ${detail}</div>`;
-            }
-            const exerciseMeta = findExerciseById(ex.exerciseId);
-            const holdBased = exerciseMeta && exerciseMeta.holdBased;
-            const isBodyweightLoad = exerciseMeta && isBodyweightLoadExercise(exerciseMeta);
-            return `<div class="h-ex">${ex.name}: ${ex.sets
-              .filter((s) => s.done && !s.isWarmup)
-              .map((s) => (holdBased
-                ? `${s.reps || 0}秒${s.rpe ? `(RPE${s.rpe})` : ''}`
-                : `${s.weight || 0}kg${isBodyweightLoad ? '(体重換算)' : ''}×${s.reps || 0}${s.rpe ? `(RPE${s.rpe})` : ''}`))
-              .join(', ') || '未記録'}</div>`;
-          })
-          .join('')}
-      </details>
+      <button type="button" class="text-link-btn detail-toggle-btn" data-toggle-detail="${session.id}">
+        ${expanded ? '種目名だけの表示に戻す' : 'セットの詳細を見る（重量・回数）'}
+      </button>
+      <ul class="ex-name-list">${exListHtml}</ul>
     </div>`;
+}
+
+// 記録タブの種目名をタップした時、グラフタブのその種目の推移へ直接切り替える。
+// setActiveRecordTab('graph')がグラフタブを開いてrenderProgressScreen()経由でセレクトの
+// 選択肢を作り直すので、その後に目的の種目を選び直す(デフォルト選択を上書きする)。
+// その種目がまだ1件も完了セットを持たない(exercisesWithHistoryOptionsに出てこない)場合は
+// セレクトにoption自体が無いため、無理に選ばずグラフタブへの遷移だけ行う。
+function goToExerciseGraph(exerciseId) {
+  setActiveRecordTab('graph');
+  const select = document.getElementById('progress-exercise-select');
+  if (!select) return;
+  const hasOption = Array.from(select.options).some((opt) => opt.value === exerciseId);
+  if (hasOption) {
+    select.value = exerciseId;
+    renderExerciseProgressChart(exerciseId);
+  }
 }
 
 function groupHistoryByDate(history) {
