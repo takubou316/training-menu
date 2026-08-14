@@ -1430,18 +1430,24 @@ body.modal-open {
   margin: 0;
 }
 
-/* 「他のメニューを作る」は、他の控えめな操作(編集する／＋新しいプランを作る等)と同じ
-   .text-link-btnの見た目（下線付きの色文字、箱なし）に揃える。以前は「ほかのプランを見る」
-   と同じ重い箱スタイル(.wu-cd-toggle)を流用していたが、箱の角丸と下のカードの継ぎ目が
-   中途半端に見えると指摘があったため、箱自体を無くした（2026-08-14）。 */
+/* 「他のメニューを作る」は輪郭だけの控えめなボタン（塗りつぶし無し、押せる感じは
+   輪郭で示す）にしている。以前は「ほかのプランを見る」と同じ重い箱スタイル
+   (.wu-cd-toggle)、その後は下線付きの色文字リンク(.text-link-btn風)を試したが、
+   どちらも「スタイリッシュじゃない」という指摘があり、複数案を提示した上でこの形に
+   決まった（2026-08-14）。 */
 .mode-cards-toggle { margin-bottom: 12px; }
 .mode-cards-toggle summary {
+  display: block;
+  width: 100%;
+  text-align: center;
   cursor: pointer;
   font-size: 13px;
-  color: var(--accent);
-  text-decoration: underline;
+  color: var(--text-dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 9px 12px;
   list-style: none;
-  padding: 4px 0;
 }
 .mode-cards-toggle summary::-webkit-details-marker { display: none; }
 .mode-cards-toggle .mode-choice { margin-top: 12px; }
