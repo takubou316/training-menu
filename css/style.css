@@ -1045,6 +1045,13 @@ body.modal-open {
 }
 
 .template-toggle { margin-bottom: 16px; }
+.template-toggle summary.ghost-pill-btn {
+  display: block;
+  width: 100%;
+  list-style: none;
+}
+.template-toggle summary::-webkit-details-marker { display: none; }
+.template-toggle[open] summary { margin-bottom: 12px; }
 
 .template-item {
   display: flex;
@@ -1818,13 +1825,11 @@ body.modal-open {
 
 .jump-links {
   display: flex;
-  justify-content: space-between;
   gap: 8px;
   margin-top: 12px;
-  font-size: 14px;
 }
 
-.jump-links .text-link-btn:only-child { margin-left: auto; }
+.jump-links .ghost-pill-btn { flex: 1; }
 
 .record-empty-state {
   padding: 24px 4px 12px;
@@ -1886,4 +1891,11 @@ body.modal-open {
 }
 
 .detail-annotation { font-size: 11px; }
-.detail-toggle-btn { display: block; margin-bottom: 4px; }
+/* カードごとに繰り返し出るボタンなので、他の輪郭pillより一段控えめ
+   （幅いっぱいにせず中身の幅だけ、余白も一回り小さく）にしている。 */
+.detail-toggle-btn {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  padding: 6px 12px;
+}

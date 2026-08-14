@@ -949,7 +949,7 @@ function buildSessionCardHtml(session, { showDate = true } = {}) {
     <div class="history-item">
       ${dateHeader}
       <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
-      <button type="button" class="text-link-btn detail-toggle-btn" data-toggle-detail="${session.id}">
+      <button type="button" class="ghost-pill-btn detail-toggle-btn" data-toggle-detail="${session.id}">
         ${expanded ? '種目名だけの表示に戻す' : 'セットの詳細を見る（重量・回数）'}
       </button>
       <ul class="ex-name-list">${exListHtml}</ul>
@@ -1017,8 +1017,8 @@ function buildRecordJumpLinks(dateStr, historyMap) {
   const previous = findNearestRecordDate(dateStr, -1, historyMap);
   const next = findNearestRecordDate(dateStr, 1, historyMap);
   return `<div class="jump-links">
-    ${previous ? `<button type="button" class="text-link-btn" data-record-jump="${previous}">◀ 前回の記録へ（${recordDateLabel(recordDateFromKey(previous))}）</button>` : '<span></span>'}
-    ${next ? `<button type="button" class="text-link-btn" data-record-jump="${next}">次の記録へ（${recordDateLabel(recordDateFromKey(next))}）▶</button>` : ''}
+    ${previous ? `<button type="button" class="ghost-pill-btn" data-record-jump="${previous}">◀ 前回の記録へ（${recordDateLabel(recordDateFromKey(previous))}）</button>` : '<span></span>'}
+    ${next ? `<button type="button" class="ghost-pill-btn" data-record-jump="${next}">次の記録へ（${recordDateLabel(recordDateFromKey(next))}）▶</button>` : ''}
   </div>`;
 }
 
