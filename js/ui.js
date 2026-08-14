@@ -743,13 +743,13 @@ function renderLog(session) {
   // ウォームアップは怪我予防に関わるため、記録画面を開いた時点で最初から展開しておく
   // （クールダウンはセット記録が終わった後に見るものなので緊急度が違い、従来通り折りたたみのまま）。
   const warmupHtml = `
-    <details class="wu-cd-toggle" open>
-      <summary>ウォームアップを見る</summary>
+    <details class="section-toggle" open>
+      <summary><span class="section-toggle-title">ウォームアップ</span><span class="section-toggle-chevron">▾</span></summary>
       ${buildWarmupHtml(session.warmup, session.exercises.some((ex) => ex.type !== 'cardio'))}
     </details>`;
   const cooldownHtml = `
-    <details class="wu-cd-toggle">
-      <summary>クールダウンを見る</summary>
+    <details class="section-toggle">
+      <summary><span class="section-toggle-title">クールダウン</span><span class="section-toggle-chevron">▾</span></summary>
       ${buildCooldownHtml(session.cooldown)}
     </details>`;
   const exercisesHtml = session.exercises
