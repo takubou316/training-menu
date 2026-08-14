@@ -1432,8 +1432,11 @@ body.modal-open {
 /* ===== モード選択画面：今日の予定の案内（2026-08-14、原点回帰UX見直し） ===== */
 /* 週間プランで今日の予定が実行可能な内容の時だけ、画面最上部にこれだけを見せ、
    「要望から作る」「自分で作る」の2枚のカードは#mode-cards-detailsへ折りたたむ。
-   以前、専用の目立つバナーを別途置いて「うるさい」と指摘された経緯があるため、
-   .weekly-plan-day-row-todayと同じ抑えたaccent-dimの配色に揃えている。 */
+   最初はaccent-dimのベタ塗り箱にしていたが、他の操作群を輪郭だけの.ghost-pill-btnに
+   統一した結果、ここだけがベタ塗りで浮いて見えると指摘があり、.section-toggleと同じ
+   「箱を作らず左にアクセント線」のスタイルに変更した（2026-08-14）。「始める」だけは
+   その日の主要な行動なので、他のghost-pill-btnより少しだけ目立たせている
+   （左のアクセント線がaccent-dim/section-toggleより明るいaccent）。 */
 #today-focus-section:empty { margin: 0; }
 #today-focus-section { margin-bottom: 12px; }
 
@@ -1442,24 +1445,23 @@ body.modal-open {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: var(--accent-dim);
-  border-radius: 12px;
-  padding: 16px;
+  padding: 6px 2px 6px 10px;
+  border-left: 3px solid var(--accent);
 }
 
 .today-focus-title {
   font-size: 16px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text);
 }
 
 .today-focus-start-btn {
   flex-shrink: 0;
   padding: 8px 18px;
-  border: none;
+  border: 1px solid var(--text-dim);
   border-radius: 999px;
-  background: var(--accent);
-  color: #0b1210;
+  background: var(--surface);
+  color: var(--text);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
