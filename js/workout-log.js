@@ -245,17 +245,10 @@ function isPersonalRecord(exercise, set) {
   return currentValue > previousBest;
 }
 
-// 直近セッションの総挙上量(volume)推移を古い→新しい順で返す（履歴画面の全体グラフ用）。
-function overallVolumeSeries(limit) {
-  const history = loadHistory(); // 新しい順
-  const sliced = limit ? history.slice(0, limit) : history;
-  return sliced.map((s) => ({ date: s.date, value: s.volume || 0 })).reverse();
-}
-
 if (typeof module !== 'undefined') {
   module.exports = {
     createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion,
     exerciseProgressSeries, exerciseProgressValue, isPersonalRecord,
-    overallVolumeSeries, estimateCardioCalories,
+    estimateCardioCalories,
   };
 }

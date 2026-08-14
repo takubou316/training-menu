@@ -1150,15 +1150,10 @@ function exercisesWithHistoryOptions() {
   return Array.from(seen, ([id, name]) => ({ id, name }));
 }
 
+// 種目をまたいだ重量×回数の単純合算(総挙上量)には生理学的な意味がほぼ無く、「その日やったか」
+// 自体はカレンダー(記録タブ)側で既に分かるため、種目ごとの推移のみを表示する
+// (2026-08-14、記録一覧×カレンダー統合の設計検討時に決定・後日反映)。
 function renderProgressScreen() {
-  const overallContainer = document.getElementById('overall-progress-content');
-  const overallChartHtml = buildProgressTrendChartHtml(
-    overallVolumeSeries(12),
-    { title: '総挙上量の推移（直近12回）', valueFormatter: (v) => `${Math.round(v)}kg` },
-  );
-  overallContainer.innerHTML = overallChartHtml
-    || '<p class="empty-text">記録が2回分たまるとグラフが表示されます。</p>';
-
   const select = document.getElementById('progress-exercise-select');
   const options = exercisesWithHistoryOptions();
   if (options.length === 0) {
