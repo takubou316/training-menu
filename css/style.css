@@ -1388,6 +1388,53 @@ body.modal-open {
 .weekly-plan-others-toggle { margin-top: 12px; }
 .weekly-plan-others-toggle .menu-block { margin-bottom: 0; }
 
+/* ===== モード選択画面：今日の予定の案内（2026-08-14、原点回帰UX見直し） ===== */
+/* 週間プランで今日の予定が実行可能な内容の時だけ、画面最上部にこれだけを見せ、
+   「要望から作る」「自分で作る」の2枚のカードは#mode-cards-detailsへ折りたたむ。
+   以前、専用の目立つバナーを別途置いて「うるさい」と指摘された経緯があるため、
+   .weekly-plan-day-row-todayと同じ抑えたaccent-dimの配色に揃えている。 */
+#today-focus-section:empty { margin: 0; }
+#today-focus-section { margin-bottom: 12px; }
+
+.today-focus-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--accent-dim);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.today-focus-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.today-focus-start-btn {
+  flex-shrink: 0;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #0b1210;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.today-focus-rest {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+/* 週間プラン未作成、または今日が休みの日は、折りたたみのsummary自体を隠して
+   従来通りカード2枚がそのまま並ぶ見た目に戻す（「他に」何も無い/優先すべき提案が
+   無いのに開閉できるように見せる意味が無いため）。 */
+.mode-cards-toggle.mode-cards-flat summary { display: none; }
+
 /* ===== 週間プラン画面：プラン名・空の状態 ===== */
 
 .weekly-editor-plan-name {

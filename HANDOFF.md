@@ -1,36 +1,51 @@
 # HANDOFF.md（training-menu）
 
 - **最終更新日時**: 2026-08-14（Claude更新）
-- **変更主体**: Codex（初回実装）＋Claude（移植漏れの発見・修正、PCプレビュー確認、ロードマップ更新）
+- **変更主体**: Claude（設計相談〜実装〜PCプレビュー確認）
 
 ## 現在の目的
 
-記録一覧とグラフ画面をカレンダー統合画面に一本化する（完了）。
+モード選択画面の最上部に、週間プランの「今日の予定」を出す（完了）。原点回帰UX見直しの一項目。
 
 ## 現在の実装状態（完了）
 
-- `index.html`の`#screen-history`と`#screen-progress`を`#screen-record`へ統合し、記録／グラフの上位タブと、カレンダー／リストの表示切り替えを追加した。ボトムナビは5個から4個（メニュー作成／週間プラン／記録／豆知識）になった。
-- カレンダーは実データを日付単位でグループ化し、複数セッション同日、日付移動、前後の記録日ジャンプ、記録スタンプ（`assets/stamp-record.svg`）、空状態導線に対応。
-- 日の詳細ヘッダーは`position: sticky`で画面内に固定（`js/ui.js`の`updateStickyHeaderOffset()`）。
-- 記録カードはデフォルト種目名だけの軽量表示。「セットの詳細を見る」で重量・回数・RPEを展開（`buildSessionCardHtml`／`buildExerciseDetailHtml`）。種目名タップでグラフタブの該当種目推移へ直接ジャンプ（`goToExerciseGraph`）。
-- グラフタブから「総挙上量の推移」を削除し、「種目ごとの推移」のみに（`overallVolumeSeries`関数ごと削除）。
-- `service-worker.js`のキャッシュ名を`training-menu-v8`へ更新し、新規アセットをキャッシュ対象に追加。
-- 試作ファイル`prototype-history-calendar.html`・`prototype-assets/`は中身をCLAUDE.mdへ転記の上、削除済み。
+- `index.html`に`#today-focus-section`（画面最上部）を追加し、既存の「要望から作る」「自分で作る」
+  の2枚のカードは`<details id="mode-cards-details">`へ格納した。
+- `js/ui.js`に`renderTodayFocus`を追加。週間プラン未作成なら何も出さずカードは従来通り開いたまま
+  （`.mode-cards-flat`でsummary自体を隠す）。今日が実行可能な予定なら「今日は○○の日です」＋
+  「始める」を表示しカードを折りたたみ、休みの日なら「今日は休みの日です」の一言だけ表示してカードは
+  開いたまま。
+- `weeklyPlanDaysHtml`から今日の行を除外（`#today-focus-section`と重複するため）。今日の割り当て
+  だけがある場合は「今日以外はまだ割り当てていません」と文言を分けた。
+- `js/app.js`の`renderModeWeeklyPlanSection`から`renderTodayFocus`も呼ぶよう変更、`#today-focus-section`
+  用のクリックリスナーを`wireModeWeeklyPlanSection`に追加（`#weekly-plan-section`とは別DOM要素のため）。
+- `service-worker.js`のキャッシュ名を`training-menu-v9`へ更新。
 
-**経緯（次に似た作業をする時の参考）**: Codexへの初回委譲では実データ対応（cardio/holdBased/削除ボタン等）は正しく実装されたが、プロトタイプで検証済みだったsticky固定・種目名タップ→グラフ導線・詳細トグルの3点が移植漏れしていた。Claudeが監査で発見し直接修正した（Codexへの再委譲はせず）。原因と再発防止策は記憶`feedback_prototype_to_production_spec`に記録済み。
+設計判断の詳細（データモデル・`.mode-cards-flat`の仕組み・配色の理由）は
+[CLAUDE.md](CLAUDE.md)の「モード選択画面：今日の予定を最上部に出す」節を参照。
 
 ## 確認方法（Claudeが実施・完了）
 
-- `node --check`で全対象ファイルの構文エラー無しを確認。
-- PCプレビューで、ボトムナビ4個化・空状態導線・記録作成〜スタンプ表示・カレンダー⇄リスト切替・個別削除／全削除・🔥連続日数バッジ・sticky固定ヘッダー（種目数の多いセッションでスクロール確認）・種目タップ→グラフ遷移・詳細トグル展開・複数セッション同日の重ね表示・前後の記録日へのジャンプリンク・グラフタブ（総挙上量削除後の表示）を確認。コンソールエラー無し、`assets/stamp-record.svg`が200 OKで読み込まれることを確認。
-- **実機（iPhone、GitHub Pages経由）で確認済み（2026-08-14、ユーザー確認）**。ローカルLANサーバー(HTTP)ではなくGitHub Pages(HTTPS)経由にしたのは、Service WorkerがHTTPS(またはlocalhost)でないと正しく登録されない仕様のため。
+- `node --check`で`js/app.js`・`js/ui.js`の構文エラー無しを確認。
+- PCプレビュー（`training-menu-alt`設定、8083番。別セッションが`training-menu`(8081番)を
+  使用中だったため衝突回避）で、localStorageに直接データを入れて3パターンを確認:
+  - 週間プラン未作成 → 最上部に何も出ず、カード2枚がそのまま表示（変更前と同じ見た目）
+  - 今日が実行可能な予定（脚の日） → 「今日は脚の日です」＋「始める」を表示、カードは
+    「他のメニューを作る」に折りたたみ。「始める」クリックで設定画面を経由せず脚メニューの
+    確認画面まで直接遷移することを確認（コンソールエラー無し）
+  - 週間プランはあるが今日が休み → 「今日は休みの日です」を表示、カードは開いたまま
+- **実機（iPhone）での確認は未実施**。UI_UX_GUIDELINES.mdの方針上、実機確認をせずにUI作業の
+  「完了」とはしていない点に注意。次回iPhoneで開いた際に確認をお願いしたい。
 
 ## 未確認事項・既知の問題
 
-- 上記「これから」に該当する未着手項目（アクセントカラーの使いすぎの棚卸し、カレンダー「今日」表示の低視力配慮）は、Obsidian Vaultの`アイデアまとめ\03 トレーニングメニューアプリ\ロードマップ.md`の「これから」欄に記録済み。今回のタスクの対象外。
+- 実機（iPhone、GitHub Pages経由）での確認が未実施。特に`<details>`の開閉アニメーション・
+  タップ範囲の感触は実機で見るまで分からない。
+- 原点回帰の残り項目（チュートリアル作成、「今日やることを最上部に」以外のChatGPT案、動画/デモ機能）
+  は未着手のままObsidian Vaultのロードマップに残っている。
 
 ## 参照
 
-- [CLAUDE.md](CLAUDE.md)（「記録画面：カレンダー統合」節に設計判断の詳細）
+- [CLAUDE.md](CLAUDE.md)（「モード選択画面：今日の予定を最上部に出す」節に設計判断の詳細）
 - [AGENTS.md](AGENTS.md)
-- Obsidian Vault「アイデアまとめ\03 トレーニングメニューアプリ\ロードマップ.md」（完了済み欄に記録）
+- Obsidian Vault「アイデアまとめ\03 トレーニングメニューアプリ\ロードマップ.md」

@@ -842,7 +842,11 @@ function wireWeeklyScreen() {
 // このセクションに統合した。
 
 function renderModeWeeklyPlanSection() {
-  renderWeeklyPlanSection(loadWeeklyPlans(), getActiveWeeklyPlanId(), loadCustomTemplates());
+  const plans = loadWeeklyPlans();
+  const activeId = getActiveWeeklyPlanId();
+  const templates = loadCustomTemplates();
+  renderWeeklyPlanSection(plans, activeId, templates);
+  renderTodayFocus(plans, activeId, templates);
 }
 
 // 週間プランセクションの今日の行にある「始める」。
@@ -904,6 +908,14 @@ function confirmWeeklyPlanName() {
 }
 
 function wireModeWeeklyPlanSection() {
+  // 画面最上部の「今日の予定」案内(#today-focus-section)は#weekly-plan-sectionとは
+  // 別のDOM要素なので、「始める」ボタンのクリックは専用のリスナーで拾う。
+  document.getElementById('today-focus-section').addEventListener('click', (e) => {
+    if (e.target.closest('[data-weekly-plan-start-today]')) {
+      startTodayFromActivePlan();
+    }
+  });
+
   document.getElementById('weekly-plan-section').addEventListener('click', (e) => {
     if (e.target.closest('#weekly-plan-create-btn')) {
       // 0件の状態からは名前モーダルをいきなり開かず、まず週間プラン画面の空状態

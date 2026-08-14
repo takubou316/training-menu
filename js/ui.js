@@ -109,32 +109,76 @@ function shortSavedDateLabel(isoString) {
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-// 週間プランの中身を、休みの曜日を省いた「曜日：内容」の行リストにする（モード選択画面用）。
-// 主役は中身なので、1行に詰め込まず曜日ごとに見やすく並べる。1件も割り当てが無ければ
-// まだ何もしていないと分かる文言だけを返す。
-// 今日にあたる行は軽くハイライトし、始められる内容(部位、または削除されていないテンプレート)
-// なら「始める」を添える。専用バナーを別途置くとうるさいという指摘を受けてここに統合した。
+// 週間プランの中身を、休み・今日の曜日を省いた「曜日：内容」の行リストにする
+// （モード選択画面の週間プランパネル用）。主役は中身なので、1行に詰め込まず曜日ごとに
+// 見やすく並べる。今日の予定は2026-08-14に画面最上部の#today-focus-section（renderTodayFocus）
+// へ昇格したため、ここでは重複表示を避けるため除外している。
 function weeklyPlanDaysHtml(days, templates) {
   const todayIdx = todayWeekdayIndex();
-  const rows = days
-    .map((day, i) => ({ day, i }))
-    .filter(({ day }) => day && day.kind !== 'rest');
-  if (rows.length === 0) {
+  const anyAssigned = days.some((day) => day && day.kind !== 'rest');
+  if (!anyAssigned) {
     return '<p class="weekly-plan-summary-empty">まだ何も割り当てていません</p>';
   }
-  return `<div class="weekly-plan-days">${rows.map(({ day, i }) => {
-    const isToday = i === todayIdx;
-    const actionable = isToday && (
-      (day.kind === 'parts' && day.parts && day.parts.length > 0)
-      || (day.kind === 'template' && templates.some((t) => t.id === day.templateId))
-    );
-    return `
-    <div class="weekly-plan-day-row${isToday ? ' weekly-plan-day-row-today' : ''}">
+  const rows = days
+    .map((day, i) => ({ day, i }))
+    .filter(({ day, i }) => day && day.kind !== 'rest' && i !== todayIdx);
+  if (rows.length === 0) {
+    // 割り当てが今日だけの場合。今日の内容は上の今日の案内に出ているのでここでは触れない。
+    return '<p class="weekly-plan-summary-empty">今日以外はまだ割り当てていません</p>';
+  }
+  return `<div class="weekly-plan-days">${rows.map(({ day, i }) => `
+    <div class="weekly-plan-day-row">
       <span class="weekly-plan-day-label">${WEEKDAY_LABELS[i]}</span>
       <span class="weekly-plan-day-content">${escapeHtml(weeklyDayContentText(day, templates))}</span>
-      ${actionable ? '<button type="button" class="weekly-plan-day-start-btn" data-weekly-plan-start-today>始める</button>' : ''}
+    </div>`).join('')}</div>`;
+}
+
+// モード選択画面の最上部に置く「今日の予定」案内（2026-08-14、原点回帰UX見直しの一環）。
+// 週間プランを1つも作っていなければ何も表示しない（そもそも「他に」何も無い状態で
+// 折りたたみを見せても意味が無いため、#mode-cards-detailsのsummary自体も隠して従来通り
+// カード2枚がそのまま並ぶ見た目に戻す＝.mode-cards-flat）。プランがあれば、今日が
+// 実行可能な内容(部位、または削除されていないテンプレート)なら「今日は○○の日です」＋
+// 「始める」を強調表示し、その代わり「要望から作る」「自分で作る」の2枚は
+// #mode-cards-detailsに折りたたむ（知識があって毎回作るのが面倒な人ほど、今日の
+// 提案だけ見えれば用が済む）。休みの日は変更を最小限にしたく、軽い一言だけ添えて
+// カードは従来通り開いたままにする。以前、専用の目立つバナーを別途置いて「うるさい」と
+// 指摘された経緯があるため、配色は.weekly-plan-day-row-todayと同じ抑えたaccent-dimに揃えている。
+function renderTodayFocus(plans, activeId, templates) {
+  const container = document.getElementById('today-focus-section');
+  const detailsEl = document.getElementById('mode-cards-details');
+  if (!container) return;
+
+  const setCardsFlat = (flat) => {
+    if (!detailsEl) return;
+    detailsEl.classList.toggle('mode-cards-flat', flat);
+    if (flat) detailsEl.open = true;
+  };
+
+  if (plans.length === 0) {
+    container.innerHTML = '';
+    setCardsFlat(true);
+    return;
+  }
+
+  const active = plans.find((p) => p.id === activeId) || plans[0];
+  const day = active.days[todayWeekdayIndex()];
+  const actionable = day && (
+    (day.kind === 'parts' && day.parts && day.parts.length > 0)
+    || (day.kind === 'template' && templates.some((t) => t.id === day.templateId))
+  );
+
+  if (actionable) {
+    container.innerHTML = `
+    <div class="today-focus-panel">
+      <div class="today-focus-title">今日は${escapeHtml(weeklyDayContentText(day, templates))}の日です</div>
+      <button type="button" class="today-focus-start-btn" data-weekly-plan-start-today>始める</button>
     </div>`;
-  }).join('')}</div>`;
+    setCardsFlat(false);
+    detailsEl.open = false;
+  } else {
+    container.innerHTML = '<p class="today-focus-rest">今日は休みの日です</p>';
+    setCardsFlat(true);
+  }
 }
 
 // モード選択画面の「週間プラン」セクション。プリセットが1つも無ければ他の2つのモードカードと

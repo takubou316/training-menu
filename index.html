@@ -21,16 +21,24 @@
     <section id="screen-mode" class="screen active">
       <h2>今日のメニューを作る</h2>
 
-      <div class="mode-choice">
-        <button type="button" class="mode-card" id="mode-request-btn">
-          <div class="mode-card-title">要望から作る</div>
-          <div class="mode-card-desc">部位・器具・時間などを選ぶと自動でメニューを組み立てます</div>
-        </button>
-        <button type="button" class="mode-card" id="mode-custom-btn">
-          <div class="mode-card-title">自分で作る</div>
-          <div class="mode-card-desc">種目・休憩時間などを自分で細かく決められます</div>
-        </button>
-      </div>
+      <!-- 週間プランの「今日」の予定。renderTodayFocus()(js/ui.js)が中身を出し分ける:
+           プラン未作成なら空、休みの日なら軽い一言、実行可能な予定があれば「始める」付きで
+           強調表示する。詳細はtraining-menu/CLAUDE.mdの原点回帰UX見直し節を参照。 -->
+      <div id="today-focus-section"></div>
+
+      <details id="mode-cards-details" class="wu-cd-toggle mode-cards-toggle">
+        <summary>他のメニューを作る</summary>
+        <div class="mode-choice">
+          <button type="button" class="mode-card" id="mode-request-btn">
+            <div class="mode-card-title">要望から作る</div>
+            <div class="mode-card-desc">部位・器具・時間などを選ぶと自動でメニューを組み立てます</div>
+          </button>
+          <button type="button" class="mode-card" id="mode-custom-btn">
+            <div class="mode-card-title">自分で作る</div>
+            <div class="mode-card-desc">種目・休憩時間などを自分で細かく決められます</div>
+          </button>
+        </div>
+      </details>
 
       <div id="weekly-plan-section"></div>
     </section>
