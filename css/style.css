@@ -1404,12 +1404,14 @@ body.modal-open {
   margin: 0 0 4px;
 }
 
-/* 操作は控えめなテキストリンクに留め、内容より目立たせない */
+/* 幅いっぱいを2等分したghost-pill-btnを並べる（2026-08-14、以前は控えめな
+   テキストリンクだった。他の輪郭ボタン群との統一のため変更） */
 .weekly-plan-links {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   margin-top: 12px;
 }
+.weekly-plan-links .ghost-pill-btn { flex: 1; }
 
 .weekly-plan-others-toggle { margin-top: 12px; }
 .weekly-plan-others-toggle .menu-block { margin-bottom: 0; }
@@ -1460,12 +1462,9 @@ body.modal-open {
    輪郭で示す）にしている。以前は「ほかのプランを見る」と同じ重い箱スタイル
    (.wu-cd-toggle)、その後は下線付きの色文字リンク(.text-link-btn風)を試したが、
    どちらも「スタイリッシュじゃない」という指摘があり、複数案を提示した上でこの形に
-   決まった（2026-08-14）。 */
-.mode-cards-toggle { margin-bottom: 12px; }
-.mode-cards-toggle summary {
-  display: block;
-  width: 100%;
-  text-align: center;
+   決まった（2026-08-14）。見た目自体は使い回せるよう.ghost-pill-btnとして共通化し、
+   週間プランの「編集する」「＋新しいプラン」にも同じ見た目を使っている。 */
+.ghost-pill-btn {
   cursor: pointer;
   font-size: 13px;
   color: var(--text);
@@ -1473,6 +1472,12 @@ body.modal-open {
   border: 1px solid var(--text-dim);
   border-radius: 999px;
   padding: 9px 12px;
+  text-align: center;
+}
+.mode-cards-toggle { margin-bottom: 12px; }
+.mode-cards-toggle summary.ghost-pill-btn {
+  display: block;
+  width: 100%;
   list-style: none;
 }
 .mode-cards-toggle summary::-webkit-details-marker { display: none; }

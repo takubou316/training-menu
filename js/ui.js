@@ -215,16 +215,17 @@ function renderWeeklyPlanSection(plans, activeId, templates) {
       </div>
     </details>` : '';
 
-  // 主役は「何が入っているか」なので、操作(編集する／＋新しいプランを作る)は控えめな
-  // テキストリンクにして、内容のほうが目立つようにする。
+  // 編集する／＋新しいプランを作るは、以前は控えめなテキストリンクだったが、
+  // 「他のメニューを作る」を輪郭pillボタンにしたのに合わせて2等分のボタンに変更した
+  // （Imagineで複数案を提示しユーザーが選んだI案、2026-08-14）。
   container.innerHTML = `
   <div class="menu-block weekly-plan-panel">
     <h3>週間プラン</h3>
     <div class="weekly-plan-active-name">📌 ${escapeHtml(active.name)}</div>
     ${daysHtml}
     <div class="weekly-plan-links">
-      <button type="button" class="text-link-btn" data-weekly-plan-edit="${active.id}">編集する</button>
-      <button type="button" class="text-link-btn" id="weekly-plan-new-btn">＋ 新しいプランを作る</button>
+      <button type="button" class="ghost-pill-btn" data-weekly-plan-edit="${active.id}">編集する</button>
+      <button type="button" class="ghost-pill-btn" id="weekly-plan-new-btn">＋ 新しいプラン</button>
     </div>
     ${othersHtml}
   </div>`;
