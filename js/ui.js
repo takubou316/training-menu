@@ -201,8 +201,8 @@ function renderWeeklyPlanSection(plans, activeId, templates) {
   const daysHtml = weeklyPlanDaysHtml(active.days, templates);
 
   const othersHtml = others.length > 0 ? `
-    <details class="wu-cd-toggle weekly-plan-others-toggle">
-      <summary>ほかのプランを見る（${others.length}件）</summary>
+    <details class="weekly-plan-others-toggle">
+      <summary class="ghost-pill-btn">ほかのプランを見る（${others.length}件）</summary>
       <div class="menu-block">
         ${others.map((p) => `
         <div class="template-item">

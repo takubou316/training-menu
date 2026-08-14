@@ -1414,7 +1414,13 @@ body.modal-open {
 .weekly-plan-links .ghost-pill-btn { flex: 1; }
 
 .weekly-plan-others-toggle { margin-top: 12px; }
-.weekly-plan-others-toggle .menu-block { margin-bottom: 0; }
+.weekly-plan-others-toggle .menu-block { margin-bottom: 0; margin-top: 12px; }
+.weekly-plan-others-toggle summary.ghost-pill-btn {
+  display: block;
+  width: 100%;
+  list-style: none;
+}
+.weekly-plan-others-toggle summary::-webkit-details-marker { display: none; }
 
 /* ===== モード選択画面：今日の予定の案内（2026-08-14、原点回帰UX見直し） ===== */
 /* 週間プランで今日の予定が実行可能な内容の時だけ、画面最上部にこれだけを見せ、
