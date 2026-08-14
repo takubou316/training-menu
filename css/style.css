@@ -1435,6 +1435,13 @@ body.modal-open {
    無いのに開閉できるように見せる意味が無いため）。 */
 .mode-cards-toggle.mode-cards-flat summary { display: none; }
 
+/* 閉じたdetailsの中身を隠すのはブラウザ標準の挙動任せにせず、ここで明示的に指定する。
+   .mode-choiceには`display: flex`を直接指定しており、ブラウザによってはこの指定が
+   標準の「閉じたdetailsの中身を隠す」処理より優先されてしまい、閉じているのに
+   カード2枚が表示されたまま残ることがあった（Chromeベースのプレビューでは問題なかったが
+   iPhone Safari実機で発覚。[[feedback_phone_real_device_verification]]と同種）。 */
+.mode-cards-toggle:not([open]) .mode-choice { display: none; }
+
 /* ===== 週間プラン画面：プラン名・空の状態 ===== */
 
 .weekly-editor-plan-name {
