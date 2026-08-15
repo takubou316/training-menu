@@ -387,7 +387,7 @@ function setRowSummaryText(set, holdBased) {
   return `${reps}・RPE${set.rpe}`;
 }
 
-function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml, disabled }) {
+function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml, disabled, tickStep }) {
   const labelHtml = field === 'rpe'
     ? `<span>${label} <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span>`
     : `<span>${label}</span>`;
@@ -399,7 +399,7 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
           <div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
           <div class="slider-track-row">
             <span class="slider-bound-label slider-bound-min">${min}</span>
-            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''}>
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''}${tickStep ? ` data-tick-step="${tickStep}"` : ''}>
             <span class="slider-bound-label slider-bound-max">${max}</span>
           </div>
           ${extraHtml || ''}
@@ -809,9 +809,10 @@ function renderLog(session) {
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
               min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
+              tickStep: ex.holdBased ? 30 : 5,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
-            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
+            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done, tickStep: 1 });
             return `
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
           <div class="set-row-head">
