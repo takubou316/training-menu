@@ -938,6 +938,25 @@ body.modal-open {
 .number-wheel-item.active { color: var(--text); font-weight: 700; font-size: 16px; }
 .slider-field:has(input:disabled) .number-wheel { opacity: 0.5; pointer-events: none; }
 
+/* 体重の初回手入力フォーム（2026-08-14）。一度も保存されていない間だけ表示する
+   （js/app.jsのrenderBodyWeightField）。数字ホイールと違い、ここだけは直接入力を許可する
+   （体重は「毎回選ぶ値」ではなく「一度決めたらそのまま使う値」のため）。 */
+.bodyweight-manual-row {
+  display: flex;
+  gap: 8px;
+}
+.bodyweight-manual-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 16px;
+}
+.bodyweight-manual-row .ghost-pill-btn { flex-shrink: 0; width: auto; }
+
 .set-pr-badge {
   margin: -2px 0 10px;
   padding: 7px 10px;

@@ -40,24 +40,60 @@ let currentMenu = null;
 let currentSession = null;
 let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
 
-// 体重スライダーは0〜150kgのように範囲を広く取ると、0.5kg刻みの微調整がスライダー1本の
-// 横幅の中でやりにくい(1pxあたりの変化量が大きくなるため)。回数スライダー(js/ui.jsの
-// repsInitialMax)と同じ考え方で、初期表示は現在値の前後15kgだけに絞った狭い範囲にし、
-// 端まで動かして指を離すとその方向へ10kgずつ広げる。
-const BODYWEIGHT_SLIDER_PADDING = 15;
-const BODYWEIGHT_SLIDER_EXTEND = 10;
-const BODYWEIGHT_SLIDER_ABS_MIN = 20;
-const BODYWEIGHT_SLIDER_ABS_MAX = 250;
+// 体重は回数/RPEと同じ数字ホイールで選ぶ(2026-08-14)。ただし体重は「毎回その場で選ぶ値」
+// ではなく「一度決めたらそのまま使い続ける値」という他と違う性質を持つため、一度も
+// 設定されていない最初の1回だけは数字入力(キーボード)で素早く正確に決められるようにし、
+// 一度でも設定された後は数字ホイールに切り替える（renderBodyWeightField参照）。
+// 「操作して選ぶ、直接入力させない」という他フィールドの方針の意図的な例外。
+const BODYWEIGHT_MIN = 20;
+const BODYWEIGHT_MAX = 200;
+const BODYWEIGHT_STEP = 0.5;
 
-// valueが今のmin〜maxの範囲外(初回表示・他方のスライダーとの同期・設定復元など)になった
-// 場合だけ、値の前後にpaddingを取った狭い範囲へ作り直す。範囲内に収まっている間は
-// (ユーザーが端まで伸ばした範囲を含めて)そのまま尊重し、勝手に狭め直さない。
-function applyBodyWeightSliderBounds(slider, value) {
-  const min = Number(slider.min);
-  const max = Number(slider.max);
-  if (value >= min && value <= max && max > min) return;
-  slider.min = Math.max(BODYWEIGHT_SLIDER_ABS_MIN, value - BODYWEIGHT_SLIDER_PADDING);
-  slider.max = Math.min(BODYWEIGHT_SLIDER_ABS_MAX, value + BODYWEIGHT_SLIDER_PADDING);
+function bodyWeightHasStoredValue() {
+  const settings = loadSettings();
+  return !!(settings && settings.bodyWeightKg != null);
+}
+
+// 体重欄(設定画面/自分で作る画面の2箇所)を、保存済みの値が無ければ手入力フォームに、
+// あれば数字ホイールに描画し直す。手入力フォームで確定した瞬間にもう一方の画面も
+// まとめて数字ホイールへ切り替わる(setBodyWeightKgの後にrenderBodyWeightFields()を呼ぶ)。
+function renderBodyWeightField(containerId, inputId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  if (!bodyWeightHasStoredValue()) {
+    container.innerHTML = `
+      <div class="bodyweight-manual-row">
+        <input type="number" inputmode="decimal" step="${BODYWEIGHT_STEP}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" class="bodyweight-manual-input" placeholder="例: 60">
+        <button type="button" class="ghost-pill-btn" data-bodyweight-manual-confirm="${inputId}">設定する</button>
+      </div>
+      <p class="error-text bodyweight-manual-error" hidden></p>`;
+    return;
+  }
+  container.innerHTML = `
+    ${numberWheelTrackHtml(BODYWEIGHT_MIN, BODYWEIGHT_MAX, BODYWEIGHT_STEP)}
+    <input type="range" id="${inputId}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" step="${BODYWEIGHT_STEP}" value="${getBodyWeightKg()}" hidden>`;
+  const slider = document.getElementById(inputId);
+  slider.addEventListener('input', () => setBodyWeightKg(Number(slider.value), true));
+}
+
+function renderBodyWeightFields() {
+  renderBodyWeightField('bodyweight-field', 'bodyweight-slider');
+  renderBodyWeightField('bodyweight-field-custom', 'bodyweight-slider-custom');
+}
+
+function confirmBodyWeightManualInput(inputId) {
+  const containerId = inputId === 'bodyweight-slider' ? 'bodyweight-field' : 'bodyweight-field-custom';
+  const container = document.getElementById(containerId);
+  const input = container.querySelector('.bodyweight-manual-input');
+  const errorEl = container.querySelector('.bodyweight-manual-error');
+  const value = Number(input.value);
+  if (!input.value || Number.isNaN(value) || value < BODYWEIGHT_MIN || value > BODYWEIGHT_MAX) {
+    errorEl.textContent = `${BODYWEIGHT_MIN}〜${BODYWEIGHT_MAX}の数字を入力してください`;
+    errorEl.hidden = false;
+    return;
+  }
+  setBodyWeightKg(Math.round(value * 2) / 2, true);
+  renderBodyWeightFields();
 }
 
 // 「自分で作る」モードの状態
@@ -315,7 +351,6 @@ function setBodyWeightKg(value, persist) {
   ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
     const slider = document.getElementById(id);
     if (!slider) return;
-    applyBodyWeightSliderBounds(slider, value);
     slider.value = value;
     // 2つのスライダーは値を同期しているが、ドラッグ中のブラウザ標準'input'イベントは
     // 操作した側にしか発火しない。ここで.valueを直接書き換えるだけのもう片方は
@@ -331,28 +366,25 @@ function setBodyWeightKg(value, persist) {
 }
 
 function wireBodyWeightSlider() {
-  ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
-    const slider = document.getElementById(id);
-    if (!slider) return;
-    slider.addEventListener('input', () => setBodyWeightKg(Number(slider.value), true));
-    // ドラッグ中(input)ではなく指を離した瞬間(change)にだけ範囲を伸ばす。回数スライダー
-    // (js/app.jsのhandleLogInput)と同じ理由で、input時に伸ばすとドラッグ中に範囲が
-    // 先回りして伸びてしまい「端まで行って離すと伸びる」という直感的な挙動にならないため。
-    slider.addEventListener('change', () => {
-      const value = Number(slider.value);
-      let extended = false;
-      if (value >= Number(slider.max)) {
-        slider.max = Math.min(BODYWEIGHT_SLIDER_ABS_MAX, Number(slider.max) + BODYWEIGHT_SLIDER_EXTEND);
-        extended = true;
-      }
-      if (value <= Number(slider.min)) {
-        slider.min = Math.max(BODYWEIGHT_SLIDER_ABS_MIN, Number(slider.min) - BODYWEIGHT_SLIDER_EXTEND);
-        extended = true;
-      }
-      // 範囲を伸ばすとmin/maxが変わり、値は同じでも塗りつぶしの割合(--slider-fill)は
-      // 変わるはずなのに、次にドラッグするまで古い割合(伸ばす前は100%等)のまま残って
-      // しまっていた（実機で「塗られ過ぎている」ように見えるバグとして発覚）。
-      if (extended) updateSliderTrackFill(slider);
+  renderBodyWeightFields();
+
+  // 手入力フォームの「設定する」ボタン。フォーム自体は保存済みの値が無い間だけ
+  // renderBodyWeightFieldが描画するので、コンテナへの委譲で拾う(ボタンが後から
+  // 描画されても効くように)。
+  ['bodyweight-field', 'bodyweight-field-custom'].forEach((containerId) => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-bodyweight-manual-confirm]');
+      if (btn) confirmBodyWeightManualInput(btn.dataset.bodyweightManualConfirm);
+    });
+    // Enterキーでも確定できるようにする(スマホの数字キーボードの「完了」相当)。
+    container.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const input = e.target.closest('.bodyweight-manual-input');
+      if (!input) return;
+      e.preventDefault();
+      confirmBodyWeightManualInput(container.id === 'bodyweight-field' ? 'bodyweight-slider' : 'bodyweight-slider-custom');
     });
   });
 }
@@ -550,12 +582,14 @@ function numberWheelCommit(track) {
   }
 }
 
+// レイアウト(要素の幅)は挿入した時点で同期的に取得できるため、requestAnimationFrameで
+// 次の描画まで待つ必要は無い(以前はrAFで包んでいたが、Browserペインが非表示で描画が
+// 止まっている状況(タブが裏に回っている等)ではrAF自体が発火せず初期位置合わせが
+// 永久に行われないことがあると判明したため、同期呼び出しに変更した)。
 function initNumberWheel(track) {
   const input = numberWheelHiddenInput(track);
-  requestAnimationFrame(() => {
-    if (input) numberWheelScrollToValue(track, input.value, false);
-    numberWheelUpdateActive(track);
-  });
+  if (input) numberWheelScrollToValue(track, input.value, false);
+  numberWheelUpdateActive(track);
 }
 
 const numberWheelScrollTimers = new WeakMap();

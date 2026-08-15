@@ -407,25 +407,33 @@ function sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBas
 // その<input>にセットしてinput/changeイベントを発火させることで、handleLogInput側の
 // 既存ロジック(値の反映・disabled化・RPE残りレップ表示・自己ベスト判定など)をそのまま
 // 使い回している。ホイール自体の描画・ドラッグ処理はjs/app.jsのwireNumberWheels。
-function numberWheelHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, disabled, extraHtml }) {
+// 数字ホイールの中身(トラック+目盛り代わりの数字一覧)だけを組み立てる共通部品。
+// 呼び出し側(numberWheelHtml、休憩時間・体重用の各関数)がラベル行や<input>を
+// それぞれの文脈に合わせて足す。
+function numberWheelTrackHtml(min, max, step) {
   const stepsCount = Math.round((max - min) / step);
   const itemsHtml = Array.from({ length: stepsCount + 1 }, (_, i) => {
     const n = Math.round((min + i * step) * 10) / 10;
     return `<div class="number-wheel-item" data-n="${n}">${n}</div>`;
   }).join('');
   return `
-        <div class="slider-field">
-          ${sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased)}
           <div class="number-wheel">
             <div class="number-wheel-highlight"></div>
             <div class="number-wheel-fade-left"></div>
             <div class="number-wheel-fade-right"></div>
-            <div class="number-wheel-track" data-wheel-for="${field}">
+            <div class="number-wheel-track">
               <div class="number-wheel-spacer"></div>
               ${itemsHtml}
               <div class="number-wheel-spacer"></div>
             </div>
-          </div>
+          </div>`;
+}
+
+function numberWheelHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, disabled, extraHtml }) {
+  return `
+        <div class="slider-field">
+          ${sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased)}
+          ${numberWheelTrackHtml(min, max, step)}
           <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''} hidden>
           ${extraHtml || ''}
         </div>`;
@@ -527,14 +535,13 @@ function renderCustomExerciseList(customExercises, customRestSec) {
         ? '<span class="picker-item-cardio-badge">有酸素種目</span>'
         : (() => {
           const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
+          // 回数/RPEと同じ数字ホイールに統一（2026-08-14）。以前はスライダーだったが、
+          // 見た目・使い勝手の方針を数字ホイールに揃えることになったため合わせた。
           return `
       <div class="slider-field">
         <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
-        <div class="slider-track-row">
-          <span class="slider-bound-label slider-bound-min">0秒</span>
-          <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
-          <span class="slider-bound-label slider-bound-max">300秒</span>
-        </div>
+        ${numberWheelTrackHtml(0, 300, 15)}
+        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}" hidden>
       </div>`;
         })();
       return `
