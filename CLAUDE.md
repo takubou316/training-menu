@@ -134,7 +134,34 @@ RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。これは�
 （Reps in Reserveベース、Zourdos et al. 2016、NSCA発行のStrength and Conditioning Journal掲載）に基づく。
 回数・秒数スライダーはどちらも1刻みで細かく動かせる。回数側は上限(max)だけ常に現在値の1段上まで
 （例: 10回なら上限20）にしてあり、右端まで動かして指を離すとさらに+10ずつ上限が伸びる
-（`js/ui.js`の`repsInitialMax`、`js/app.js`の`handleLogInput`）。
+（`js/ui.js`の`repsInitialMax`、`js/app.js`の`handleLogInput`）。体重スライダーにも同じ考え方を
+2026-08-14に適用済み（下記「体重スライダーの範囲」参照）。
+
+## スライダー全般の見た目・使い勝手（2026-08-14）
+
+「見た目が古い・チープ」「微調整しづらい」という指摘を受けて、アプリ内の全スライダー
+（`.slider-field input[type="range"]`。体重・重量・回数・RPE・休憩時間・有酸素の時間/距離）に
+以下の改善を入れた:
+
+- **見た目**: トラックを太く(8px)・つまみを大きく(26px円)し、現在値までを`--accent`で塗って
+  進捗を一目で分かるようにした（以前は`accent-color`だけでブラウザ標準の見た目に任せていた）。
+  WebKit(iOS Safari)には`::-webkit-slider-progress`が無いため、塗りは`--slider-fill`カスタム
+  プロパティ+トラック背景のグラデーションで表現している（`js/app.js`の`updateSliderTrackFill`）。
+- **ドラッグ中の値バブル**: つまみの真上に、隣の`.slider-value`ラベルと同じ表記（例:「87 kg」
+  「RPE 7」）を吹き出しで表示する。指を離すと消える（`showSliderBubble`/`positionSliderBubble`/
+  `hideSliderBubble`）。
+- **配線方法**: 個々の描画箇所(`sliderFieldHtml`等)を1つずつ直す代わりに、`document`レベルの
+  イベント委譲(`input`/`pointerdown`/`pointerup`)と`MutationObserver`（`#main`配下に新しく
+  スライダーが描画されるたびに自動で塗りを初期化）で一括対応している(`wireSliderEnhancements`)。
+  今後スライダーを新設しても、この配線を個別に増やす必要はない。
+
+### 体重スライダーの範囲（2026-08-14）
+
+以前は`min=30 max=150`の固定範囲で、0.5kg刻みの微調整がスライダー1本の横幅の中でやりにくい
+（1pxあたりの変化量が大きい）と指摘があった。回数スライダー(`repsInitialMax`)と同じ考え方で、
+初期表示は現在値の前後15kgだけに絞った狭い範囲にし、端まで動かして指を離すとその方向へ10kgずつ
+広げる（`applyBodyWeightSliderBounds`、`wireBodyWeightSlider`内の`change`リスナー）。回数と違い
+下限側にも同じ仕組みがある（軽い方に外れた人にも対応するため）。
 
 ## ローカル起動
 
