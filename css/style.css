@@ -852,6 +852,27 @@ body.modal-open {
 
 .set-row .set-idx { font-size: 13px; font-weight: 600; color: var(--text-dim); }
 
+/* セット行は縦に何段も重なる密な文脈なので、他画面のスライダーより一回り
+   コンパクトにする（2026-08-14）。「大きくて邪魔に見える」という指摘があったため、
+   太いトラック・大きいつまみはそのままに、セット行の中でだけ縮小している。 */
+.set-row .slider-field { margin-bottom: 6px; }
+.set-row .slider-field input[type="range"] { height: 22px; }
+.set-row .slider-field input[type="range"]::-webkit-slider-runnable-track { height: 5px; }
+.set-row .slider-field input[type="range"]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6.5px;
+  border-width: 2px;
+}
+.set-row .slider-field input[type="range"]::-moz-range-track { height: 5px; }
+.set-row .slider-field input[type="range"]::-moz-range-progress { height: 5px; }
+.set-row .slider-field input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+.set-row .slider-bound-label { font-size: 10px; min-width: 14px; }
+
 .set-pr-badge {
   margin: -2px 0 10px;
   padding: 7px 10px;
@@ -871,9 +892,35 @@ body.modal-open {
   color: var(--text);
   padding: 6px 4px;
 }
+/* 以前はブラウザ標準のチェックボックス(ただの白い箱)まかせで、ダークテーマに
+   馴染んでいなかった（2026-08-14指摘）。輪郭だけの角丸ボックスにし、チェック時は
+   accent色で塗りつぶし、チェックマークはCSSのみ(枠線を回転させる手法)で描く。 */
 .done-toggle input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  border: 2px solid var(--text-dim);
+  background: var(--surface);
+  cursor: pointer;
+  position: relative;
+}
+.done-toggle input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.done-toggle input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 6px;
+  height: 11px;
+  border: solid #0b1210;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .slider-field { margin-bottom: 10px; }
