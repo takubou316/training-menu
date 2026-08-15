@@ -509,7 +509,7 @@ function updateExercisePickerEquipmentNote() {
   }
   note.hidden = false;
   document.getElementById('exercise-picker-equipment-note-text').textContent = exercisePickerEquipmentFilterActive
-    ? '②で選んだ器具のみ表示中（有酸素は除く）'
+    ? '設定画面で選んだ器具のみ表示中（有酸素は除く）'
     : 'すべての器具の種目を表示中';
   document.getElementById('exercise-picker-equipment-toggle').textContent = exercisePickerEquipmentFilterActive
     ? 'すべて表示する'
