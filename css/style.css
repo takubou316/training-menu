@@ -1494,24 +1494,22 @@ body.modal-open {
 
 /* ===== 豆知識画面 ===== */
 
+/* 以前はaccent-dimのベタ塗り箱+白文字だったが、他の強調表示
+   （.today-focus-panel、.section-toggle）と同じ「箱を作らず左にアクセント線」に
+   揃えた（2026-08-14）。文字色の上書きも撤廃し、下の.knowledge-q/.knowledge-a/
+   .knowledge-sourceと同じ通常の配色（Q.はaccent、本文はtext-dim）を使う。 */
 .knowledge-today-tip {
-  background: var(--accent-dim);
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  padding: 14px;
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px 8px 14px;
   margin-bottom: 16px;
 }
 
 .knowledge-today-tip-label {
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--accent);
   margin-bottom: 8px;
 }
-
-.knowledge-today-tip .knowledge-q { color: #fff; }
-.knowledge-today-tip .knowledge-a { color: #fff; }
-.knowledge-today-tip .knowledge-source { color: rgba(255, 255, 255, 0.75); }
 
 #knowledge-search {
   width: 100%;
