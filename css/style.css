@@ -1424,6 +1424,11 @@ body.modal-open {
   border-top: 1px solid var(--border);
   background: var(--surface);
   padding-bottom: env(safe-area-inset-bottom, 0);
+  /* z-indexを明示していなかったため、#main配下でz-index(例: .number-wheel-highlightの
+     z-index:2)を持つ要素がスタッキングの都合でこのボトムナビより上に描画されてしまう
+     ことがあった（2026-08-14、実機とPCブラウザ両方で発覚）。.app-headerと同じ10にして
+     スクロールしてきたページ内容より必ず手前に来るようにする。 */
+  z-index: 10;
 }
 
 .nav-btn {
