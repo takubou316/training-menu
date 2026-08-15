@@ -809,10 +809,9 @@ function renderLog(session) {
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
               min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
-              tickStep: ex.holdBased ? 30 : 5,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
-            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done, tickStep: 1 });
+            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
             return `
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
           <div class="set-row-head">
