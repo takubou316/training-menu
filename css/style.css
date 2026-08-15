@@ -288,7 +288,7 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   color: var(--text-dim);
 }
 .exercise-picker-equipment-note[hidden] { display: none; }
-.exercise-picker-equipment-note .text-link-btn { flex-shrink: 0; font-size: 12px; }
+.exercise-picker-equipment-note .ghost-pill-btn { flex-shrink: 0; font-size: 12px; padding: 6px 12px; }
 
 .picker-filter-btn.active {
   border-color: var(--accent);

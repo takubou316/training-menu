@@ -355,6 +355,8 @@ UIを検証しており、以下はその試作で固まった設計判断（実
 | 「保存した組み合わせから読み込む」（自分で作る画面） | `.wu-cd-toggle`箱 | 幅いっぱいの`.ghost-pill-btn` |
 | 「前回の記録へ／次の記録へ」（カレンダー詳細、`.jump-links`） | `.text-link-btn`下線リンク | 幅いっぱいを2等分した`.ghost-pill-btn`×2 |
 | 「セットの詳細を見る」（記録カード内、`.detail-toggle-btn`） | `.text-link-btn`下線リンク | 中身の幅だけの`.ghost-pill-btn`（カードごとに繰り返し出るため他より一回り小さいコンパクト版、`font-size:12px; padding:6px 12px;`） |
+| 「この組み合わせを保存」（自分で作る画面、`.template-save-row`） | `.text-link-btn`下線リンク | 中身の幅だけの`.ghost-pill-btn`（右寄せ、通常サイズ） |
+| 器具絞り込みトグル「すべて表示する／器具で絞り込む」（種目ピッカー、`.exercise-picker-equipment-note`） | `.text-link-btn`下線リンク | 中身の幅だけの`.ghost-pill-btn`（ノート行に収まるコンパクト版、`font-size:12px; padding:6px 12px;`） |
 
 **ウォームアップ/クールダウン（記録画面）だけは例外的に別スタイル。** これらは「もっと見る」的な
 軽い操作ではなく記録画面本編の1セクションなので、`.section-toggle`という専用クラスにした
