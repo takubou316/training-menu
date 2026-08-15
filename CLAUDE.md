@@ -154,6 +154,18 @@ RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。これは�
   イベント委譲(`input`/`pointerdown`/`pointerup`)と`MutationObserver`（`#main`配下に新しく
   スライダーが描画されるたびに自動で塗りを初期化）で一括対応している(`wireSliderEnhancements`)。
   今後スライダーを新設しても、この配線を個別に増やす必要はない。
+- **トラック両脇の範囲表示**: 「どこまで動かせばどれだけ数字が動くか分からない」「知らないうちに
+  大きく動かしすぎる」という指摘を受け、トラックの両脇に今のmin/maxを薄いラベルで表示する
+  （`.slider-track-row`/`.slider-bound-label`）。体重・回数のように端で範囲(min/max)が伸びる
+  スライダーは、`updateSliderTrackFill`の中で`updateSliderBoundLabels`も呼ぶことでラベルの
+  表示も追従させている。秒数系(休憩時間・有酸素の時間)は分:秒表記に変換して表示する
+  （`formatSliderBoundLabel`）。
+- **既知の罠（実機のみで発覚）**: 端まで動かして範囲(min/max)を伸ばす処理の直後、塗りつぶし
+  (`--slider-fill`)を再計算していないと、伸ばす前の古い割合が残ってしまうバグがあった
+  （体重・回数の両方で発生）。範囲を書き換える箇所では必ず`updateSliderTrackFill`もセットで
+  呼ぶこと。また体重スライダーは設定画面/自分で作る画面の2箇所で値を同期しているが、
+  `.value`を直接書き換えるだけではブラウザ標準の`input`イベントは発火しないため、
+  操作していない側は`setBodyWeightKg`内で明示的に`updateSliderTrackFill`を呼ぶ必要がある。
 
 ### 体重スライダーの範囲（2026-08-14）
 
