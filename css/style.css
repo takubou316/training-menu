@@ -929,10 +929,27 @@ body.modal-open {
    JS側から更新する。WebKit(iOS Safari)には::-webkit-slider-progressが無いため、
    トラック背景のグラデーションで塗りを表現している(Firefoxは::-moz-range-progress
    で標準対応)。*/
+/* トラックの両脇に今の範囲(min/max)を表示する（2026-08-14）。範囲が見えないと
+   「どこまで動かせばどれだけ数字が動くか」が分からず、体重のように端で範囲が伸びる
+   スライダーだと知らないうちに大きく動かしすぎてしまうと指摘があった。 */
+.slider-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.slider-bound-label {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-dim);
+  min-width: 18px;
+}
+.slider-bound-label.slider-bound-max { text-align: right; }
+
 .slider-field input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 28px;
   background: transparent;
   cursor: pointer;

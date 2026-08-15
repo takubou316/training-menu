@@ -375,6 +375,35 @@ function updateSliderTrackFill(slider) {
   const value = Number(slider.value);
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   slider.style.setProperty('--slider-fill', `${pct}%`);
+  updateSliderBoundLabels(slider);
+}
+
+// トラック両脇の範囲表示(.slider-bound-min/.slider-bound-max)を、今のmin/maxに合わせて
+// 更新する。体重・回数のように端まで動かすと範囲が伸びるスライダーでは、この表示も
+// 追従しないと「今どこまで動かせるか」が伝わらない。塗り(--slider-fill)と同じタイミングで
+// 常に呼ぶことで更新漏れを防ぐ(呼ぶだけなら値が同じでも害はない)。
+function updateSliderBoundLabels(slider) {
+  const row = slider.closest('.slider-track-row');
+  if (!row) return;
+  const minEl = row.querySelector('.slider-bound-min');
+  const maxEl = row.querySelector('.slider-bound-max');
+  if (minEl) minEl.textContent = formatSliderBoundLabel(slider, slider.min);
+  if (maxEl) maxEl.textContent = formatSliderBoundLabel(slider, slider.max);
+}
+
+// 秒数系(休憩時間・有酸素の時間)は生の秒数だと読みにくいので、既存の分:秒表記を流用する。
+// それ以外は単位を付けず素の数値のみ(値側のラベルで単位が分かるため、両端まで繰り返さない)。
+function formatSliderBoundLabel(slider, rawValue) {
+  if (slider.dataset.cardioField === 'duration') {
+    return `${Math.round(Number(rawValue) / 60)}分`;
+  }
+  if (slider.dataset.cardioField === 'distance') {
+    return `${rawValue}km`;
+  }
+  if (slider.hasAttribute('data-custom-rest')) {
+    return `${rawValue}秒`;
+  }
+  return rawValue;
 }
 
 let sliderValueBubbleEl = null;

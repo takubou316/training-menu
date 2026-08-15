@@ -389,7 +389,11 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
   return `
         <div class="slider-field">
           <div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
-          <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
+          <div class="slider-track-row">
+            <span class="slider-bound-label slider-bound-min">${min}</span>
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
+            <span class="slider-bound-label slider-bound-max">${max}</span>
+          </div>
           ${extraHtml || ''}
         </div>`;
 }
@@ -480,7 +484,11 @@ function renderCustomExerciseList(customExercises, customRestSec) {
           return `
       <div class="slider-field">
         <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
-        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
+        <div class="slider-track-row">
+          <span class="slider-bound-label slider-bound-min">0秒</span>
+          <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}">
+          <span class="slider-bound-label slider-bound-max">300秒</span>
+        </div>
       </div>`;
         })();
       return `
@@ -844,13 +852,21 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       ${sparklineHtml}
       <div class="slider-field">
         <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>
-        <input type="range" min="0" max="7200" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+        <div class="slider-track-row">
+          <span class="slider-bound-label slider-bound-min">0分</span>
+          <input type="range" min="0" max="7200" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+          <span class="slider-bound-label slider-bound-max">120分</span>
+        </div>
         <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
       </div>
       ${ex.hasDistance ? `
       <div class="slider-field">
         <div class="slider-label"><span>距離</span><span class="slider-value">${Number(ex.distance).toFixed(1)}km</span></div>
-        <input type="range" min="0" max="20" step="0.1" value="${ex.distance}" data-cardio-ex="${exIndex}" data-cardio-field="distance">
+        <div class="slider-track-row">
+          <span class="slider-bound-label slider-bound-min">0km</span>
+          <input type="range" min="0" max="20" step="0.1" value="${ex.distance}" data-cardio-ex="${exIndex}" data-cardio-field="distance">
+          <span class="slider-bound-label slider-bound-max">20km</span>
+        </div>
       </div>` : ''}
       <div class="ex-note" data-cardio-calorie="${exIndex}">推定消費カロリー: 約${Math.round(calories)}kcal</div>
       <div class="ex-note" data-cardio-rest-summary="${exIndex}" ${(ex.restLog && ex.restLog.length) ? '' : 'hidden'}>${formatCardioRestSummary(ex.restLog)}</div>
