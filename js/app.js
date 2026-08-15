@@ -317,6 +317,11 @@ function setBodyWeightKg(value, persist) {
     if (!slider) return;
     applyBodyWeightSliderBounds(slider, value);
     slider.value = value;
+    // 2つのスライダーは値を同期しているが、ドラッグ中のブラウザ標準'input'イベントは
+    // 操作した側にしか発火しない。ここで.valueを直接書き換えるだけのもう片方は
+    // 塗りつぶし(--slider-fill)の再計算が呼ばれないまま古い割合が残ってしまうため、
+    // 両方とも明示的に更新する。
+    updateSliderTrackFill(slider);
   });
   ['bodyweight-value', 'bodyweight-value-custom'].forEach((id) => {
     const el = document.getElementById(id);
@@ -335,12 +340,19 @@ function wireBodyWeightSlider() {
     // 先回りして伸びてしまい「端まで行って離すと伸びる」という直感的な挙動にならないため。
     slider.addEventListener('change', () => {
       const value = Number(slider.value);
+      let extended = false;
       if (value >= Number(slider.max)) {
         slider.max = Math.min(BODYWEIGHT_SLIDER_ABS_MAX, Number(slider.max) + BODYWEIGHT_SLIDER_EXTEND);
+        extended = true;
       }
       if (value <= Number(slider.min)) {
         slider.min = Math.max(BODYWEIGHT_SLIDER_ABS_MIN, Number(slider.min) - BODYWEIGHT_SLIDER_EXTEND);
+        extended = true;
       }
+      // 範囲を伸ばすとmin/maxが変わり、値は同じでも塗りつぶしの割合(--slider-fill)は
+      // 変わるはずなのに、次にドラッグするまで古い割合(伸ばす前は100%等)のまま残って
+      // しまっていた（実機で「塗られ過ぎている」ように見えるバグとして発覚）。
+      if (extended) updateSliderTrackFill(slider);
     });
   });
 }
