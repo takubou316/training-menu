@@ -882,13 +882,17 @@ body.modal-open {
    慣性で数字を読み取るタイミングが難しいため、JS側で確実に合わせ直す）。
    完了(disabled)にすると操作不可＋薄く表示する。 */
 .number-wheel { position: relative; }
+/* 高さをtop:0/bottom:0で親いっぱいに伸ばす書き方をしていたところ、実機(iPhone Safari)で
+   この枠線が画面下端(固定表示のボトムナビ付近)まで伸びてしまう不具合が報告された
+   （PCのプレビューでは再現せず）。原因を確実に断定できていないが、伸縮に頼らない
+   固定高さ+縦中央寄せの指定に変更して回避した（2026-08-14）。 */
 .number-wheel-highlight {
   position: absolute;
   left: 50%;
-  top: 0;
-  bottom: 0;
+  top: 50%;
   width: 40px;
-  transform: translateX(-50%);
+  height: 36px;
+  transform: translate(-50%, -50%);
   border-left: 1.5px solid var(--accent);
   border-right: 1.5px solid var(--accent);
   border-radius: 6px;
@@ -899,7 +903,7 @@ body.modal-open {
 .number-wheel-fade-right {
   position: absolute;
   top: 0;
-  bottom: 0;
+  height: 36px;
   width: 28px;
   z-index: 1;
   pointer-events: none;
