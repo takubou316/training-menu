@@ -376,6 +376,23 @@ function updateSliderTrackFill(slider) {
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   slider.style.setProperty('--slider-fill', `${pct}%`);
   updateSliderBoundLabels(slider);
+  updateSliderTickPeriod(slider);
+}
+
+// data-tick-step="10"のように「何単位ごとに目盛りを引くか」を指定したスライダーだけ、
+// 今のmin/maxに対する目盛り間隔を%で計算してCSS側に渡す(体重スライダーで指定、
+// 2026-08-14)。端で範囲(min/max)が伸びるスライダーでも、間隔がその都度計算し直されるので
+// 常に「10kgごと」等が保たれる。指定が無いスライダーは--slider-tick-period(既定100%)の
+// ままで目盛りが表示されない。
+function updateSliderTickPeriod(slider) {
+  const tickStep = Number(slider.dataset.tickStep);
+  if (!tickStep) return;
+  const min = Number(slider.min) || 0;
+  const max = Number(slider.max) || 100;
+  const span = max - min;
+  if (span <= 0) return;
+  const periodPct = (tickStep / span) * 100;
+  slider.style.setProperty('--slider-tick-period', `${periodPct}%`);
 }
 
 // トラック両脇の範囲表示(.slider-bound-min/.slider-bound-max)を、今のmin/maxに合わせて

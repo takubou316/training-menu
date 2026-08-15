@@ -954,13 +954,23 @@ body.modal-open {
   background: transparent;
   cursor: pointer;
   --slider-fill: 0%;
+  /* 目盛りの間隔。data-tick-step付きのスライダーだけJS(updateSliderTickPeriod)が
+     具体的な%を計算して上書きする。既定は100%(＝目盛りが実質見えない)にして、
+     目盛り無しのスライダーに影響しないようにしている。 */
+  --slider-tick-period: 100%;
 }
 .slider-field input[type="range"]::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 999px;
-  background: linear-gradient(to right,
-    var(--accent) 0%, var(--accent) var(--slider-fill),
-    var(--border) var(--slider-fill), var(--border) 100%);
+  /* 2枚のbackgroundを重ねている: 上に目盛り用の縦線(bgの色で塗りに切れ込みを入れる)、
+     下に現在値までの塗り。data-tick-step無しのスライダーは--slider-tick-periodが
+     既定の100%のままなので、縦線は実質見えない。 */
+  background:
+    repeating-linear-gradient(to right,
+      var(--bg) 0, var(--bg) 2px, transparent 2px, transparent var(--slider-tick-period)),
+    linear-gradient(to right,
+      var(--accent) 0%, var(--accent) var(--slider-fill),
+      var(--border) var(--slider-fill), var(--border) 100%);
 }
 .slider-field input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
@@ -976,7 +986,10 @@ body.modal-open {
 .slider-field input[type="range"]::-moz-range-track {
   height: 8px;
   border-radius: 999px;
-  background: var(--border);
+  background:
+    repeating-linear-gradient(to right,
+      var(--bg) 0, var(--bg) 2px, transparent 2px, transparent var(--slider-tick-period)),
+    var(--border);
 }
 .slider-field input[type="range"]::-moz-range-progress {
   height: 8px;
