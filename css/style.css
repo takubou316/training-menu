@@ -1091,15 +1091,6 @@ body.modal-open {
   margin: 4px 0 8px;
 }
 
-.text-link-btn {
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 13px;
-  text-decoration: underline;
-  cursor: pointer;
-}
 
 .template-name-input {
   width: 100%;
@@ -1159,34 +1150,8 @@ body.modal-open {
   cursor: pointer;
 }
 
-.wu-cd-toggle {
-  margin-bottom: 12px;
-}
-.wu-cd-toggle summary {
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--accent);
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  list-style: none;
-}
-.wu-cd-toggle summary::-webkit-details-marker { display: none; }
-.wu-cd-toggle[open] summary {
-  border-radius: 10px 10px 0 0;
-  border-bottom: none;
-}
-.wu-cd-toggle .menu-block {
-  border-radius: 0;
-  border-top: none;
-}
-.wu-cd-toggle .menu-block:last-child {
-  border-radius: 0 0 10px 10px;
-}
-
 /* ウォームアップ/クールダウンは「もっと見る」的な軽い操作ではなく、記録画面本編の
-   1セクションなので、他の折りたたみ(.wu-cd-toggle)と違って箱で囲まず、章見出しらしい
+   1セクションなので、他の折りたたみ(.ghost-pill-btn)と違って箱で囲まず、章見出しらしい
    スタイルにしている（左にアクセントの縦線、太字タイトル、開閉を示すシェブロン）。
    Imagine(mcp__visualize)で複数案を提示しユーザーが選んだ形（2026-08-14）。 */
 .section-toggle { margin-bottom: 16px; }
