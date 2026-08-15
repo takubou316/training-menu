@@ -345,6 +345,97 @@ function wireBodyWeightSlider() {
   });
 }
 
+// ===== スライダー全般の見た目強化（塗りつぶしトラック＋ドラッグ中の値バブル） =====
+// アプリ内の`.slider-field input[type="range"]`（体重・重量・回数・RPE・休憩時間・
+// 有酸素の時間/距離など）すべてに共通で効かせる。個々の描画箇所(sliderFieldHtml等)を
+// 増やしても自動的に対応できるよう、個別に配線せずdocumentレベルのイベント委譲と
+// MutationObserverで一括対応している。
+
+const SLIDER_THUMB_SIZE = 26; // css側の::-webkit-slider-thumb/::-moz-range-thumbの幅と合わせる
+
+// WebKit(iOS Safari)には::-webkit-slider-progressが無く、塗りつぶしはトラック背景の
+// グラデーションで表現するしかないため、現在値の割合を--slider-fillカスタムプロパティに
+// 反映する。Firefoxは::-moz-range-progressで標準対応しているため実質上書き不要だが、
+// 呼んでも害はない。
+function updateSliderTrackFill(slider) {
+  const min = Number(slider.min) || 0;
+  const max = Number(slider.max) || 100;
+  const value = Number(slider.value);
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  slider.style.setProperty('--slider-fill', `${pct}%`);
+}
+
+let sliderValueBubbleEl = null;
+
+function ensureSliderValueBubble() {
+  if (!sliderValueBubbleEl) {
+    sliderValueBubbleEl = document.createElement('div');
+    sliderValueBubbleEl.className = 'slider-value-bubble';
+    document.body.appendChild(sliderValueBubbleEl);
+  }
+  return sliderValueBubbleEl;
+}
+
+// バブルの位置・中身をスライダーの現在位置に合わせる。中身は隣の.slider-valueラベル
+// （単位付きの表示、例:「87 kg」「RPE 7」）をそのまま流用し、表記を二重管理しない。
+function positionSliderBubble(slider) {
+  const bubble = ensureSliderValueBubble();
+  const rect = slider.getBoundingClientRect();
+  const min = Number(slider.min) || 0;
+  const max = Number(slider.max) || 100;
+  const pct = max > min ? (Number(slider.value) - min) / (max - min) : 0;
+  const x = rect.left + SLIDER_THUMB_SIZE / 2 + pct * (rect.width - SLIDER_THUMB_SIZE);
+  bubble.style.left = `${x}px`;
+  bubble.style.top = `${rect.top - 8}px`;
+  const valueLabel = slider.closest('.slider-field')?.querySelector('.slider-value');
+  bubble.textContent = valueLabel ? valueLabel.textContent : slider.value;
+}
+
+function showSliderBubble(slider) {
+  positionSliderBubble(slider);
+  ensureSliderValueBubble().classList.add('visible');
+}
+
+function hideSliderBubble() {
+  if (sliderValueBubbleEl) sliderValueBubbleEl.classList.remove('visible');
+}
+
+function isRangeInput(el) {
+  return el instanceof HTMLInputElement && el.type === 'range';
+}
+
+function wireSliderEnhancements() {
+  document.querySelectorAll('input[type="range"]').forEach(updateSliderTrackFill);
+
+  // 新しく描画されたスライダー(記録画面の再描画、種目追加など)にも自動で塗りを反映する。
+  new MutationObserver((mutations) => {
+    mutations.forEach((m) => {
+      m.addedNodes.forEach((node) => {
+        if (node.nodeType !== 1) return;
+        if (isRangeInput(node)) updateSliderTrackFill(node);
+        node.querySelectorAll?.('input[type="range"]').forEach(updateSliderTrackFill);
+      });
+    });
+  }).observe(document.getElementById('main'), { childList: true, subtree: true });
+
+  // 値ラベル(.slider-value)の更新は各画面固有のリスナー(handleLogInput等、スライダーの
+  // 直近の祖先要素に登録)が担当している。DOMのバブリングでは、targetに近い祖先の
+  // リスナーほど先に呼ばれるため、documentに登録したこの'input'リスナーが呼ばれる頃には
+  // 値ラベルは既に更新済み。バブルの表示文言はそれをそのまま読むだけでよい。
+  document.addEventListener('input', (e) => {
+    if (!isRangeInput(e.target)) return;
+    updateSliderTrackFill(e.target);
+    if (sliderValueBubbleEl?.classList.contains('visible')) positionSliderBubble(e.target);
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!isRangeInput(e.target)) return;
+    showSliderBubble(e.target);
+  });
+  ['pointerup', 'pointercancel'].forEach((evt) => {
+    document.addEventListener(evt, hideSliderBubble);
+  });
+}
+
 // ===== 「自分で作る」モード =====
 
 function recomputeCustomWarmupCooldown() {
@@ -1242,6 +1333,7 @@ function init() {
   wirePartExclusivity();
   wirePainExclusivity();
   wireBodyWeightSlider();
+  wireSliderEnhancements();
   wireCustomScreen();
   wireExercisePicker();
   wireMenuScreen();
