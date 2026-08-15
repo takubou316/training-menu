@@ -884,43 +884,55 @@ body.modal-open {
   font-weight: 700;
 }
 
+/* 「完了」は四角い箱+チェックマークではなく、単語ごとピル状のボタンとして
+   トグルする方式にした（2026-08-14、複数案から選定）。チェックボックス自体は
+   アクセシビリティ/フォーム上の状態管理のために残すが視覚的には隠し(sr-only化)、
+   隣の.done-toggle-pillをボタンとして見せる。<label>で包んでいるのでピル部分の
+   どこを押しても切り替わる。 */
 .done-toggle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--text);
-  padding: 6px 4px;
-}
-/* 以前はブラウザ標準のチェックボックス(ただの白い箱)まかせで、ダークテーマに
-   馴染んでいなかった（2026-08-14指摘）。輪郭だけの角丸ボックスにし、チェック時は
-   accent色で塗りつぶし、チェックマークはCSSのみ(枠線を回転させる手法)で描く。 */
-.done-toggle input[type="checkbox"] {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  border: 2px solid var(--text-dim);
-  background: var(--surface);
   cursor: pointer;
-  position: relative;
 }
-.done-toggle input[type="checkbox"]:checked {
+.done-toggle input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.done-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface);
+  border: 2px solid var(--text-dim);
+  color: var(--text-dim);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 999px;
+}
+.done-toggle input[type="checkbox"]:checked + .done-toggle-pill {
   background: var(--accent);
   border-color: var(--accent);
+  color: #0b1210;
 }
-.done-toggle input[type="checkbox"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 7px;
-  top: 3px;
-  width: 6px;
-  height: 11px;
-  border: solid #0b1210;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.done-toggle input[type="checkbox"]:checked + .done-toggle-pill::before { content: '✓ '; }
+
+/* 完了にした後もスライダーが動かせて記録済みの値を誤って変えられてしまうという
+   指摘があり、完了中はスライダーをdisabledにしている(js/app.jsのhandleLogInput)。
+   あわせて行自体を縮め、消えたスライダーの代わりに.set-row-summaryへ
+   「10回・RPE7」のような1行サマリーを出す（完了を外せば元の編集可能な表示に戻る）。 */
+.set-row.is-done .slider-field,
+.set-row.is-done .set-pr-badge {
+  display: none;
+}
+.set-row-summary {
+  flex: 1;
+  text-align: right;
+  margin-right: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .slider-field { margin-bottom: 10px; }

@@ -379,7 +379,15 @@ function formatSliderValue(field, value, holdBased) {
   return value;
 }
 
-function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml }) {
+// 完了にすると縮む(スライダー類を隠す)セット行に、代わりに表示する1行サマリー。
+// 何をやったか消えてしまわないよう、reps/RPEだけ短く残す(重量は種目によって
+// 表示形式がまちまち(自重換算等)なので、値ラベル側で既に見えている前提で含めない)。
+function setRowSummaryText(set, holdBased) {
+  const reps = holdBased ? `${set.reps}秒` : `${set.reps}回`;
+  return `${reps}・RPE${set.rpe}`;
+}
+
+function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml, disabled }) {
   const labelHtml = field === 'rpe'
     ? `<span>${label} <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span>`
     : `<span>${label}</span>`;
@@ -391,7 +399,7 @@ function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, valu
           <div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
           <div class="slider-track-row">
             <span class="slider-bound-label slider-bound-min">${min}</span>
-            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}">
+            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''}>
             <span class="slider-bound-label slider-bound-max">${max}</span>
           </div>
           ${extraHtml || ''}
@@ -792,7 +800,7 @@ function renderLog(session) {
             const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
             const weightField = ex.holdBased || !weightRange
               ? ''
-              : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight });
+              : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight, disabled: s.done });
             // 回数スライダー自体は1刻みで細かく動かせるようにしつつ、上限(max)は最初10回に
             // しておき、右端で離すと10ずつ伸びる(handleLogInput参照、伸びる幅が10刻み)。
             // 初期値ちょうどをmaxにすると「つまみが最初から右端に張り付いて動かせる幅がない」
@@ -800,17 +808,18 @@ function renderLog(session) {
             const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Number(s.reps) + 10);
             const repsField = sliderFieldHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased,
+              min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
-            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe });
+            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
             return `
-        <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}">
+        <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
           <div class="set-row-head">
             <span class="set-idx">${label}</span>
+            <span class="set-row-summary" data-set-summary="${exIndex}:${setIndex}">${s.done && !s.isWarmup ? setRowSummaryText(s, ex.holdBased) : ''}</span>
             <label class="done-toggle">
               <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
-              完了
+              <span class="done-toggle-pill">完了</span>
             </label>
           </div>
           <div class="set-pr-badge" data-pr-badge="${exIndex}:${setIndex}" hidden>🏆 自己ベスト更新！</div>

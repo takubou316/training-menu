@@ -1325,11 +1325,26 @@ function handleLogInput(e) {
   // チェックボックスはinput/changeの両方が発火するため、完了処理はchange時だけ行う。
   // input時にも実行すると休憩タイマーのスクロールロックが二重にかかる。
   if (e.type === 'change' && field === 'done') {
+    const exercise = currentSession.exercises[exIndex];
+    const row = target.closest('.set-row');
+    if (row) {
+      // 完了にした後もスライダーが動かせてしまい、記録済みの値を誤って変えられて
+      // しまうという指摘があったため、完了中は重量/回数/RPEのスライダーを操作不可にする。
+      // あわせて行自体を縮め(is-done、CSS側でスライダー本体を隠す)、消えた値の代わりに
+      // 「10回・RPE7」のような1行サマリーを見せる(完全に情報を失わないため)。
+      row.classList.toggle('is-done', target.checked);
+      row.querySelectorAll('input[type="range"]').forEach((slider) => {
+        slider.disabled = target.checked;
+      });
+      const summaryEl = row.querySelector(`[data-set-summary="${exIndex}:${setIndex}"]`);
+      if (summaryEl) {
+        summaryEl.textContent = target.checked && !set.isWarmup ? setRowSummaryText(set, exercise.holdBased) : '';
+      }
+    }
     if (target.checked) {
-      const exercise = currentSession.exercises[exIndex];
       const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
       if (prBadge) prBadge.hidden = !isPersonalRecord(exercise, set);
-      startRestTimer(currentSession.exercises[exIndex].restSec);
+      startRestTimer(exercise.restSec);
     } else {
       const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
       if (prBadge) prBadge.hidden = true;
