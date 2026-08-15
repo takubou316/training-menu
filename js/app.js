@@ -1270,6 +1270,10 @@ function handleLogInput(e) {
   // 「右端まで行って離すと+10」という直感的な挙動にならないため。
   if (e.type === 'change' && field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
     target.max = Number(target.max) + 10;
+    // maxが変わると塗りつぶしの割合(--slider-fill)も変わるはずなのに、次にドラッグする
+    // まで古い割合(伸ばす前は100%)のまま残ってしまう(体重スライダーで実機発覚済みの
+    // バグと同種)。ここでも明示的に再計算する。
+    updateSliderTrackFill(target);
   }
 
   // チェックボックスはinput/changeの両方が発火するため、完了処理はchange時だけ行う。
