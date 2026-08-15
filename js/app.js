@@ -40,6 +40,26 @@ let currentMenu = null;
 let currentSession = null;
 let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
 
+// 体重スライダーは0〜150kgのように範囲を広く取ると、0.5kg刻みの微調整がスライダー1本の
+// 横幅の中でやりにくい(1pxあたりの変化量が大きくなるため)。回数スライダー(js/ui.jsの
+// repsInitialMax)と同じ考え方で、初期表示は現在値の前後15kgだけに絞った狭い範囲にし、
+// 端まで動かして指を離すとその方向へ10kgずつ広げる。
+const BODYWEIGHT_SLIDER_PADDING = 15;
+const BODYWEIGHT_SLIDER_EXTEND = 10;
+const BODYWEIGHT_SLIDER_ABS_MIN = 20;
+const BODYWEIGHT_SLIDER_ABS_MAX = 250;
+
+// valueが今のmin〜maxの範囲外(初回表示・他方のスライダーとの同期・設定復元など)になった
+// 場合だけ、値の前後にpaddingを取った狭い範囲へ作り直す。範囲内に収まっている間は
+// (ユーザーが端まで伸ばした範囲を含めて)そのまま尊重し、勝手に狭め直さない。
+function applyBodyWeightSliderBounds(slider, value) {
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  if (value >= min && value <= max && max > min) return;
+  slider.min = Math.max(BODYWEIGHT_SLIDER_ABS_MIN, value - BODYWEIGHT_SLIDER_PADDING);
+  slider.max = Math.min(BODYWEIGHT_SLIDER_ABS_MAX, value + BODYWEIGHT_SLIDER_PADDING);
+}
+
 // 「自分で作る」モードの状態
 let customExercises = []; // EXERCISESの生データを追加順に並べたもの
 let customRestSec = {}; // exerciseId -> 休憩秒数
@@ -294,7 +314,9 @@ function setBodyWeightKg(value, persist) {
   bodyWeightKg = value;
   ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
     const slider = document.getElementById(id);
-    if (slider) slider.value = value;
+    if (!slider) return;
+    applyBodyWeightSliderBounds(slider, value);
+    slider.value = value;
   });
   ['bodyweight-value', 'bodyweight-value-custom'].forEach((id) => {
     const el = document.getElementById(id);
@@ -308,6 +330,18 @@ function wireBodyWeightSlider() {
     const slider = document.getElementById(id);
     if (!slider) return;
     slider.addEventListener('input', () => setBodyWeightKg(Number(slider.value), true));
+    // ドラッグ中(input)ではなく指を離した瞬間(change)にだけ範囲を伸ばす。回数スライダー
+    // (js/app.jsのhandleLogInput)と同じ理由で、input時に伸ばすとドラッグ中に範囲が
+    // 先回りして伸びてしまい「端まで行って離すと伸びる」という直感的な挙動にならないため。
+    slider.addEventListener('change', () => {
+      const value = Number(slider.value);
+      if (value >= Number(slider.max)) {
+        slider.max = Math.min(BODYWEIGHT_SLIDER_ABS_MAX, Number(slider.max) + BODYWEIGHT_SLIDER_EXTEND);
+      }
+      if (value <= Number(slider.min)) {
+        slider.min = Math.max(BODYWEIGHT_SLIDER_ABS_MIN, Number(slider.min) - BODYWEIGHT_SLIDER_EXTEND);
+      }
+    });
   });
 }
 
