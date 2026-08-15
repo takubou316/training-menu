@@ -494,6 +494,137 @@ function wireSliderEnhancements() {
   });
 }
 
+// ===== 数字ホイール（回数/RPE。スライダーの代わりに横スクロールで数字を選ぶ） =====
+// 実体は同じ.slider-field内にある非表示の<input type="range">（numberWheelHtml参照）。
+// ホイールが確定した値をその<input>へ反映し、input/changeイベントを発火させることで
+// handleLogInput側の既存ロジック(値の反映・disabled化・RPE残りレップ表示・自己ベスト
+// 判定など)をそのまま使い回している。ホイール自体はここでしか状態を持たない。
+
+function numberWheelHiddenInput(track) {
+  return track.closest('.slider-field')?.querySelector('input[type="range"]');
+}
+
+// トラック中央に一番近い.number-wheel-itemを返す(＝今選ばれている数字)。
+function numberWheelNearestItem(track) {
+  const rect = track.getBoundingClientRect();
+  const center = rect.left + rect.width / 2;
+  let closest = null;
+  let closestDist = Infinity;
+  track.querySelectorAll('.number-wheel-item').forEach((el) => {
+    const elRect = el.getBoundingClientRect();
+    const dist = Math.abs((elRect.left + elRect.width / 2) - center);
+    if (dist < closestDist) {
+      closestDist = dist;
+      closest = el;
+    }
+  });
+  return closest;
+}
+
+function numberWheelUpdateActive(track) {
+  const nearest = numberWheelNearestItem(track);
+  track.querySelectorAll('.number-wheel-item').forEach((el) => {
+    el.classList.toggle('active', el === nearest);
+  });
+  return nearest;
+}
+
+function numberWheelScrollToValue(track, value, smooth) {
+  const item = track.querySelector(`.number-wheel-item[data-n="${value}"]`);
+  if (item) item.scrollIntoView({ inline: 'center', block: 'nearest', behavior: smooth ? 'smooth' : 'instant' });
+}
+
+// スクロールが落ち着いた(指を離した/慣性が止まった/ドラッグを離した)瞬間に呼ぶ。
+// CSSのscroll-snapだけでもほぼ中央に来ているはずだが、値を確実に反映するため
+// JS側でも中央合わせし直してから<input>へ反映する。
+function numberWheelCommit(track) {
+  numberWheelScrollToValue(track, numberWheelNearestItem(track)?.dataset.n, true);
+  const nearest = numberWheelUpdateActive(track);
+  if (!nearest) return;
+  const input = numberWheelHiddenInput(track);
+  if (!input || input.disabled) return;
+  if (String(input.value) !== String(nearest.dataset.n)) {
+    input.value = nearest.dataset.n;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+}
+
+function initNumberWheel(track) {
+  const input = numberWheelHiddenInput(track);
+  requestAnimationFrame(() => {
+    if (input) numberWheelScrollToValue(track, input.value, false);
+    numberWheelUpdateActive(track);
+  });
+}
+
+const numberWheelScrollTimers = new WeakMap();
+let numberWheelDragTrack = null;
+let numberWheelDragStartX = 0;
+let numberWheelDragStartScrollLeft = 0;
+
+function wireNumberWheels() {
+  document.querySelectorAll('.number-wheel-track').forEach(initNumberWheel);
+
+  // 新しく描画されたホイール(記録画面の再描画など)にも自動で初期位置合わせを行う。
+  new MutationObserver((mutations) => {
+    mutations.forEach((m) => {
+      m.addedNodes.forEach((node) => {
+        if (node.nodeType !== 1) return;
+        if (node.matches?.('.number-wheel-track')) initNumberWheel(node);
+        node.querySelectorAll?.('.number-wheel-track').forEach(initNumberWheel);
+      });
+    });
+  }).observe(document.getElementById('main'), { childList: true, subtree: true });
+
+  // overflow要素自身のscrollイベントはバブリングしないため、captureフェーズで拾う。
+  // 見た目(active表示)はスクロール中ずっと追従させ、スクロールが止まってから
+  // (120ms間動きが無ければ)値を確定させる。
+  document.addEventListener('scroll', (e) => {
+    const track = e.target;
+    if (!track.classList?.contains('number-wheel-track')) return;
+    numberWheelUpdateActive(track);
+    clearTimeout(numberWheelScrollTimers.get(track));
+    numberWheelScrollTimers.set(track, setTimeout(() => numberWheelCommit(track), 120));
+  }, true);
+
+  // 中央以外の見えている数字をタップした時、その数字まで直接スクロールする
+  // (ドラッグ操作時はブラウザが自動でclickを抑制するため、タップ判定と競合しない)。
+  document.addEventListener('click', (e) => {
+    const item = e.target.closest('.number-wheel-item');
+    if (!item) return;
+    numberWheelScrollToValue(item.closest('.number-wheel-track'), item.dataset.n, true);
+  });
+
+  // PC向け: マウスのクリック+ドラッグでもスクロールできるようにする。タッチ操作は
+  // ブラウザ標準のスクロール(慣性・scroll-snap込み)にそのまま任せたいので、
+  // pointerType==='mouse'の時だけ自前でscrollLeftを操作する。
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const track = e.target.closest('.number-wheel-track');
+    if (!track || numberWheelHiddenInput(track)?.disabled) return;
+    numberWheelDragTrack = track;
+    numberWheelDragStartX = e.clientX;
+    numberWheelDragStartScrollLeft = track.scrollLeft;
+    track.style.scrollSnapType = 'none';
+    track.setPointerCapture(e.pointerId);
+  });
+  document.addEventListener('pointermove', (e) => {
+    if (!numberWheelDragTrack) return;
+    numberWheelDragTrack.scrollLeft = numberWheelDragStartScrollLeft - (e.clientX - numberWheelDragStartX);
+    numberWheelUpdateActive(numberWheelDragTrack);
+  });
+  function endNumberWheelDrag() {
+    if (!numberWheelDragTrack) return;
+    const track = numberWheelDragTrack;
+    numberWheelDragTrack = null;
+    track.style.scrollSnapType = '';
+    numberWheelCommit(track);
+  }
+  document.addEventListener('pointerup', endNumberWheelDrag);
+  document.addEventListener('pointercancel', endNumberWheelDrag);
+}
+
 // ===== 「自分で作る」モード =====
 
 function recomputeCustomWarmupCooldown() {
@@ -1311,16 +1442,9 @@ function handleLogInput(e) {
     }
   }
 
-  // ドラッグ中(input)ではなく指を離した瞬間(change)にだけ上限を伸ばす。
-  // input時に伸ばすとドラッグの途中で上限が先回りして伸びてしまい、
-  // 「右端まで行って離すと+10」という直感的な挙動にならないため。
-  if (e.type === 'change' && field === 'reps' && !currentSession.exercises[exIndex].holdBased && Number(target.value) >= Number(target.max)) {
-    target.max = Number(target.max) + 10;
-    // maxが変わると塗りつぶしの割合(--slider-fill)も変わるはずなのに、次にドラッグする
-    // まで古い割合(伸ばす前は100%)のまま残ってしまう(体重スライダーで実機発覚済みの
-    // バグと同種)。ここでも明示的に再計算する。
-    updateSliderTrackFill(target);
-  }
+  // 回数/RPEは数字ホイール化(2026-08-14)に伴い範囲を固定にしたため、以前あった
+  // 「端まで動かして離すと上限を伸ばす」ロジックは不要になり削除した
+  // (js/ui.jsのnumberWheelHtmlのコメント参照)。
 
   // チェックボックスはinput/changeの両方が発火するため、完了処理はchange時だけ行う。
   // input時にも実行すると休憩タイマーのスクロールロックが二重にかかる。
@@ -1411,6 +1535,7 @@ function init() {
   wirePainExclusivity();
   wireBodyWeightSlider();
   wireSliderEnhancements();
+  wireNumberWheels();
   wireCustomScreen();
   wireExercisePicker();
   wireMenuScreen();

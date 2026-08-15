@@ -387,16 +387,54 @@ function setRowSummaryText(set, holdBased) {
   return `${reps}・RPE${set.rpe}`;
 }
 
-function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml, disabled, tickStep }) {
+// sliderFieldHtml/numberWheelHtmlで共通の「ラベル＋現在値」行を組み立てる。
+function sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased) {
   const labelHtml = field === 'rpe'
     ? `<span>${label} <button type="button" class="rpe-info-btn" data-rpe-info-toggle aria-label="RPEとは">ⓘ</button></span>`
     : `<span>${label}</span>`;
   const rpeReserveHtml = field === 'rpe'
     ? `<span class="rpe-reserve-hint" data-rpe-reserve="${exIndex}:${setIndex}">${rpeReserveText(value)}</span>`
     : '';
+  return `<div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>`;
+}
+
+// 回数・RPEの入力を、ドラッグして目的の数字に合わせるスライダーではなく、横に並んだ数字を
+// 指で流して選ぶ「数字ホイール」にしたもの（2026-08-14、複数回の相談の末に決定）。
+// スライダーだと「端まで動かすと範囲が伸びる」仕組みが分かりにくい、太いトラックが密な
+// リストで邪魔、目盛りを付けてもごちゃつく、と何を試しても収まりが悪かったため、
+// 発想を変えて「範囲固定・スクロールして選ぶ」方式に切り替えた。
+// 実体は非表示の<input type="range">のままにし(hidden属性)、ホイールが確定した値を
+// その<input>にセットしてinput/changeイベントを発火させることで、handleLogInput側の
+// 既存ロジック(値の反映・disabled化・RPE残りレップ表示・自己ベスト判定など)をそのまま
+// 使い回している。ホイール自体の描画・ドラッグ処理はjs/app.jsのwireNumberWheels。
+function numberWheelHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, disabled, extraHtml }) {
+  const stepsCount = Math.round((max - min) / step);
+  const itemsHtml = Array.from({ length: stepsCount + 1 }, (_, i) => {
+    const n = Math.round((min + i * step) * 10) / 10;
+    return `<div class="number-wheel-item" data-n="${n}">${n}</div>`;
+  }).join('');
   return `
         <div class="slider-field">
-          <div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>
+          ${sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased)}
+          <div class="number-wheel">
+            <div class="number-wheel-highlight"></div>
+            <div class="number-wheel-fade-left"></div>
+            <div class="number-wheel-fade-right"></div>
+            <div class="number-wheel-track" data-wheel-for="${field}">
+              <div class="number-wheel-spacer"></div>
+              ${itemsHtml}
+              <div class="number-wheel-spacer"></div>
+            </div>
+          </div>
+          <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''} hidden>
+          ${extraHtml || ''}
+        </div>`;
+}
+
+function sliderFieldHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, extraHtml, disabled, tickStep }) {
+  return `
+        <div class="slider-field">
+          ${sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased)}
           <div class="slider-track-row">
             <span class="slider-bound-label slider-bound-min">${min}</span>
             <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''}${tickStep ? ` data-tick-step="${tickStep}"` : ''}>
@@ -801,17 +839,17 @@ function renderLog(session) {
             const weightField = ex.holdBased || !weightRange
               ? ''
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight, disabled: s.done });
-            // 回数スライダー自体は1刻みで細かく動かせるようにしつつ、上限(max)は最初10回に
-            // しておき、右端で離すと10ずつ伸びる(handleLogInput参照、伸びる幅が10刻み)。
-            // 初期値ちょうどをmaxにすると「つまみが最初から右端に張り付いて動かせる幅がない」
-            // 状態になるため、常に現在値より1段(10)上まで動かせる余白を持たせる。
-            const repsInitialMax = ex.holdBased ? 120 : Math.max(10, Number(s.reps) + 10);
-            const repsField = sliderFieldHtml({
+            // 回数/RPEは、スライダー(ドラッグして値を合わせる)ではなく数字ホイール
+            // (横に流して選ぶ)を使う。何度か試行錯誤した末の結論で、詳細は
+            // numberWheelHtmlのコメント参照。範囲は固定(ホイールは端の伸び縮みが
+            // 要らない=広めに取っても選びやすい)。
+            const repsMax = ex.holdBased ? 300 : 50;
+            const repsField = numberWheelHtml({
               exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: repsInitialMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
+              min: 0, max: repsMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
               extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
             });
-            const rpeField = sliderFieldHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
+            const rpeField = numberWheelHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
             return `
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
           <div class="set-row-head">
