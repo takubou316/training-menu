@@ -60,6 +60,12 @@ h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
   border: none;
   margin: 0 0 20px;
   padding: 0;
+  /* <fieldset>はブラウザの既定挙動で「中身の最小幅」まで自動的に広がってしまう
+     （幅の指定が無くても効く、Web標準の古い挙動）。中に数字ホイール(体重は
+     20〜200kgで360個、横に並べると1万px超)が入ると、この既定挙動のせいで
+     fieldset自体・ひいてはページ全体が横に長く伸びてしまう不具合があった
+     （2026-08-14、実機で発覚）。min-width:0で打ち消す。 */
+  min-width: 0;
 }
 
 .mode-choice {
@@ -881,7 +887,16 @@ body.modal-open {
    scrollIntoViewでスナップさせている（ネイティブスナップだけだと指を離した瞬間の
    慣性で数字を読み取るタイミングが難しいため、JS側で確実に合わせ直す）。
    完了(disabled)にすると操作不可＋薄く表示する。 */
-.number-wheel { position: relative; }
+/* 幅を明示していないと、中身の数字が多い(例: 体重は20〜200kgで360個)場合に
+   .number-wheel-trackが画面幅ではなく中身全部の幅(1万px超)まで広がってしまい、
+   ページ全体が横スクロールするようになる不具合があった（2026-08-14、実機で発覚）。
+   width:100%で親の幅に強制的に収め、overflowも明示して中身がはみ出せないようにする。 */
+.number-wheel {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+}
 /* 高さをtop:0/bottom:0で親いっぱいに伸ばす書き方をしていたところ、実機(iPhone Safari)で
    この枠線が画面下端(固定表示のボトムナビ付近)まで伸びてしまう不具合が報告された
    （PCのプレビューでは再現せず）。原因を確実に断定できていないが、伸縮に頼らない
@@ -912,6 +927,9 @@ body.modal-open {
 .number-wheel-fade-right { right: 0; background: linear-gradient(to left, var(--surface-2), transparent); }
 .number-wheel-track {
   display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   height: 36px;
