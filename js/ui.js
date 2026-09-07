@@ -13,6 +13,9 @@ function showScreen(name) {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === name);
   });
+  if ((name === 'setup' || name === 'custom') && typeof resetBodyWeightManualErrors === 'function') {
+    resetBodyWeightManualErrors();
+  }
 }
 
 function goalLabel(goalKey) {

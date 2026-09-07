@@ -60,7 +60,15 @@ function bodyWeightHasStoredValue() {
 function renderBodyWeightField(containerId, inputId) {
   const container = document.getElementById(containerId);
   if (!container) return;
+  // ラベル(現在値表示)はcontainerIdから機械的に対応するidを求めて、フォーム側の
+  // 状態(未設定/設定済み)と食い違わないようここで必ず一緒に更新する。以前はHTML側に
+  // 「60 kg」を決め打ちで書いてしまっていたため、未設定のまま「60 kg」という
+  // ラベルと「体重を入力してください」という手入力フォームが同時に出て矛盾して見える
+  // 不具合があった。
+  const labelId = containerId === 'bodyweight-field' ? 'bodyweight-value' : 'bodyweight-value-custom';
+  const labelEl = document.getElementById(labelId);
   if (!bodyWeightHasStoredValue()) {
+    if (labelEl) labelEl.textContent = '未設定';
     container.innerHTML = `
       <div class="bodyweight-manual-row">
         <input type="number" inputmode="decimal" step="${BODYWEIGHT_STEP}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" class="bodyweight-manual-input" placeholder="例: 60">
@@ -69,6 +77,7 @@ function renderBodyWeightField(containerId, inputId) {
       <p class="error-text bodyweight-manual-error" hidden></p>`;
     return;
   }
+  if (labelEl) labelEl.textContent = `${getBodyWeightKg()} kg`;
   container.innerHTML = `
     ${numberWheelTrackHtml(BODYWEIGHT_MIN, BODYWEIGHT_MAX, BODYWEIGHT_STEP)}
     <input type="range" id="${inputId}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" step="${BODYWEIGHT_STEP}" value="${getBodyWeightKg()}" hidden>`;
@@ -79,6 +88,20 @@ function renderBodyWeightField(containerId, inputId) {
 function renderBodyWeightFields() {
   renderBodyWeightField('bodyweight-field', 'bodyweight-slider');
   renderBodyWeightField('bodyweight-field-custom', 'bodyweight-slider-custom');
+}
+
+// 手入力フォームのバリデーションエラーは、確定ボタンを押した時にだけ表示され、確定に
+// 成功するまで消えない作りだった。そのため一度入力に失敗すると、他の画面へ移動して
+// 戻ってきただけなのに「触っていないのにエラーが出ている」ように見えてしまう
+// (showScreenから呼ぶことで、体重欄がある画面を表示するたびに未入力の状態へ戻す)。
+function resetBodyWeightManualErrors() {
+  document.querySelectorAll('.bodyweight-manual-error').forEach((el) => {
+    el.hidden = true;
+    el.textContent = '';
+  });
+  document.querySelectorAll('.bodyweight-manual-input').forEach((el) => {
+    el.value = '';
+  });
 }
 
 function confirmBodyWeightManualInput(inputId) {
