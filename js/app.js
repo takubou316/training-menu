@@ -1587,6 +1587,23 @@ function restoreLastSettings() {
   if (settings.bodyWeightKg) setBodyWeightKg(settings.bodyWeightKg, false);
 }
 
+// 初回起動時の同期選択モーダル(#sync-choice-modal)のボタン配線。js/sync.js・js/ui.js参照。
+function wireSyncChoiceModal() {
+  document.getElementById('sync-choice-login-btn').addEventListener('click', async () => {
+    const errorEl = document.getElementById('sync-choice-error');
+    errorEl.textContent = '';
+    const { error } = await signInWithGoogleForSync();
+    if (error) errorEl.textContent = 'ログインに失敗しました。もう一度お試しください。';
+    // 成功時はGoogleのログイン画面へ遷移するため、ここから先の処理は行われない
+    // (戻ってきた後はinitSupabaseAuthのonAuthStateChangeがモーダルを閉じる)。
+  });
+  document.getElementById('sync-choice-skip-btn').addEventListener('click', () => {
+    markSyncChoiceMade();
+    setSyncEnabled(false);
+    closeSyncChoiceModal();
+  });
+}
+
 function init() {
   wirePartExclusivity();
   wirePainExclusivity();
@@ -1601,6 +1618,8 @@ function init() {
   wireKnowledgeScreen();
   restoreLastSettings();
   renderModeWeeklyPlanSection();
+  wireSyncChoiceModal();
+  void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {

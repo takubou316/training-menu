@@ -1,7 +1,32 @@
 # HANDOFF.md（training-menu）
 
-- **最終更新日時**: 2026-08-14（Claude更新、v31まで）
+- **最終更新日時**: 2026-09-07（Claude更新）
 - **変更主体**: Claude（設計相談〜実装〜PCプレビュー確認〜実機バグ修正〜見た目統一〜入力方式の見直し）
+
+## 2026-09-07: クラウド同期(js/sync.js)を追加
+
+`game-daily-manager`（別リポジトリ）と接続する統合作業の一環。詳細設計・既知の制約は
+[CLAUDE.md](CLAUDE.md)の「クラウド同期」節を参照。実装内容:
+
+- 新規ファイル`js/sync.js`（Supabase接続・認証状態管理）
+- 初回起動時の同期選択モーダル（`index.html`の`#sync-choice-modal`、`js/app.js`の
+  `wireSyncChoiceModal`、`js/ui.js`の`openSyncChoiceModal`等）
+- 記録画面「その他の設定」にクラウド同期の状態表示・ログイン/ログアウトボタン
+  （`js/ui.js`の`renderSyncStatus`）
+- Codexレビューで見つかった不備（ログアウト失敗時のエラー無視、設定画面側ログインボタンの
+  エラーフィードバック欠如、`redirectTo`にクエリ/ハッシュを含めていた点）を修正済み
+- 実機（Chrome、通常のブラウザタブ）でGoogleログイン成功・クラウド同期状態の表示まで確認済み
+- **未確認**: ホーム画面に追加したPWA(standalone起動)でのOAuthリダイレクト挙動。次回、実機で
+  ホーム画面から起動した状態でのログインを確認すること
+- 同じセッション内で、無関係な未コミット変更（体重ラベルのバグ修正）を発見し、別コミットとして
+  分離済み（`70f77cd`）
+
+## 次の作業
+
+game-daily-manager側のロードマップ（フェーズ4: training-menu → Supabase同期の実装）に進む。
+[game-daily-manager/INTEGRATION_ROADMAP.md](../game-daily-manager/INTEGRATION_ROADMAP.md)参照。
+
+## 過去の作業（〜2026-08-14、v31まで）
 
 ## 今回のセッションでやったこと（すべてpush済み、v9〜v31）
 

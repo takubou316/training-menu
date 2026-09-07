@@ -204,6 +204,7 @@
 
         <details class="danger-zone">
           <summary>その他の設定</summary>
+          <div class="sync-status-row" id="sync-status-row"></div>
           <button type="button" id="reset-history-btn" class="danger-link-btn">記録データをすべて削除する</button>
         </details>
       </div>
@@ -429,8 +430,28 @@
       </div>
     </div>
   </div>
+
+  <!-- 初回起動時のみ表示。ログインする/しないを選んだら二度と出さない(js/sync.js参照)。
+       背景(demo-modal-backdrop)にdata-xxx-close相当の属性をあえて付けず、必ずどちらかの
+       ボタンを押すまで閉じられないようにしている。 -->
+  <div id="sync-choice-modal" class="demo-modal">
+    <div class="demo-modal-backdrop"></div>
+    <div class="demo-modal-content sync-choice-content">
+      <h3 style="margin:0 0 8px;">クラウド同期について</h3>
+      <p class="hint-text">Googleでログインすると、記録をクラウドにも保存し、ゲームタスク管理アプリの全体管理画面から今日やったかを確認できるようになります。ログインしなくても、今まで通りこの端末だけで使えます。</p>
+      <div class="sync-choice-actions">
+        <button type="button" class="primary-btn" id="sync-choice-login-btn">Googleでログインする</button>
+        <button type="button" class="secondary-btn" id="sync-choice-skip-btn">ログインせずこの端末だけで使う</button>
+      </div>
+      <p class="error-text" id="sync-choice-error"></p>
+    </div>
+  </div>
 </div>
 
+<!-- クラウド同期(js/sync.js)用。CDN経由のUMDビルドを1行読み込むだけで、npm/Viteは導入しない
+     (training-menuの「ビルドステップなし・依存ライブラリなし」方針を維持するため)。
+     読み込みに失敗してもwindow.supabaseが定義されないだけで、アプリ本体はそのまま動く。 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js"></script>
 <script src="js/exercises-data.js"></script>
 <script src="js/knowledge-data.js"></script>
 <script src="js/rules.js"></script>
@@ -442,6 +463,7 @@
 <script src="js/hold-timer.js"></script>
 <script src="js/cardio-timer.js"></script>
 <script src="js/rest-timer.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

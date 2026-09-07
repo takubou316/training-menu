@@ -67,6 +67,62 @@ function closeDemoModal() {
   video.load();
 }
 
+// クラウド同期(js/sync.js)関連のUI。2026-09-07追加。
+// 初回起動時の「ログインする/しない」選択モーダルと、記録画面「その他の設定」の同期状態行を描画する。
+
+function openSyncChoiceModal() {
+  document.getElementById('sync-choice-modal').classList.add('open');
+}
+
+function closeSyncChoiceModal() {
+  document.getElementById('sync-choice-modal').classList.remove('open');
+}
+
+// initSupabaseAuth()完了後にapp.jsのinit()から呼ばれる。まだ選択していない場合だけ表示する
+// (一度選んだら二度と出さない。設定から後でいつでも変更できる)。
+function maybeShowSyncChoiceModal() {
+  if (hasSyncChoiceBeenMade()) return;
+  openSyncChoiceModal();
+}
+
+// 記録画面「その他の設定」内、#sync-status-rowの中身を現在の状態に応じて描画し直す。
+// クラウド同期の状態が変わるたび(ログイン成功・ログアウト・初期化完了)に呼ばれる。
+// 2026-09-07Codexレビュー指摘を反映: ログイン/ログアウトどちらのボタンも結果(error)を見て
+// 失敗時にエラー文言を表示するようにした(以前はfire-and-forgetで失敗時に何もフィードバックが
+// 無かった)。
+function renderSyncStatus() {
+  const container = document.getElementById('sync-status-row');
+  if (!container) return; // 記録画面をまだ開いていない場合はDOMが無いので何もしない
+  if (!SUPABASE_AVAILABLE) {
+    container.innerHTML = `<p class="hint-text">クラウド同期は現在利用できません（読み込みに失敗した可能性があります）。記録はこの端末のみに保存されます。</p>`;
+    return;
+  }
+  if (currentSupabaseSession) {
+    const email = escapeHtml(currentSupabaseSession.user?.email || '');
+    container.innerHTML = `
+      <p class="hint-text">クラウド同期: 有効${email ? `（${email}）` : ''}</p>
+      <button type="button" class="secondary-btn" id="sync-signout-btn">ログアウトする</button>
+      <p class="error-text" id="sync-status-error"></p>`;
+    const btn = document.getElementById('sync-signout-btn');
+    if (btn) btn.addEventListener('click', async () => {
+      const errorEl = document.getElementById('sync-status-error');
+      const { error } = await signOutFromSync();
+      if (error && errorEl) errorEl.textContent = 'ログアウトに失敗しました。もう一度お試しください。';
+    });
+  } else {
+    container.innerHTML = `
+      <p class="hint-text">クラウド同期: 未使用（この端末だけで記録しています）</p>
+      <button type="button" class="secondary-btn" id="sync-signin-btn">Googleでログインする</button>
+      <p class="error-text" id="sync-status-error"></p>`;
+    const btn = document.getElementById('sync-signin-btn');
+    if (btn) btn.addEventListener('click', async () => {
+      const errorEl = document.getElementById('sync-status-error');
+      const { error } = await signInWithGoogleForSync();
+      if (error && errorEl) errorEl.textContent = 'ログインに失敗しました。もう一度お試しください。';
+    });
+  }
+}
+
 const PAIN_AREA_LABELS = { 肩: '肩', 腰: '腰', 膝: '膝', 手首: '手首' };
 
 // 週間プラン画面での部位表示名(#part-group/#weekly-day-part-groupのdata-part値に対応)。
@@ -1249,6 +1305,7 @@ function renderRecordScreen({ selectToday = false } = {}) {
   } else {
     renderListView(historyMap);
   }
+  if (typeof renderSyncStatus === 'function') renderSyncStatus();
 }
 
 // ===== グラフ画面（記録一覧とは別画面。全体の総挙上量推移＋種目ごとの推移） =====

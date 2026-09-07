@@ -2127,3 +2127,30 @@ body.modal-open {
   font-size: 12px;
   padding: 6px 12px;
 }
+
+/* クラウド同期(js/sync.js)関連。2026-09-07、game-daily-manager統合の一環で追加。 */
+
+.sync-choice-content .hint-text {
+  margin: 0 0 16px;
+  line-height: 1.6;
+}
+
+.sync-choice-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.sync-status-row {
+  margin: 14px 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sync-status-row .hint-text {
+  margin: 0 0 10px;
+}
+
+.sync-status-row .secondary-btn {
+  padding: 10px 14px;
+  font-size: 13px;
+}
