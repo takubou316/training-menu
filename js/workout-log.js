@@ -176,6 +176,16 @@ function finalizeSession(session) {
   };
   saveSession(record);
   updateTrainingStreak(record.date);
+  // ローカル保存が完了した後に、クラウド同期が有効な場合だけ後追いで複製する(js/sync.js参照)。
+  // 失敗してもローカルの記録には一切影響しない(常にローカルが正)、という設計方針を徹底するため
+  // try/catchで包む(2026-09-07Codexレビュー指摘: queueSessionForSync内のlocalStorage書き込みが
+  // QuotaExceededError等で同期的に例外を投げた場合、ここまで伝播してfinalizeSessionの呼び出し元
+  // (記録画面の遷移処理)まで壊れてしまう可能性があった)。
+  try {
+    if (typeof queueSessionForSync === 'function') queueSessionForSync(record);
+  } catch (e) {
+    // ベストエフォートのため握りつぶす。ローカルの記録(record)は既に保存済みで無事。
+  }
   return record;
 }
 

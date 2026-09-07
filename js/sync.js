@@ -65,7 +65,10 @@ async function initSupabaseAuth() {
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
     currentSupabaseSession = data.session;
-    if (currentSupabaseSession) markSyncChoiceMade();
+    if (currentSupabaseSession) {
+      markSyncChoiceMade();
+      void flushSyncQueue(); // 起動時、既にログイン済みなら前回の未送信分を追いつかせる
+    }
   } catch (e) {
     currentSupabaseSession = null;
   }
@@ -78,10 +81,196 @@ async function initSupabaseAuth() {
     if (session) {
       markSyncChoiceMade();
       if (typeof closeSyncChoiceModal === 'function') closeSyncChoiceModal();
+      void flushSyncQueue(); // ログイン成功時にも未送信分があれば送る
     }
     if (typeof renderSyncStatus === 'function') renderSyncStatus();
   });
   if (typeof renderSyncStatus === 'function') renderSyncStatus();
+}
+
+// オンライン復帰時にも追いつかせる。オフライン中に記録した分がここで送信される想定。
+window.addEventListener('online', () => { void flushSyncQueue(); });
+
+// ===== 記録データの同期(フェーズ4) =====
+//
+// js/workout-log.jsのfinalizeSession()が記録をlocalStorageへ保存した直後、クラウド同期が
+// 有効なら1回だけqueueSessionForSyncを呼ぶ。ここでは「ローカルへの保存が常に先に完了している」
+// 前提を崩さない(クラウド側の処理はすべてこの後追いの複製であり、失敗してもローカルの記録は
+// 一切影響を受けない)。
+
+const PENDING_SYNC_KEY = 'training-menu:pending-sync';
+
+// キューの1エントリは{ localId, userId, record }。userIdを持たせるのは、ログアウトして
+// 別アカウントでログインした場合に、前のアカウント宛てのキューを誤って新アカウントの下で
+// 送信してしまわないようにするため(2026-09-07、Codexレビュー指摘のアカウント混在対策)。
+function loadPendingSyncQueue() {
+  try {
+    const raw = localStorage.getItem(PENDING_SYNC_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function savePendingSyncQueue(queue) {
+  localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
+}
+
+// js/workout-log.jsのfinalizeSession()から呼ばれる。クラウド同期が有効な場合だけキューに
+// 追加し、その場で送信を試みる(即座に成功すればユーザーはほぼ気付かない。オフライン中なら
+// キューに残り、次にオンラインになった時・次回起動時に自動で追いつく)。
+function queueSessionForSync(record) {
+  if (!isCloudSyncActive()) return;
+  const userId = currentSupabaseSession.user.id;
+  const queue = loadPendingSyncQueue();
+  queue.push({ localId: record.id, userId, record });
+  savePendingSyncQueue(queue);
+  void flushSyncQueue();
+}
+
+let isFlushingSyncQueue = false;
+let flushRequestedDuringRun = false;
+
+// 同じエントリがこの回数失敗し続けたら、恒久的な問題(データ不整合等)とみなして隔離する。
+// 隔離してもローカルの記録自体は消えない。クラウドへの複製だけを諦める。
+const MAX_SYNC_ATTEMPTS = 5;
+
+// キューに溜まった記録を古い順にSupabaseへ送信する。起動時・オンライン復帰時・ログイン成功時・
+// 記録確定時など複数の場所から呼ばれるため、同時に走らないよう簡易ロック(isFlushingSyncQueue)
+// を掛けている。今ログイン中のユーザー宛てのものだけを対象にする。1件失敗したら(オフライン等、
+// 同じ理由で以降も失敗する可能性が高いため)以降は打ち切り、次回に持ち越す。ただし同じエントリが
+// MAX_SYNC_ATTEMPTS回失敗し続けた場合は、それだけ隔離して後続の正常なエントリの送信を止めない
+// ようにする(2026-09-07Codexレビュー指摘: 恒久的に失敗するエントリが先頭に居座ると、それより
+// 後ろの正常なエントリが永久に送信されなくなる問題への対応)。
+//
+// 2026-09-07Codexレビュー指摘を反映: 「flush開始時に読んだキュー」をそのまま上書き保存すると、
+// 実行中に他の呼び出し(記録確定直後に立て続けにもう1件記録した場合など)がキューへ追加した分を
+// まるごと消してしまう競合があった(read-modify-writeの非アトミック性)。書き戻す直前に最新の
+// キューを再読込し、「今回処理し終えたlocalIdの集合」だけを差し引くマージ方式に変更して解消した。
+//
+// 上記の修正だけでは、実行中に届いた新しいエントリがロックのせいでスキップされたまま
+// 放置される(データは消えないが送信もされない)別の問題が残っていたため、ロック中に
+// flushSyncQueue()が呼ばれたら`flushRequestedDuringRun`を立てておき、今回の実行完了後に
+// もう一度実行し直すようにした(Claudeが実装後の実地テストで発見・修正)。
+async function flushSyncQueue() {
+  if (isFlushingSyncQueue) {
+    flushRequestedDuringRun = true;
+    return;
+  }
+  if (!isCloudSyncActive()) return;
+  isFlushingSyncQueue = true;
+  try {
+    const userId = currentSupabaseSession.user.id;
+    const queue = loadPendingSyncQueue();
+    const doneIds = new Set(); // 送信成功、または隔離してキューから取り除くもの
+    const attemptUpdates = new Map(); // localId -> 更新後の失敗回数(まだキューに残すもの)
+    let stopEarly = false;
+    for (const item of queue) {
+      if (stopEarly || item.userId !== userId) continue;
+      try {
+        await syncSessionToSupabase(item.record, userId);
+        doneIds.add(item.localId);
+      } catch (e) {
+        const attempts = (item.attempts || 0) + 1;
+        if (attempts >= MAX_SYNC_ATTEMPTS) {
+          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録の自動送信を停止しました(local_id: ${item.localId})`);
+          doneIds.add(item.localId);
+        } else {
+          attemptUpdates.set(item.localId, attempts);
+          stopEarly = true;
+        }
+      }
+    }
+    if (doneIds.size > 0 || attemptUpdates.size > 0) {
+      const latest = loadPendingSyncQueue();
+      const merged = latest
+        .filter((item) => !doneIds.has(item.localId))
+        .map((item) => (attemptUpdates.has(item.localId)
+          ? { ...item, attempts: attemptUpdates.get(item.localId) }
+          : item));
+      savePendingSyncQueue(merged);
+    }
+  } finally {
+    isFlushingSyncQueue = false;
+  }
+  if (flushRequestedDuringRun) {
+    flushRequestedDuringRun = false;
+    await flushSyncQueue(); // 実行中に追加された分をこの1回で拾う
+  }
+}
+
+// 1回分のトレーニング記録(js/workout-log.jsのfinalizeSessionが作るrecord、localStorageの
+// 保存形式そのまま)を、正規化した3テーブルへ複製する。各階層でlocal_idを使ったupsertに
+// しているため、同じrecordを再送しても重複登録されない
+// (game-daily-manager/supabase/migrations/20260906_add_training_integration.sql参照)。
+//
+// 注意: これは複数の独立したHTTPリクエストの積み重ねであり、1つのトランザクションではない
+// (2026-09-07Codexレビュー指摘)。途中(例えば3種目目のsetsのupsert)で失敗した場合、それより
+// 前のsession/exercise行はSupabase側に残ったままになる。ただしlocal_idが決定的(配列インデックス
+// 基準)なため、次回の再送で同じrecordを渡せば、既にできている行は同じ内容で上書きされるだけで
+// 無害、未完了だった分は改めて作られる。つまり非アトミックだが、再送すれば自然に辻褄が合う。
+async function syncSessionToSupabase(record, userId) {
+  const sessionDate = localDateKey(record.date);
+  const { data: sessionRow, error: sessionError } = await supabaseClient
+    .from('training_sessions')
+    .upsert({
+      user_id: userId,
+      local_id: record.id,
+      session_date: sessionDate,
+      started_at: record.date,
+      goal: record.goal || null,
+      duration_sec: record.durationSec || null,
+      body_weight_kg: (typeof bodyWeightHasStoredValue === 'function' && typeof getBodyWeightKg === 'function' && bodyWeightHasStoredValue())
+        ? getBodyWeightKg() : null,
+    }, { onConflict: 'user_id,local_id' })
+    .select('id')
+    .single();
+  if (sessionError) throw sessionError;
+  const sessionId = sessionRow.id;
+
+  for (let i = 0; i < record.exercises.length; i += 1) {
+    const ex = record.exercises[i];
+    const isCardio = ex.type === 'cardio';
+    const { data: exRow, error: exError } = await supabaseClient
+      .from('training_session_exercises')
+      .upsert({
+        user_id: userId,
+        session_id: sessionId,
+        local_id: `ex-${i}`,
+        exercise_id: ex.exerciseId,
+        name: ex.name,
+        order_index: i,
+        exercise_type: isCardio ? 'cardio' : 'strength',
+        distance_km: isCardio && ex.distance != null ? ex.distance : null,
+        duration_sec: isCardio && ex.duration != null ? ex.duration : null,
+      }, { onConflict: 'session_id,local_id' })
+      .select('id')
+      .single();
+    if (exError) throw exError;
+
+    if (isCardio || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
+    // holdBased種目(プランク等)は「reps」欄に実際は保持秒数が入っている(js/ui.js等の既存表示ロジックと
+    // 同じ解釈)。exercises-data.jsのEXERCISESから元の種目定義を引いて振り分ける。
+    const exerciseMeta = typeof EXERCISES !== 'undefined' ? EXERCISES.find((item) => item.id === ex.exerciseId) : null;
+    const isHoldBased = Boolean(exerciseMeta && exerciseMeta.holdBased);
+    const setPayload = ex.sets.map((s, si) => ({
+      user_id: userId,
+      session_exercise_id: exRow.id,
+      local_id: `set-${si}`,
+      set_index: si,
+      weight: !isHoldBased && s.weight !== '' && s.weight != null ? Number(s.weight) : null,
+      reps: !isHoldBased && s.reps !== '' && s.reps != null ? Number(s.reps) : null,
+      hold_sec: isHoldBased && s.reps !== '' && s.reps != null ? Number(s.reps) : null,
+      rpe: s.rpe !== '' && s.rpe != null ? Number(s.rpe) : null,
+      is_warmup: Boolean(s.isWarmup),
+      done: Boolean(s.done),
+    }));
+    const { error: setsError } = await supabaseClient
+      .from('training_session_sets')
+      .upsert(setPayload, { onConflict: 'session_exercise_id,local_id' });
+    if (setsError) throw setsError;
+  }
 }
 
 // Googleログインを開始する。成功するとブラウザがリダイレクトされ、戻ってきた時点で
