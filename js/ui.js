@@ -90,6 +90,10 @@ function maybeShowSyncChoiceModal() {
 // 2026-09-07Codexレビュー指摘を反映: ログイン/ログアウトどちらのボタンも結果(error)を見て
 // 失敗時にエラー文言を表示するようにした(以前はfire-and-forgetで失敗時に何もフィードバックが
 // 無かった)。
+// 2026-09-07実機バグ修正: 「有効」表示の判定をcurrentSupabaseSessionの有無だけでなく
+// isCloudSyncActive()（同期フラグも見る）に変更した。以前はセッションさえあれば無条件で
+// 「有効」と表示していたため、setSyncEnabled(true)が実行されずに同期フラグが立っていない
+// 状態でも画面上は「有効」に見えてしまい、実際には記録が一切同期されない不具合に気づけなかった。
 function renderSyncStatus() {
   const container = document.getElementById('sync-status-row');
   if (!container) return; // 記録画面をまだ開いていない場合はDOMが無いので何もしない
@@ -97,7 +101,7 @@ function renderSyncStatus() {
     container.innerHTML = `<p class="hint-text">クラウド同期は現在利用できません（読み込みに失敗した可能性があります）。記録はこの端末のみに保存されます。</p>`;
     return;
   }
-  if (currentSupabaseSession) {
+  if (isCloudSyncActive()) {
     const email = escapeHtml(currentSupabaseSession.user?.email || '');
     container.innerHTML = `
       <p class="hint-text">クラウド同期: 有効${email ? `（${email}）` : ''}</p>

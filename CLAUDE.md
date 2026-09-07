@@ -489,6 +489,26 @@ Supabaseへのクラウド同期を追加した。詳細設計は`game-daily-man
   `EXERCISES`配列を`exerciseId`で検索する方式なので、将来カスタム種目に対応する場合は
   「マスタに存在しない種目」の扱いを再検討する必要がある
 
+### 実機で発見した重大バグと修正（2026-09-07）
+
+フェーズ6の実機検証中、「Googleでログインする→画面には"クラウド同期: 有効"と表示される→
+記録を確定しても一切Supabaseに同期されない」という重大な不具合が見つかった。原因は
+`signInWithGoogleForSync()`が、`supabaseClient.auth.signInWithOAuth(...)`呼び出し**直後**に
+`setSyncEnabled(true)`を実行する設計だったこと。`signInWithOAuth`は呼び出すと即座にページ遷移
+（Googleのログイン画面へのリダイレクト）が始まるため、その後に続くコードが実行される保証が
+なかった。`isCloudSyncActive()`は`isSyncEnabled()`（このフラグ）も必要とするため、フラグが
+立たないまま「セッションはある」状態になり、UIは`currentSupabaseSession`の有無だけを見て
+「有効」と表示してしまい、実態との食い違いに気づけなかった。
+
+修正: `setSyncEnabled(true)`を、ページに戻ってきた後に確実に発火する`onAuthStateChange`の
+コールバック内（`session`を受け取った時点）に移動。起動時の`getSession()`成功時にも同様の保険を
+追加（既存ユーザーの端末を次回起動時に自動で救済できる）。`renderSyncStatus`のUI判定も
+`currentSupabaseSession`単体から`isCloudSyncActive()`に変更し、表示と実態を一致させた。
+実際のSupabaseアクセストークンをローカル環境に注入して再現・修正確認済み。
+
+将来「ログアウトはせず同期だけ一時停止する」機能を追加する場合、上記の2箇所の保険処理が
+次回起動時に問答無用で同期を再有効化してしまう点に注意（`js/sync.js`にコメントで明記済み）。
+
 ### 既知の制約（2026-09-07時点、対応は次フェーズ以降に持ち越し）
 
 Codexへの設計レビューで指摘され、今回は対応を見送った点:

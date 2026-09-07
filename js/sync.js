@@ -67,6 +67,7 @@ async function initSupabaseAuth() {
     currentSupabaseSession = data.session;
     if (currentSupabaseSession) {
       markSyncChoiceMade();
+      setSyncEnabled(true); // 既にセッションがあるのに同期フラグが立っていない状態への保険(下の注記参照)
       void flushSyncQueue(); // 起動時、既にログイン済みなら前回の未送信分を追いつかせる
     }
   } catch (e) {
@@ -76,10 +77,27 @@ async function initSupabaseAuth() {
   // コールバックが呼ばれる('INITIAL_SESSION'イベント、SDKの仕様)。そのため「セッションが
   // 実際に存在する時だけ」モーダルを閉じるようにしないと、初回起動時にopenSyncChoiceModal()
   // で開いた直後、このコールバックの初期通知で即座に閉じられてしまう不具合があった。
+  //
+  // 2026-09-07実機で発見・修正した重大バグ: setSyncEnabled(true)は元々
+  // signInWithGoogleForSync()の「OAuth呼び出し成功後」にだけ置いていたが、signInWithOAuthは
+  // 呼び出すと即座にページ遷移(Googleのログイン画面へのリダイレクト)が始まるため、その後に
+  // 続く行(setSyncEnabled(true))が実行される保証がなかった。実際に「ログインはできて
+  // currentSupabaseSessionもUI上は"クラウド同期: 有効"と表示されるのに、記録を確定しても
+  // 一切Supabaseへ同期されない」という不具合が発生した(isCloudSyncActive()は
+  // isSyncEnabled()も必要とするため、フラグが立っていないとローカルに保存されるだけで
+  // 同期処理自体が動かない)。ページ遷移を経てから確実に発火するここ(onAuthStateChangeが
+  // sessionを受け取った時点)でsetSyncEnabled(true)することで、リダイレクトの成否に関わらず
+  // 確実にフラグが立つようにした。
+  //
+  // 将来の注意(Codexレビュー指摘): 「ログアウトはせず同期だけ一時停止したい」という機能を
+  // 追加する場合、この保険処理とinitSupabaseAuth冒頭の保険処理は、次回起動時に問答無用で
+  // setSyncEnabled(true)へ戻してしまう。その機能を作る際は、この2箇所のsetSyncEnabled(true)を
+  // 見直すこと。
   supabaseClient.auth.onAuthStateChange((_event, session) => {
     currentSupabaseSession = session;
     if (session) {
       markSyncChoiceMade();
+      setSyncEnabled(true);
       if (typeof closeSyncChoiceModal === 'function') closeSyncChoiceModal();
       void flushSyncQueue(); // ログイン成功時にも未送信分があれば送る
     }
@@ -275,19 +293,22 @@ async function syncSessionToSupabase(record, userId) {
 
 // Googleログインを開始する。成功するとブラウザがリダイレクトされ、戻ってきた時点で
 // onAuthStateChangeが発火する(detectSessionInUrl: trueのため、URL中のトークンを自動処理)。
-// 2026-09-07Codexレビュー指摘を反映: setSyncEnabled(true)はOAuth呼び出しが実際に成功して
-// からにする(以前は呼び出し前に楽観的にtrueへしていたため、失敗時にフラグだけ残ってしまう
-// 不整合があった)。redirectToもクエリ/ハッシュを含まないオリジン+パスだけに絞り、Supabaseが
-// 付与するトークン用ハッシュと衝突しないようにした。
+// redirectToはクエリ/ハッシュを含まないオリジン+パスだけに絞り、Supabaseが付与するトークン用
+// ハッシュと衝突しないようにしている(2026-09-07Codexレビュー指摘)。
+//
+// 注意: ここでは意図的にsetSyncEnabled(true)を呼んでいない。signInWithOAuthは呼び出すと
+// 即座にページ遷移(Googleのログイン画面へのリダイレクト)が始まるため、この関数の続きの行が
+// 実行される保証がない。実際に「ここでsetSyncEnabled(true)する」設計にした結果、ページ遷移で
+// 実行が中断され、UIには"クラウド同期: 有効"と出るのに記録が一切同期されない、という重大バグを
+// 実機で踏んだ(2026-09-07)。同期フラグは、ページに戻ってきた後に確実に発火するinitSupabaseAuth
+// のonAuthStateChangeコールバック側でsetSyncEnabled(true)している。
 async function signInWithGoogleForSync() {
   if (!SUPABASE_AVAILABLE) return { error: new Error('クラウド同期が利用できません') };
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: `${window.location.origin}${window.location.pathname}` },
   });
-  if (error) return { error };
-  setSyncEnabled(true);
-  return { error: null };
+  return { error: error || null };
 }
 
 // 2026-09-07Codexレビュー指摘を反映: signOut()のエラーを無視せず、失敗時はローカルの
