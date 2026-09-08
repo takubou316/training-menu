@@ -1,7 +1,34 @@
 # HANDOFF.md（training-menu）
 
-- **最終更新日時**: 2026-09-07（Claude更新）
+- **最終更新日時**: 2026-09-08（Claude更新）
 - **変更主体**: Claude（設計相談〜実装〜PCプレビュー確認〜実機バグ修正〜見た目統一〜入力方式の見直し）
+
+## 2026-09-08: game-daily-managerのショートカットから直接記録画面へ飛ぶ「クイックスタート」を追加
+
+`game-daily-manager`（別リポジトリ）に追加中の筋トレショートカット機能（ユーザーが自由に登録した
+タスクを特定の有酸素種目に紐づけ、ワンタップで記録開始できる機能）の受け皿。URLに
+`?quickstart=<exerciseId>`が付いていたら、通常の「自分で作る→種目を追加→生成」フローを短絡し、
+いきなり記録画面（該当種目のカードのみ）まで遷移する。
+
+- 新規関数`js/app.js`の`maybeStartQuickstart()`。`init()`の最後（`restoreLastSettings()`・
+  `initSupabaseAuth()`より後）で呼ぶ。`findExerciseById`で種目を引き、`type !== 'cardio'`や
+  未知のidなら何もせず通常のモード選択画面のまま（現時点では有酸素種目のみ対応、ショートカット側の
+  `link_type`が将来`exercise`以外に拡張されても安全に無視できる）
+- `currentMenu`を`main: [buildCustomCardioPlan(exercise)]`だけで直接組み立て、`handleStartWorkout()`を
+  そのまま呼んでいる（`buildCustomCardioPlan`・`handleStartWorkout`とも既存の「自分で作る」フローの
+  関数をそのまま再利用、新規ロジックは追加していない）。ウォームアップ/クールダウンは空の状態
+  （`{ general: '', dynamic: [], staticStretch: [] }`/`{ static: [], general: '' }`）で固定 —
+  `buildWarmupHtml`/`buildCooldownHtml`がnullを受けるとそのままクラッシュするため、`customWarmup`/
+  `customCooldown`の初期値と同じ最小形にしている
+- **再読み込み時の誤発火防止**: 判定直後に`history.replaceState`でURLからクエリパラメータを
+  除去する（ページ遷移は起きない）。これにより、記録画面滞在中にブラウザをリロードしても同じ
+  クイックスタートが再度実行されて別セッションが二重生成される、という事故を防いでいる
+- PCプレビューで確認済み: `?quickstart=walking`→ウォーキングの記録画面へ直接遷移→「記録して終了」
+  まで実行→記録タブに反映（連続日数カウントも更新）。`?quickstart=bench_press`（有酸素でない種目）
+  では何も起きず通常のモード選択画面が表示されることも確認。コンソールエラーなし
+- **未確認**: 実機（iPhone）でのgame-daily-manager側ショートカットからの実際の遷移（クロスオリジン
+  リンク）。game-daily-manager側の実装が終わってから合わせて確認する
+- 対になるgame-daily-manager側の実装状況は`game-daily-manager/HANDOFF.md`参照
 
 ## 2026-09-07: 実機で「クラウド同期が有効表示なのに一切同期されない」重大バグを発見・修正
 
@@ -44,8 +71,11 @@ Supabaseの3テーブルへ複製する処理を実装。詳細設計・既知�
 
 ## 次の作業
 
-game-daily-manager側のロードマップ（フェーズ4: training-menu → Supabase同期の実装）に進む。
-[game-daily-manager/INTEGRATION_ROADMAP.md](../game-daily-manager/INTEGRATION_ROADMAP.md)参照。
+**最優先**: クイックスタート機能（2026-09-08追加分）の仕上げ。game-daily-manager側のショートカット
+機能（マイグレーション未実行・未コミット・Codexレビュー未実施、詳細は
+`game-daily-manager/HANDOFF.md`参照）が完了し次第、実機で一連の流れ
+（ショートカット登録→クリック→この`maybeStartQuickstart()`経由で記録画面→記録確定→
+全体管理画面で達成表示）を確認する。
 
 ## 過去の作業（〜2026-08-14、v31まで）
 

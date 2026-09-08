@@ -522,3 +522,24 @@ Codexへの設計レビューで指摘され、今回は対応を見送った点
   CDNタグにも`defer`/`async`を付けておらず、CDNの応答が極端に遅いとその後続のscript実行（アプリ本体）
   がブロックされる可能性がある。jsdelivrは高可用なCDNで実害の起きる可能性は低いと判断し、今回は
   対応を見送った
+
+## クイックスタート（`?quickstart=<exerciseId>`、2026-09-08〜）
+
+`game-daily-manager`（別リポジトリ）に追加した筋トレショートカット機能（自由な名前のタスクを
+特定の種目に紐づけ、ワンタップで記録を始められる機能）から遷移してきた時の受け皿。ウォーキングの
+ように「やるハードルを下げたい」有酸素種目向けに、通常の「自分で作る」の2段階（種目を追加して
+生成→開始）を1回のクリックへ短絡する。
+
+- `js/app.js`の`maybeStartQuickstart()`が`init()`の最後で`?quickstart=`パラメータを見る。有酸素
+  種目(`type: 'cardio'`)のみ対応。強度種目や未知のidの場合は何もせず通常のモード選択画面のまま
+  （将来game-daily-manager側の`link_type`が`exercise`以外に拡張されても、ここが黙って無視する
+  ことで安全に共存できる設計）
+- 実装は既存の「自分で作る」フローの関数（`buildCustomCardioPlan`・`handleStartWorkout`）を
+  そのまま再利用しているだけで、記録の保存経路・クラウド同期経路は通常の記録と完全に同じ
+  （`finalizeSession`から`queueSessionForSync`が呼ばれ、同期していれば`training_session_exercises`
+  に`exercise_id`が入る。これをgame-daily-manager側が「達成したか」の判定に使う）
+- 判定直後に`history.replaceState`でURLからパラメータを除去する。記録画面滞在中にページを
+  リロードしても同じクイックスタートが再発火して別セッションが二重生成されないようにするため
+- 達成判定の考え方（「別の種目をやったのに無関係なショートカットが達成扱いにならないように」
+  という要望への対応）は`exercise_id`での厳密な一致のみで行う。詳細な判定ロジック自体は
+  game-daily-manager側（`training_shortcuts`テーブル、CLAUDE.md参照）にある

@@ -1440,6 +1440,34 @@ function handleStartWorkout() {
   startSessionTimer();
 }
 
+// game-daily-manager(全体管理画面)のショートカットからの遷移用。URLに
+// ?quickstart=<exerciseId>が付いていたら、「自分で作る→種目を1つ追加→生成」を
+// ワンタップ分に短絡し、いきなり記録画面まで進める(有酸素種目のみ対応)。
+// 再読み込み時に同じセッションが誤って再生成されないよう、判定後は必ずURLから
+// パラメータを取り除く(history.replaceState、ページ遷移は発生させない)。
+function maybeStartQuickstart() {
+  const params = new URLSearchParams(window.location.search);
+  const exerciseId = params.get('quickstart');
+  if (!exerciseId) return;
+  history.replaceState(null, '', window.location.pathname + window.location.hash);
+
+  const exercise = findExerciseById(exerciseId);
+  if (!exercise || exercise.type !== 'cardio') return; // 未知のid・非対応種目は何もせず通常のモード選択画面のまま
+
+  currentMenu = {
+    // 有酸素種目単体にウォームアップ/クールダウンの体操・ストレッチを組み立てる意味が薄く、
+    // 「即座に記録画面へ」というクイックスタートの目的にも反するため、空の状態(buildWarmupHtml/
+    // buildCooldownHtmlがそのまま読める最小の形)で固定する。
+    warmup: { general: '', dynamic: [], staticStretch: [] },
+    cooldown: { static: [], general: '' },
+    main: [buildCustomCardioPlan(exercise)],
+    generatedAt: new Date().toISOString(),
+    params: { custom: true, quickstart: true },
+    userReordered: false,
+  };
+  handleStartWorkout();
+}
+
 // 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
 // data-cardio-ex/data-cardio-fieldという別の属性でstrengthの仕組み(data-ex/data-set/data-field)
 // と衝突しないようにしている。
@@ -1620,6 +1648,7 @@ function init() {
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
+  maybeStartQuickstart();
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
