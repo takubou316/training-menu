@@ -462,8 +462,17 @@ UIを検証しており、以下はその試作で固まった設計判断（実
 既存の記録同期(`queueSessionForSync`)と同じオフラインキュー(`training-menu:pending-sync`)を
 共有しており、キューの各エントリに`op`('upsert'|'delete')を持たせて`flushSyncQueue`側で
 分岐する。オフライン中に削除した場合も、次にオンラインになった時に自動で追いつく。
-game-daily-manager側は`todayCompletedExerciseIds`をページ読み込み時に一度だけクエリするため、
-削除後すぐには反映されず、全体管理画面を開き直す必要がある点に注意。
+game-daily-manager側は`todayCompletedExerciseIds`をタブがアクティブになるたびに再クエリする
+ため（下記「同じ端末で複数タブ」の直前、focus/visibilitychangeで再フェッチする仕組み参照）、
+全体管理画面のタブへ戻れば削除後の表示に自然に更新される。
+
+**バグ修正（2026-09-08、Codexレビュー指摘）**: キューの成功/失敗の記録を`localId`単位で
+行っていたため、同じ`localId`に対して`upsert`と`delete`が両方キューに積まれた場合（例:
+オフライン中に記録→すぐ削除）、片方が成功しただけで`doneIds`にその`localId`が入り、
+その後失敗したもう片方の操作までマージ時に誤って取り除かれてしまうバグがあった。各エントリに
+一意な`entryId`（`crypto.randomUUID()`）を持たせ、成功/失敗の記録は`entryId`単位で行うよう
+修正した（`entryId`を持たない旧形式のエントリは`localId`で代用するが、旧形式は常に`upsert`
+のみだったため従来通り正しく動く）。
 
 ## データの保存場所
 
@@ -545,6 +554,12 @@ Codexへの設計レビューで指摘され、今回は対応を見送った点
   CDNタグにも`defer`/`async`を付けておらず、CDNの応答が極端に遅いとその後続のscript実行（アプリ本体）
   がブロックされる可能性がある。jsdelivrは高可用なCDNで実害の起きる可能性は低いと判断し、今回は
   対応を見送った
+- **同じ端末で複数タブを同時に開いて操作した場合の競合は未対応（2026-09-08、ショートカット機能の
+  Codexレビューで指摘）**。オフラインキュー(`js/sync.js`の`isFlushingSyncQueue`)はメモリ内の
+  フラグによる簡易ロックのため、タブをまたいだ排他制御ができない。2つのタブでほぼ同時に
+  「記録」と「削除」を行うと、削除の方が先にサーバーへ届いた後に古い記録のupsertが後から届いて
+  クラウド上に復活してしまう、といった順序の入れ替わりが理論上ありうる。個人が1台の端末を
+  1つのタブで使う想定の範囲では実害が起きにくいため、対応は見送っている
 
 ## クイックスタート（`?quickstart=<exerciseId>`、2026-09-08〜）
 
@@ -553,10 +568,11 @@ Codexへの設計レビューで指摘され、今回は対応を見送った点
 ように「やるハードルを下げたい」有酸素種目向けに、通常の「自分で作る」の2段階（種目を追加して
 生成→開始）を1回のクリックへ短絡する。
 
-- `js/app.js`の`maybeStartQuickstart()`が`init()`の最後で`?quickstart=`パラメータを見る。有酸素
-  種目(`type: 'cardio'`)のみ対応。強度種目や未知のidの場合は何もせず通常のモード選択画面のまま
-  （将来game-daily-manager側の`link_type`が`exercise`以外に拡張されても、ここが黙って無視する
-  ことで安全に共存できる設計）
+- `js/app.js`の`maybeHandleEntryParams()`が`init()`の最後で`?quickstart=`・`?view=record`の
+  両方をまとめて見る（後述の「達成」時の遷移先と合わせて1箇所に統合済み。両方同時に付いた
+  URLでは`quickstart`を優先する）。有酸素種目(`type: 'cardio'`)のみ対応。強度種目や未知のidの
+  場合は何もせず通常のモード選択画面のまま（将来game-daily-manager側の`link_type`が`exercise`
+  以外に拡張されても、ここが黙って無視することで安全に共存できる設計）
 - 実装は既存の「自分で作る」フローの関数（`buildCustomCardioPlan`・`buildWarmupAndCooldown`・
   `handleStartWorkout`）をそのまま再利用しているだけで、ウォームアップ/クールダウンの内容・記録の
   保存経路・クラウド同期経路は通常の記録と完全に同じ（`finalizeSession`から`queueSessionForSync`が

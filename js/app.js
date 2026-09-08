@@ -1443,47 +1443,45 @@ function handleStartWorkout() {
   startSessionTimer();
 }
 
-// game-daily-manager(全体管理画面)のショートカットからの遷移用。URLに
-// ?quickstart=<exerciseId>が付いていたら、「自分で作る→種目を1つ追加→生成」を
-// ワンタップ分に短絡し、いきなり記録画面まで進める(有酸素種目のみ対応)。
-// 再読み込み時に同じセッションが誤って再生成されないよう、判定後は必ずURLから
-// パラメータを取り除く(history.replaceState、ページ遷移は発生させない)。
-function maybeStartQuickstart() {
+// game-daily-manager(全体管理画面)のショートカットからの遷移用。URLの?quickstart=<exerciseId>と
+// ?view=recordの2つをここで一括判定する(以前は別々の関数だったが、Codexレビューで
+// 「手作業やリンク破損で両方が同時に付いた場合、quickstartが記録画面へ進めた直後にview=record側が
+// 割り込んで画面を奪ってしまう」と指摘され、1箇所で読み取って排他的に処理するよう統合した。
+// game-daily-manager側が生成するリンクはどちらか一方しか付けないため通常は起こらないが、
+// 手打ち・共有時のURL破損等への防御)。優先順位はquickstart→view。
+// 判定後は必ずURLからこれらのパラメータを取り除く(history.replaceState、ページ遷移は発生させない)。
+function maybeHandleEntryParams() {
   const params = new URLSearchParams(window.location.search);
   const exerciseId = params.get('quickstart');
-  if (!exerciseId) return;
-  history.replaceState(null, '', window.location.pathname + window.location.hash);
-
-  const exercise = findExerciseById(exerciseId);
-  if (!exercise || exercise.type !== 'cardio') return; // 未知のid・非対応種目は何もせず通常のモード選択画面のまま
-
-  // ウォームアップ/クールダウンは「自分で作る」画面と全く同じ組み立て方にする(buildWarmupAndCooldown)。
-  // 当初は「有酸素単体には要らないだろう」と空にしていたが、これは誤りだった: menu-generator.jsには
-  // pattern:'cardio'向けの専用ウォームアップ(「ごく軽いペースで3〜5分」)が元々用意されており、
-  // 通常フローで有酸素種目だけを選んでも表示される。クイックスタートだけ勝手に省略すると、同じ種目
-  // なのに通常フローと結果が変わってしまうため、統一した(2026-09-08、実機フィードバックで発覚)。
-  const painAreas = (loadSettings() || {}).painAreas || [];
-  const { warmup, cooldown } = buildWarmupAndCooldown([exercise], painAreas);
-  currentMenu = {
-    warmup,
-    cooldown,
-    main: [buildCustomCardioPlan(exercise)],
-    generatedAt: new Date().toISOString(),
-    params: { custom: true, quickstart: true },
-    userReordered: false,
-  };
-  handleStartWorkout();
-}
-
-// game-daily-managerのショートカットが既に「達成」している時の遷移先。URLに?view=recordが
-// 付いていたら、記録タブ(カレンダー)を今日を選んだ状態で直接開く。ショートカットの「達成」
-// リンクを踏んだ時に、もう一度クイックスタートで新しいセッションを始めてしまわないよう、
-// quickstartとは別のURLパラメータにしている(2026-09-08、実機フィードバックで追加)。
-function maybeOpenRequestedView() {
-  const params = new URLSearchParams(window.location.search);
   const view = params.get('view');
-  if (!view) return;
+  if (!exerciseId && !view) return;
   history.replaceState(null, '', window.location.pathname + window.location.hash);
+
+  if (exerciseId) {
+    const exercise = findExerciseById(exerciseId);
+    if (!exercise || exercise.type !== 'cardio') return; // 未知のid・非対応種目は何もせず通常のモード選択画面のまま
+
+    // ウォームアップ/クールダウンは「自分で作る」画面と全く同じ組み立て方にする(buildWarmupAndCooldown)。
+    // 当初は「有酸素単体には要らないだろう」と空にしていたが、これは誤りだった: menu-generator.jsには
+    // pattern:'cardio'向けの専用ウォームアップ(「ごく軽いペースで3〜5分」)が元々用意されており、
+    // 通常フローで有酸素種目だけを選んでも表示される。クイックスタートだけ勝手に省略すると、同じ種目
+    // なのに通常フローと結果が変わってしまうため、統一した(2026-09-08、実機フィードバックで発覚)。
+    const painAreas = (loadSettings() || {}).painAreas || [];
+    const { warmup, cooldown } = buildWarmupAndCooldown([exercise], painAreas);
+    currentMenu = {
+      warmup,
+      cooldown,
+      main: [buildCustomCardioPlan(exercise)],
+      generatedAt: new Date().toISOString(),
+      params: { custom: true, quickstart: true },
+      userReordered: false,
+    };
+    handleStartWorkout();
+    return; // view=recordが同時に付いていても無視する(quickstart優先)
+  }
+
+  // ここに来るのはquickstartが無くviewだけ指定されている場合。game-daily-manager側の「達成」済み
+  // ショートカットからの遷移用(記録タブ・カレンダーを今日を選んだ状態で直接開く)。
   if (view !== 'record') return; // 未知の値は何もせず通常のモード選択画面のまま
   renderRecordScreen({ selectToday: true });
   showScreen('record');
@@ -1693,8 +1691,7 @@ function init() {
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
-  maybeStartQuickstart();
-  maybeOpenRequestedView();
+  maybeHandleEntryParams();
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {

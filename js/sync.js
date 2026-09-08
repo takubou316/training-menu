@@ -135,6 +135,16 @@ function savePendingSyncQueue(queue) {
   localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(queue));
 }
 
+// キューの各エントリを一意に識別するID。同じlocalIdに対してupsertとdeleteが両方キューに
+// 積まれるケース(例: オフライン中に記録→すぐ削除)がありうるため、成功/失敗の記録は
+// localIdではなくこのentryId単位で行う(下のflushSyncQueue参照。2026-09-08、Codexレビュー指摘:
+// localId単位で管理すると、片方の操作が成功しただけでdoneIdsにlocalIdが入り、その後失敗した
+// もう片方の操作までマージ時に誤って取り除かれてしまうバグがあった)。
+function generateSyncEntryId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // js/workout-log.jsのfinalizeSession()から呼ばれる。クラウド同期が有効な場合だけキューに
 // 追加し、その場で送信を試みる(即座に成功すればユーザーはほぼ気付かない。オフライン中なら
 // キューに残り、次にオンラインになった時・次回起動時に自動で追いつく)。
@@ -143,7 +153,7 @@ function queueSessionForSync(record) {
   if (!isCloudSyncActive()) return;
   const userId = currentSupabaseSession.user.id;
   const queue = loadPendingSyncQueue();
-  queue.push({ localId: record.id, userId, record, op: 'upsert' });
+  queue.push({ entryId: generateSyncEntryId(), localId: record.id, userId, record, op: 'upsert' });
   savePendingSyncQueue(queue);
   void flushSyncQueue();
 }
@@ -157,7 +167,7 @@ function queueSessionDeleteForSync(localId) {
   if (!isCloudSyncActive()) return;
   const userId = currentSupabaseSession.user.id;
   const queue = loadPendingSyncQueue();
-  queue.push({ localId, userId, op: 'delete' });
+  queue.push({ entryId: generateSyncEntryId(), localId, userId, op: 'delete' });
   savePendingSyncQueue(queue);
   void flushSyncQueue();
 }
@@ -196,36 +206,40 @@ async function flushSyncQueue() {
   try {
     const userId = currentSupabaseSession.user.id;
     const queue = loadPendingSyncQueue();
-    const doneIds = new Set(); // 送信成功、または隔離してキューから取り除くもの
-    const attemptUpdates = new Map(); // localId -> 更新後の失敗回数(まだキューに残すもの)
+    const doneEntryIds = new Set(); // 送信成功、または隔離してキューから取り除くもの
+    const attemptUpdates = new Map(); // entryId -> 更新後の失敗回数(まだキューに残すもの)
     let stopEarly = false;
     for (const item of queue) {
       if (stopEarly || item.userId !== userId) continue;
+      // entryIdを持たない古いエントリ(この仕組み導入前にキューに積まれたもの)はlocalIdで代用する。
+      // 古い形式は常にupsertのみだったため、localId単位の管理でも従来通り正しく動く。
+      const entryId = item.entryId || item.localId;
       try {
         if (item.op === 'delete') {
           await deleteSessionFromSupabase(item.localId, userId);
         } else {
           await syncSessionToSupabase(item.record, userId);
         }
-        doneIds.add(item.localId);
+        doneEntryIds.add(entryId);
       } catch (e) {
         const attempts = (item.attempts || 0) + 1;
         if (attempts >= MAX_SYNC_ATTEMPTS) {
-          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録の自動送信を停止しました(local_id: ${item.localId})`);
-          doneIds.add(item.localId);
+          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録の自動送信を停止しました(local_id: ${item.localId}, op: ${item.op || 'upsert'})`);
+          doneEntryIds.add(entryId);
         } else {
-          attemptUpdates.set(item.localId, attempts);
+          attemptUpdates.set(entryId, attempts);
           stopEarly = true;
         }
       }
     }
-    if (doneIds.size > 0 || attemptUpdates.size > 0) {
+    if (doneEntryIds.size > 0 || attemptUpdates.size > 0) {
       const latest = loadPendingSyncQueue();
       const merged = latest
-        .filter((item) => !doneIds.has(item.localId))
-        .map((item) => (attemptUpdates.has(item.localId)
-          ? { ...item, attempts: attemptUpdates.get(item.localId) }
-          : item));
+        .filter((item) => !doneEntryIds.has(item.entryId || item.localId))
+        .map((item) => {
+          const entryId = item.entryId || item.localId;
+          return attemptUpdates.has(entryId) ? { ...item, attempts: attemptUpdates.get(entryId) } : item;
+        });
       savePendingSyncQueue(merged);
     }
   } finally {
