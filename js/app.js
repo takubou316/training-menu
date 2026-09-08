@@ -1454,18 +1454,36 @@ function maybeStartQuickstart() {
   const exercise = findExerciseById(exerciseId);
   if (!exercise || exercise.type !== 'cardio') return; // 未知のid・非対応種目は何もせず通常のモード選択画面のまま
 
+  // ウォームアップ/クールダウンは「自分で作る」画面と全く同じ組み立て方にする(buildWarmupAndCooldown)。
+  // 当初は「有酸素単体には要らないだろう」と空にしていたが、これは誤りだった: menu-generator.jsには
+  // pattern:'cardio'向けの専用ウォームアップ(「ごく軽いペースで3〜5分」)が元々用意されており、
+  // 通常フローで有酸素種目だけを選んでも表示される。クイックスタートだけ勝手に省略すると、同じ種目
+  // なのに通常フローと結果が変わってしまうため、統一した(2026-09-08、実機フィードバックで発覚)。
+  const painAreas = (loadSettings() || {}).painAreas || [];
+  const { warmup, cooldown } = buildWarmupAndCooldown([exercise], painAreas);
   currentMenu = {
-    // 有酸素種目単体にウォームアップ/クールダウンの体操・ストレッチを組み立てる意味が薄く、
-    // 「即座に記録画面へ」というクイックスタートの目的にも反するため、空の状態(buildWarmupHtml/
-    // buildCooldownHtmlがそのまま読める最小の形)で固定する。
-    warmup: { general: '', dynamic: [], staticStretch: [] },
-    cooldown: { static: [], general: '' },
+    warmup,
+    cooldown,
     main: [buildCustomCardioPlan(exercise)],
     generatedAt: new Date().toISOString(),
     params: { custom: true, quickstart: true },
     userReordered: false,
   };
   handleStartWorkout();
+}
+
+// game-daily-managerのショートカットが既に「達成」している時の遷移先。URLに?view=recordが
+// 付いていたら、記録タブ(カレンダー)を今日を選んだ状態で直接開く。ショートカットの「達成」
+// リンクを踏んだ時に、もう一度クイックスタートで新しいセッションを始めてしまわないよう、
+// quickstartとは別のURLパラメータにしている(2026-09-08、実機フィードバックで追加)。
+function maybeOpenRequestedView() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get('view');
+  if (!view) return;
+  history.replaceState(null, '', window.location.pathname + window.location.hash);
+  if (view !== 'record') return; // 未知の値は何もせず通常のモード選択画面のまま
+  renderRecordScreen({ selectToday: true });
+  showScreen('record');
 }
 
 // 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
@@ -1649,6 +1667,7 @@ function init() {
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
   maybeStartQuickstart();
+  maybeOpenRequestedView();
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {

@@ -534,10 +534,17 @@ Codexへの設計レビューで指摘され、今回は対応を見送った点
   種目(`type: 'cardio'`)のみ対応。強度種目や未知のidの場合は何もせず通常のモード選択画面のまま
   （将来game-daily-manager側の`link_type`が`exercise`以外に拡張されても、ここが黙って無視する
   ことで安全に共存できる設計）
-- 実装は既存の「自分で作る」フローの関数（`buildCustomCardioPlan`・`handleStartWorkout`）を
-  そのまま再利用しているだけで、記録の保存経路・クラウド同期経路は通常の記録と完全に同じ
-  （`finalizeSession`から`queueSessionForSync`が呼ばれ、同期していれば`training_session_exercises`
-  に`exercise_id`が入る。これをgame-daily-manager側が「達成したか」の判定に使う）
+- 実装は既存の「自分で作る」フローの関数（`buildCustomCardioPlan`・`buildWarmupAndCooldown`・
+  `handleStartWorkout`）をそのまま再利用しているだけで、ウォームアップ/クールダウンの内容・記録の
+  保存経路・クラウド同期経路は通常の記録と完全に同じ（`finalizeSession`から`queueSessionForSync`が
+  呼ばれ、同期していれば`training_session_exercises`に`exercise_id`が入る。これをgame-daily-manager
+  側が「達成したか」の判定に使う）。**教訓（2026-09-08、実機フィードバックで発覚した誤り）**:
+  初版では「有酸素単体にウォームアップは要らないだろう」と独自判断して空にしていたが、実際には
+  `menu-generator.js`に`pattern:'cardio'`向けの専用ウォームアップ（「ごく軽いペースで3〜5分」）が
+  既に用意されており、通常の「自分で作る」で有酸素だけ選んでも表示される内容だった。クイックスタート
+  だけ勝手に省略すると同じ種目なのに結果が変わってしまう。**近道を実装する時は、素材（ここでは
+  `buildWarmupAndCooldown`）を作り直さず、既存の組み立て関数にそのまま渡して同じ結果を得ること。
+  「要らないはず」という独自判断で項目を削らない。**
 - 判定直後に`history.replaceState`でURLからパラメータを除去する。記録画面滞在中にページを
   リロードしても同じクイックスタートが再発火して別セッションが二重生成されないようにするため
 - 達成判定の考え方（「別の種目をやったのに無関係なショートカットが達成扱いにならないように」
