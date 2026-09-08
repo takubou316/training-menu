@@ -1611,6 +1611,19 @@ function openResetHistoryModal(targetId) {
   document.getElementById('reset-history-modal').classList.add('open');
 }
 
+// 記録削除時、クラウド同期が有効ならSupabase側のtraining_sessions行もあわせて削除キューに積む
+// (js/sync.jsのqueueSessionDeleteForSync)。ローカル削除は既に完了しているため、失敗しても
+// ローカルには影響しないベストエフォート(workout-log.jsのqueueSessionForSync呼び出しと同じ方針。
+// 2026-09-08追加: これが無いと、ローカルで削除してもgame-daily-manager側は削除前のSupabase上の
+// 記録を見続けるため、全体管理画面の「達成」表示がローカル削除後も残ってしまっていた)。
+function queueSessionDeleteSafe(localId) {
+  try {
+    if (typeof queueSessionDeleteForSync === 'function') queueSessionDeleteForSync(localId);
+  } catch (e) {
+    // ベストエフォートのため握りつぶす。ローカルの削除は既に完了している。
+  }
+}
+
 // 「今日のデータを削除する」用。1日に複数回記録している場合も、今日の分をまとめて削除する
 // （記録画面：カレンダー統合の設計メモにある通り、1日に複数セッションがあり得るため）。
 function openResetTodayModal() {
@@ -1801,10 +1814,16 @@ function init() {
   document.getElementById('reset-history-confirm').addEventListener('click', () => {
     if (historyDeleteMode === 'session') {
       deleteSession(historyDeleteTargetId);
+      queueSessionDeleteSafe(historyDeleteTargetId);
     } else if (historyDeleteMode === 'today') {
-      deleteSessionsByDateKey(localDateKey(new Date()));
+      const todayKey = localDateKey(new Date());
+      const idsToDelete = loadHistory().filter((s) => localDateKey(s.date) === todayKey).map((s) => s.id);
+      deleteSessionsByDateKey(todayKey);
+      idsToDelete.forEach(queueSessionDeleteSafe);
     } else {
+      const idsToDelete = loadHistory().map((s) => s.id);
       clearHistory();
+      idsToDelete.forEach(queueSessionDeleteSafe);
     }
     historyDeleteTargetId = null;
     historyDeleteMode = 'all';

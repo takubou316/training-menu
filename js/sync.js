@@ -138,11 +138,26 @@ function savePendingSyncQueue(queue) {
 // js/workout-log.jsのfinalizeSession()から呼ばれる。クラウド同期が有効な場合だけキューに
 // 追加し、その場で送信を試みる(即座に成功すればユーザーはほぼ気付かない。オフライン中なら
 // キューに残り、次にオンラインになった時・次回起動時に自動で追いつく)。
+// opを持たないエントリは(過去に積まれた分も含めて)'upsert'として扱う(下のflushSyncQueue参照)。
 function queueSessionForSync(record) {
   if (!isCloudSyncActive()) return;
   const userId = currentSupabaseSession.user.id;
   const queue = loadPendingSyncQueue();
-  queue.push({ localId: record.id, userId, record });
+  queue.push({ localId: record.id, userId, record, op: 'upsert' });
+  savePendingSyncQueue(queue);
+  void flushSyncQueue();
+}
+
+// js/app.jsの記録削除(今日のデータを削除する／記録データをすべて削除する／個別削除)から呼ばれる。
+// ローカル削除は既に完了している前提で、Supabase側のtraining_sessions行(と、on delete cascadeで
+// 連動するtraining_session_exercises/training_session_sets)を後追いで削除するだけの
+// ベストエフォート処理(2026-09-08追加。それまではローカル削除がクラウド側に伝播せず、
+// game-daily-manager側の「達成」表示がローカル削除後も残ってしまっていた)。
+function queueSessionDeleteForSync(localId) {
+  if (!isCloudSyncActive()) return;
+  const userId = currentSupabaseSession.user.id;
+  const queue = loadPendingSyncQueue();
+  queue.push({ localId, userId, op: 'delete' });
   savePendingSyncQueue(queue);
   void flushSyncQueue();
 }
@@ -187,7 +202,11 @@ async function flushSyncQueue() {
     for (const item of queue) {
       if (stopEarly || item.userId !== userId) continue;
       try {
-        await syncSessionToSupabase(item.record, userId);
+        if (item.op === 'delete') {
+          await deleteSessionFromSupabase(item.localId, userId);
+        } else {
+          await syncSessionToSupabase(item.record, userId);
+        }
         doneIds.add(item.localId);
       } catch (e) {
         const attempts = (item.attempts || 0) + 1;
@@ -289,6 +308,18 @@ async function syncSessionToSupabase(record, userId) {
       .upsert(setPayload, { onConflict: 'session_exercise_id,local_id' });
     if (setsError) throw setsError;
   }
+}
+
+// 1回分のトレーニング記録をクラウド側からも削除する(queueSessionDeleteForSync経由)。
+// training_session_exercises/training_session_setsはon delete cascadeで自動的に消える
+// (game-daily-manager/supabase/schema.sql参照)ため、親のtraining_sessions行だけ消せばよい。
+async function deleteSessionFromSupabase(localId, userId) {
+  const { error } = await supabaseClient
+    .from('training_sessions')
+    .delete()
+    .eq('user_id', userId)
+    .eq('local_id', localId);
+  if (error) throw error;
 }
 
 // Googleログインを開始する。成功するとブラウザがリダイレクトされ、戻ってきた時点で

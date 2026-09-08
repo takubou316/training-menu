@@ -454,6 +454,17 @@ UIを検証しており、以下はその試作で固まった設計判断（実
   「とりあえず開始してみる」使い方が増えたことで、間違えて記録した1日分をまとめてやり直したい
   場面向けに追加した
 
+**クラウド同期中の削除の伝播（2026-09-08追加）**: 上記3種類のローカル削除は、いずれも
+`js/sync.js`の`queueSessionDeleteForSync(localId)`を後追いで呼び、Supabase側の
+`training_sessions`行（`on delete cascade`で子テーブルも連動）も削除キューに積む。これが
+無いと、ローカルで削除してもgame-daily-manager側の全体管理画面は削除前のSupabase上の記録を
+見続けるため、ショートカットの「達成」表示がローカル削除後も残ってしまう不具合があった。
+既存の記録同期(`queueSessionForSync`)と同じオフラインキュー(`training-menu:pending-sync`)を
+共有しており、キューの各エントリに`op`('upsert'|'delete')を持たせて`flushSyncQueue`側で
+分岐する。オフライン中に削除した場合も、次にオンラインになった時に自動で追いつく。
+game-daily-manager側は`todayCompletedExerciseIds`をページ読み込み時に一度だけクエリするため、
+削除後すぐには反映されず、全体管理画面を開き直す必要がある点に注意。
+
 ## データの保存場所
 
 すべてのデータ（設定・トレーニング記録）は端末のlocalStorageのみに保存される。ブラウザのデータを消去すると記録も失われる点に注意。
