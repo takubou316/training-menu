@@ -435,12 +435,24 @@ UIを検証しており、以下はその試作で固まった設計判断（実
 ## 記録データの削除
 
 記録一覧画面(`screen-history`)の一番下に、間違って触らないよう`<details>`で畳んだ
-「その他の設定」を置き、開くと初めて「記録データをすべて削除する」という控えめな
-テキストリンクが出てくる（`.danger-zone`/`.danger-link-btn`、通常のボタンのような
+「その他の設定」を置き、開くと初めて「今日のデータを削除する」「記録データをすべて削除する」
+という控えめなテキストリンクが出てくる（`.danger-zone`/`.danger-link-btn`、通常のボタンのような
 目立つ見た目にしていない）。押すと確認モーダル(`#reset-history-modal`)が出て、
 「削除する」を明示的に押さないと実行されない二段構えにしてある。削除されるのは
 トレーニング記録(`training-menu:history`)だけで、お気に入りや体重などの設定は残る
-（`js/storage.js`の`clearHistory`）。
+（`js/storage.js`の`clearHistory`/`deleteSessionsByDateKey`）。
+
+削除の対象は3種類あり、`js/app.js`の`historyDeleteMode`('all'|'session'|'today')で区別する
+（`historyDeleteTargetId`だけでは「今日の分をまとめて」を表現できないため、2026-09-08に
+別軸として追加した）:
+- `all`: 「記録データをすべて削除する」。`clearHistory()`
+- `session`: カレンダー/リスト表示の各記録カードにある個別の削除（`data-history-delete`）。
+  その1件(`session.id`)だけを`deleteSession()`
+- `today`: 「今日のデータを削除する」。1日に複数回記録している場合(記録画面：カレンダー統合の
+  設計メモ参照)もまとめて対象になるため、単一のidでは表現できず`localDateKey`で絞り込む
+  `deleteSessionsByDateKey()`を使う。ウォーキングのショートカット(クイックスタート)のように
+  「とりあえず開始してみる」使い方が増えたことで、間違えて記録した1日分をまとめてやり直したい
+  場面向けに追加した
 
 ## データの保存場所
 

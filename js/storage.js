@@ -119,6 +119,14 @@ function deleteSession(id) {
   return history;
 }
 
+// 指定した日付(dateKey、localDateKey形式)に行った記録をまとめて削除する（他の日には影響しない）。
+// 1日に複数回記録している場合(記録画面：カレンダー統合の設計メモ参照)もすべて対象になる。
+function deleteSessionsByDateKey(dateKey) {
+  const history = loadHistory().filter((s) => localDateKey(s.date) !== dateKey);
+  localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+  return history;
+}
+
 // 指定した種目の直近の記録（最後に行ったセット内容）を返す。無ければnull。
 function findLastPerformance(exerciseId) {
   const history = loadHistory();
@@ -266,7 +274,7 @@ function setActiveWeeklyPlanId(id) {
 if (typeof module !== 'undefined') {
   module.exports = {
     loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, updateTrainingStreak,
-    clearHistory, deleteSession, findLastPerformance,
+    clearHistory, deleteSession, deleteSessionsByDateKey, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,

@@ -137,6 +137,9 @@ let exercisePickerEquipmentFilterActive = true;
 
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
+// 上記とは別軸で、削除の種類を持つ('all'|'session'|'today')。「今日のデータを削除する」は
+// 1日に複数回記録がある場合も全部まとめて対象になるため、単一のsession.idでは表現できない。
+let historyDeleteMode = 'all';
 
 // 豆知識画面のカテゴリ絞り込み('all'またはKNOWLEDGE_CATEGORIESのいずれか)
 let knowledgeCategoryFilter = 'all';
@@ -1594,6 +1597,7 @@ function handleFinishWorkout() {
 
 // targetIdがnullなら「すべて削除」、session.idを渡せばその1件だけの削除確認になる。
 function openResetHistoryModal(targetId) {
+  historyDeleteMode = targetId ? 'session' : 'all';
   historyDeleteTargetId = targetId || null;
   const titleEl = document.getElementById('reset-history-modal-title');
   const descEl = document.getElementById('reset-history-modal-desc');
@@ -1604,6 +1608,16 @@ function openResetHistoryModal(targetId) {
     titleEl.textContent = '記録をすべて削除しますか？';
     descEl.textContent = 'これまでのトレーニング記録がすべて消え、元に戻せません。お気に入りや体重などの設定はそのまま残ります。';
   }
+  document.getElementById('reset-history-modal').classList.add('open');
+}
+
+// 「今日のデータを削除する」用。1日に複数回記録している場合も、今日の分をまとめて削除する
+// （記録画面：カレンダー統合の設計メモにある通り、1日に複数セッションがあり得るため）。
+function openResetTodayModal() {
+  historyDeleteMode = 'today';
+  historyDeleteTargetId = null;
+  document.getElementById('reset-history-modal-title').textContent = '今日の記録を削除しますか？';
+  document.getElementById('reset-history-modal-desc').textContent = '今日行った記録（複数回あればすべて）が消え、元に戻せません。他の日の記録には影響しません。';
   document.getElementById('reset-history-modal').classList.add('open');
 }
 
@@ -1743,6 +1757,7 @@ function init() {
   document.getElementById('rpe-info-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
+  document.getElementById('reset-today-btn').addEventListener('click', openResetTodayModal);
   document.getElementById('reset-history-btn').addEventListener('click', () => openResetHistoryModal(null));
   document.getElementById('screen-record').addEventListener('click', (e) => {
     const delBtn = e.target.closest('[data-history-delete]');
@@ -1784,12 +1799,15 @@ function init() {
     }
   });
   document.getElementById('reset-history-confirm').addEventListener('click', () => {
-    if (historyDeleteTargetId) {
+    if (historyDeleteMode === 'session') {
       deleteSession(historyDeleteTargetId);
+    } else if (historyDeleteMode === 'today') {
+      deleteSessionsByDateKey(localDateKey(new Date()));
     } else {
       clearHistory();
     }
     historyDeleteTargetId = null;
+    historyDeleteMode = 'all';
     document.getElementById('reset-history-modal').classList.remove('open');
     renderRecordScreen();
   });
