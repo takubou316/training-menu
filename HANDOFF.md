@@ -3,6 +3,41 @@
 - **最終更新日時**: 2026-09-15（Claude更新）
 - **変更主体**: Claude（設計相談〜実装〜PCプレビュー確認〜実機バグ修正〜見た目統一〜入力方式の見直し）
 
+## 2026-09-15: 上記の記録中セッション復元機能にCodexレビューで見つかった3件のバグを修正
+
+新しい記録中セッション復元機能（直下の節）についてCodexへ設計レビューを依頼（read-only、
+`codex-reviewer`経由）。指摘された3件（いずれも実コードで再現条件を確認済み、優先度P2）を
+すべて修正しコミット済み。
+
+1. **`?quickstart=`の再発火**: 記録中セッションを復元する時、URLパラメータの除去
+   （`history.replaceState`）自体も丸ごとスキップしていたため、そのセッションを完了した後に
+   再度リロードされると、消し忘れたquickstartパラメータが意図しない新規セッションを開始して
+   しまっていた。`consumeEntryParams()`としてURL読み取り・除去だけを独立させ、復元の有無に
+   関わらず必ず一度だけ呼ぶように分離（`js/app.js`）。
+2. **認証確認前の記録が同期対象から漏れる**: 起動直後、`initSupabaseAuth()`の最初のセッション
+   確認(`getSession()`、非同期)が終わる前に復元したセッションを「記録して終了」すると、
+   `isCloudSyncActive()`が`currentSupabaseSession`未設定のため偽になり、`queueSessionForSync`が
+   その記録を静かにキューへ積まず取りこぼしていた。`js/sync.js`に`authInitDone`/
+   `waitForAuthInit()`を追加し、同期を選択済みなのに認証確認未了の間は`queueSessionForSync`が
+   確認完了を待ってから判定し直すようにした。
+3. **画面移動でセッション開始時刻が失われる**: 記録画面はボトムナビ（メニュー作成／週間プラン／
+   記録／豆知識）がいつでもタップ可能で、タップすると（`currentSession`が生きたままでも）
+   無条件に`stopSessionTimer()`が呼ばれ`sessionStartTime`が`null`になっていた。その後アプリを
+   バックグラウンドにすると`sessionStartTime: null`のスナップショットで上書きされ、次回起動時に
+   `startSessionTimer(null)`が現在時刻から再スタートしてしまい、それまでの経過時間が最終的な
+   `durationSec`から失われていた。`js/session-timer.js`に`pauseSessionTimerDisplay()`
+   （インターバルだけ止めて`sessionStartTime`は消さない）を新設し、ナビゲーション時は
+   `stopSessionTimer()`の代わりにこちらを使うよう変更。
+
+あわせて簡素化1件（`js/cardio-timer.js`の`updateCardioTimer`が毎秒2回同じ内容を保存していた
+重複除去）と、防御的な修正1件（`restoreActiveSessionIfAny`を`try/catch`で囲み、壊れた/想定外
+形式のスナップショットで例外が起きても`init()`の残りのイベント配線を止めないようにした）も実施。
+
+ローカルの簡易サーバーで、有酸素タイマー計測中にボトムナビで別画面へ移動→そのままリロード→
+記録画面が復元され、`sessionStartTime`が保持されたまま「記録して終了」した記録の`durationSec`が
+ナビゲーション・リロードを挟んだ実時間と一致することを確認済み（78秒）。認証確認前の同期漏れ
+(#2)はコード上のレビューのみで、実際のSupabaseログインを使った実地確認はまだ。
+
 ## 2026-09-15: 記録中セッションが消える重大バグを修正
 
 ウォーキング等の有酸素タイマーで計測中に他アプリへ長時間切り替えると、戻ってきた時に
@@ -32,12 +67,15 @@ rest-timer/hold-timerは数十秒〜数分程度の短時間な操作であり�
 確認済み。**実機（iPhone、実際に他アプリへ切り替えてOSに殺されるケース）での確認はまだ**。
 詳細はCLAUDE.mdの「タイマーまわりの方針」に追記予定。
 
-**この環境固有の注意（2026-09-15判明）**: このPC(`takutolibrary`ルートの`.claude/launch.json`)の
-`training-menu`設定は`python`コマンドを前提にしているが、現時点でこのマシンの`python`/`python3`は
-Windowsストアの実行エイリアス（未インストール状態のスタブ）を指しており動作しない。`node`/`npm`も
-PATH上に見当たらなかった。今回はPowerShellの`System.Net.HttpListener`で代替の簡易静的サーバーを
-その場で用意して動作確認した。今後この環境でpreview_startの`training-menu`が同じエラー
-（`Python was not found`）で失敗する場合、まずPythonの実体がインストールされているか確認すること。
+**この環境固有の注意（2026-09-15判明、同日中に解決）**: このPC(`takutolibrary`ルートの
+`.claude/launch.json`)の`training-menu`設定は`python`コマンドを前提にしているが、当初この
+マシンの`python`/`python3`はWindowsストアの実行エイリアス（未インストール状態のスタブ）を
+指しており動作しなかった。`node`/`npm`もPATH上に見当たらなかった。動作確認はPowerShellの
+`System.Net.HttpListener`で代替の簡易静的サーバーをその場で用意して行った。その後ユーザーの
+許可を得てwingetでPython 3.12・Node.js LTSを実体インストール済み（Node.js自体は既に
+インストール済みだったことが判明）。ただしClaude Codeアプリのプロセスは起動時点のPATHを
+子プロセスへ引き継ぐため、インストール後もアプリ再起動までは反映されない（Windowsの一般的な
+仕様）。詳細は記憶`project_training_menu_local_server_python_missing`参照。
 
 ## 2026-09-08: Codexレビューで見つかったバグを修正（オフラインキューのentryId化、URL排他処理）
 

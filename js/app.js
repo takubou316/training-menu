@@ -69,15 +69,27 @@ function persistActiveSessionSnapshot() {
 // 記録中セッションを上書きしてしまうため呼び出し元でスキップする)。
 function restoreActiveSessionIfAny() {
   const snapshot = loadActiveSessionSnapshot();
-  if (!snapshot || !snapshot.session) return false;
+  if (!snapshot || !snapshot.session || !Array.isArray(snapshot.session.exercises)) return false;
 
-  currentSession = snapshot.session;
-  currentMenu = snapshot.menu || null;
-  renderLog(currentSession);
-  showScreen('log');
-  startSessionTimer(snapshot.sessionStartTime);
-  if (snapshot.cardioTimer) restoreCardioTimer(snapshot.cardioTimer);
-  return true;
+  // 想定外の形式のスナップショット(将来のデータ構造変更や、書き込み途中でOSに
+  // プロセスを終了させられ壊れた場合など)でrenderLog等が例外を投げると、
+  // init()の残りの配線(ボタンのイベント登録等)まで止まってしまいアプリ全体が
+  // 動かなくなる。復元専用の処理なので失敗時は握りつぶし、壊れたスナップショットを
+  // 捨てて通常起動にフォールバックする(2026-09-15、Codexレビュー指摘)。
+  try {
+    currentSession = snapshot.session;
+    currentMenu = snapshot.menu || null;
+    renderLog(currentSession);
+    showScreen('log');
+    startSessionTimer(snapshot.sessionStartTime);
+    if (snapshot.cardioTimer) restoreCardioTimer(snapshot.cardioTimer);
+    return true;
+  } catch (e) {
+    currentSession = null;
+    currentMenu = null;
+    clearActiveSessionSnapshot();
+    return false;
+  }
 }
 let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
 
@@ -1485,19 +1497,32 @@ function handleStartWorkout() {
   persistActiveSessionSnapshot();
 }
 
-// game-daily-manager(全体管理画面)のショートカットからの遷移用。URLの?quickstart=<exerciseId>と
+// game-daily-manager(全体管理画面)のショートカットからの遷移用URLパラメータ(?quickstart=<exerciseId>・
+// ?view=record)を読み取り、その場でURLから取り除く(history.replaceState、ページ遷移は発生させない)。
+// 復元(restoreActiveSessionIfAny)するかどうかに関わらず必ず一度だけ呼ぶ必要がある。
+// 復元を優先してこの関数自体の呼び出しをスキップすると、URLにパラメータが残ったままになり、
+// 記録中セッションを完了した後に再度ページがリロードされた際、残っていたquickstartが
+// 意図せず新しいセッションを始めてしまう不具合があった(2026-09-15、Codexレビュー指摘)。
+function consumeEntryParams() {
+  const params = new URLSearchParams(window.location.search);
+  const exerciseId = params.get('quickstart');
+  const view = params.get('view');
+  if (!exerciseId && !view) return null;
+  history.replaceState(null, '', window.location.pathname + window.location.hash);
+  return { exerciseId, view };
+}
+
+// game-daily-manager(全体管理画面)のショートカットからの遷移用。?quickstart=<exerciseId>と
 // ?view=recordの2つをここで一括判定する(以前は別々の関数だったが、Codexレビューで
 // 「手作業やリンク破損で両方が同時に付いた場合、quickstartが記録画面へ進めた直後にview=record側が
 // 割り込んで画面を奪ってしまう」と指摘され、1箇所で読み取って排他的に処理するよう統合した。
 // game-daily-manager側が生成するリンクはどちらか一方しか付けないため通常は起こらないが、
 // 手打ち・共有時のURL破損等への防御)。優先順位はquickstart→view。
-// 判定後は必ずURLからこれらのパラメータを取り除く(history.replaceState、ページ遷移は発生させない)。
-function maybeHandleEntryParams() {
-  const params = new URLSearchParams(window.location.search);
-  const exerciseId = params.get('quickstart');
-  const view = params.get('view');
-  if (!exerciseId && !view) return;
-  history.replaceState(null, '', window.location.pathname + window.location.hash);
+// URLの読み取り・除去自体はconsumeEntryParams()が別途担うため、ここでは渡された値を使うだけ
+// (記録中セッションを復元した場合はこの関数自体を呼ばない、js/app.jsのinit()参照)。
+function maybeHandleEntryParams(entryParams) {
+  if (!entryParams) return;
+  const { exerciseId, view } = entryParams;
 
   if (exerciseId) {
     const exercise = findExerciseById(exerciseId);
@@ -1736,9 +1761,12 @@ function init() {
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
-  // 前回終了できなかった記録中セッションがあれば先に復元する。復元した場合、
-  // ?quickstart等のURLパラメータ処理は記録中セッションを上書きしてしまうためスキップする。
-  if (!restoreActiveSessionIfAny()) maybeHandleEntryParams();
+  // URLパラメータの読み取り・除去は復元の有無に関わらず必ず一度だけ行う(consumeEntryParamsが
+  // history.replaceStateで即座に取り除く)。前回終了できなかった記録中セッションがあれば
+  // 先に復元し、復元した場合はその値を使ったquickstart等の実行はスキップする
+  // (記録中セッションを上書きしてしまうため)。
+  const entryParams = consumeEntryParams();
+  if (!restoreActiveSessionIfAny()) maybeHandleEntryParams(entryParams);
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persistActiveSessionSnapshot();
@@ -1911,7 +1939,11 @@ function init() {
       stopHoldTimer();
       stopCardioTimer();
       endRestTimer();
-      stopSessionTimer();
+      // 記録中セッション自体はまだ続いている可能性がある(このnavには「記録を終了する」機能は
+      // 無く、単に別画面を見に行くだけ)ため、sessionStartTimeは消さずに表示更新だけ止める
+      // (stopSessionTimerとの違いはjs/session-timer.jsのコメント参照)。
+      pauseSessionTimerDisplay();
+      persistActiveSessionSnapshot();
       showScreen(target);
     });
   });

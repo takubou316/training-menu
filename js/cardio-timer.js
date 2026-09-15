@@ -132,10 +132,13 @@ function updateCardioTimer() {
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
   if (button) button.textContent = `■ ${formatDuration(activeSec)}`;
 
-  // 毎秒、計測中のタイマー状態をlocalStorageへ保存する(js/app.jsのpersistActiveSessionSnapshot)。
-  // ウォーキング等の長時間計測中にOSがバックグラウンドのタブ/PWAを終了させて復帰時にページが
-  // 丸ごとリロードされても、次回起動時にここまでの経過時間を復元できるようにするため。
-  if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();
+  // 毎秒のタイマー状態のlocalStorageへの保存(js/app.jsのpersistActiveSessionSnapshot)は、
+  // 上のslider.dispatchEvent('input')がjs/app.jsのhandleCardioLogInputへ伝播した先で行われる
+  // (`#log-content`のinputリスナー経由)。ここで別途明示的に呼ぶと同じ内容を毎秒2回保存する
+  // だけの重複になるため呼ばない(2026-09-15、Codexレビュー指摘で簡素化)。唯一の例外は
+  // 起動直後のrestoreCardioTimerからの最初の呼び出しで、その時点ではまだ`#log-content`の
+  // inputリスナーが登録されておらず伝播しないが、読み込んだばかりのスナップショットと
+  // 内容が変わらないため実害はなく、次のtick(1秒後、リスナー登録済み)で追いつく。
 }
 
 // 「休憩」「再開」共通のトグル操作。

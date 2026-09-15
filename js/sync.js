@@ -57,10 +57,35 @@ function isCloudSyncActive() {
   return SUPABASE_AVAILABLE && isSyncEnabled() && Boolean(currentSupabaseSession);
 }
 
+// 起動時の最初のgetSession()確認が終わったかどうか。記録中セッションの復元機能
+// (js/app.jsのrestoreActiveSessionIfAny、2026-09-15追加)により、起動直後の最初の1秒程度で
+// 前回分の記録をすぐ完了できるようになった。この確認が終わる前に「記録して終了」すると、
+// 同期を選んでいる(isSyncEnabled)のにcurrentSupabaseSessionがまだ入っておらず
+// isCloudSyncActive()が偽になるため、queueSessionForSyncがその記録を同期対象から
+// 静かに取りこぼしてしまう不具合があった(2026-09-15、Codexレビュー指摘)。
+let authInitDone = false;
+let authInitWaiters = [];
+
+function waitForAuthInit() {
+  if (authInitDone) return Promise.resolve();
+  return new Promise((resolve) => authInitWaiters.push(resolve));
+}
+
+function resolveAuthInit() {
+  if (authInitDone) return;
+  authInitDone = true;
+  const waiters = authInitWaiters;
+  authInitWaiters = [];
+  waiters.forEach((resolve) => resolve());
+}
+
 // アプリ起動時に一度だけ呼ぶ。現在のセッションを読み込み、以後の変化(ログイン/ログアウト/
 // トークン更新)を購読する。UIの再描画はrenderSyncStatus(js/ui.js)に委ねる。
 async function initSupabaseAuth() {
-  if (!SUPABASE_AVAILABLE) return;
+  if (!SUPABASE_AVAILABLE) {
+    resolveAuthInit();
+    return;
+  }
   try {
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
@@ -73,6 +98,9 @@ async function initSupabaseAuth() {
   } catch (e) {
     currentSupabaseSession = null;
   }
+  // 最初のセッション確認はここで確定する(以後のonAuthStateChangeによる更新はauthInitDoneに影響しない)。
+  // queueSessionForSyncがこの確認の完了を待てるようにするためのフラグ(上のwaitForAuthInit参照)。
+  resolveAuthInit();
   // 注意: onAuthStateChangeは登録した直後、現在の状態(未ログインならsession=null)で必ず一度
   // コールバックが呼ばれる('INITIAL_SESSION'イベント、SDKの仕様)。そのため「セッションが
   // 実際に存在する時だけ」モーダルを閉じるようにしないと、初回起動時にopenSyncChoiceModal()
@@ -149,13 +177,30 @@ function generateSyncEntryId() {
 // 追加し、その場で送信を試みる(即座に成功すればユーザーはほぼ気付かない。オフライン中なら
 // キューに残り、次にオンラインになった時・次回起動時に自動で追いつく)。
 // opを持たないエントリは(過去に積まれた分も含めて)'upsert'として扱う(下のflushSyncQueue参照)。
-function queueSessionForSync(record) {
+//
+// 呼び出し元(workout-log.js)はfire-and-forgetで同期的なtry/catchに包んでいるだけなので、
+// await前に投げる例外は呼び出し元のcatchで拾えるが、await後の失敗はここで自前に握りつぶす
+// 必要がある(呼び出し元まで伝播すると未処理のPromise rejectionになるだけで、記録自体は
+// 既にローカル保存済みなので実害は無いが、意図を明示するため)。
+async function queueSessionForSync(record) {
+  // 同期を選んでいるのに、起動直後でまだ最初のセッション確認(initSupabaseAuth)が終わって
+  // いない場合はここで待つ。待たずにisCloudSyncActive()だけで判定すると、記録中セッションの
+  // 復元機能により起動直後すぐ「記録して終了」された時、まだcurrentSupabaseSessionが
+  // 入っていないというだけの理由でこの記録が同期対象から静かに漏れてしまう
+  // (2026-09-15、Codexレビュー指摘)。
+  if (SUPABASE_AVAILABLE && isSyncEnabled() && !authInitDone) {
+    await waitForAuthInit();
+  }
   if (!isCloudSyncActive()) return;
-  const userId = currentSupabaseSession.user.id;
-  const queue = loadPendingSyncQueue();
-  queue.push({ entryId: generateSyncEntryId(), localId: record.id, userId, record, op: 'upsert' });
-  savePendingSyncQueue(queue);
-  void flushSyncQueue();
+  try {
+    const userId = currentSupabaseSession.user.id;
+    const queue = loadPendingSyncQueue();
+    queue.push({ entryId: generateSyncEntryId(), localId: record.id, userId, record, op: 'upsert' });
+    savePendingSyncQueue(queue);
+    void flushSyncQueue();
+  } catch (e) {
+    // ベストエフォート。ローカルの記録(record)は既に保存済みで無事。
+  }
 }
 
 // js/app.jsの記録削除(今日のデータを削除する／記録データをすべて削除する／個別削除)から呼ばれる。
