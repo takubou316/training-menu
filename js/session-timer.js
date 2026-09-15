@@ -13,8 +13,10 @@ function formatDuration(totalSec) {
     : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function startSessionTimer() {
-  sessionStartTime = Date.now();
+// existingStartTimeを渡すと、その時刻から経過したものとして再開する
+// (アプリ再読み込み後にセッションを復元する場合に使う。js/app.jsのrestoreActiveSessionIfAny参照)。
+function startSessionTimer(existingStartTime) {
+  sessionStartTime = existingStartTime || Date.now();
   updateSessionTimerDisplay();
   if (sessionTimerInterval) clearInterval(sessionTimerInterval);
   sessionTimerInterval = setInterval(updateSessionTimerDisplay, 1000);

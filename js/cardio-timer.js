@@ -131,6 +131,11 @@ function updateCardioTimer() {
 
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
   if (button) button.textContent = `■ ${formatDuration(activeSec)}`;
+
+  // 毎秒、計測中のタイマー状態をlocalStorageへ保存する(js/app.jsのpersistActiveSessionSnapshot)。
+  // ウォーキング等の長時間計測中にOSがバックグラウンドのタブ/PWAを終了させて復帰時にページが
+  // 丸ごとリロードされても、次回起動時にここまでの経過時間を復元できるようにするため。
+  if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();
 }
 
 // 「休憩」「再開」共通のトグル操作。
@@ -204,4 +209,32 @@ function stopCardioTimer() {
   }
   unlockBodyScroll();
   activeCardioTimer = null;
+  // タイマーを止めたことをスナップショットにも反映する(消し忘れると、次回起動時に
+  // 既に終わったタイマーのモーダルが誤って復元されてしまう)。
+  if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();
+}
+
+// リロード後にactivateCardioTimerの状態(js/app.jsのrestoreActiveSessionIfAnyが保存済みスナップショット
+// から渡す)をそのまま引き継いで、計測中/休憩中のタイマー画面を再現する。開始時刻(segmentStartedAt)は
+// 絶対時刻のまま保つので、リロードで空いた時間もDate.now()との差分に自然に反映される
+// (js/cardio-timer.js冒頭コメントの「開始時刻だけを覚えておく」方式そのもの)。
+function restoreCardioTimer(saved) {
+  activeCardioTimer = {
+    exIndex: saved.exIndex,
+    phase: saved.phase,
+    accumulatedActiveMs: saved.accumulatedActiveMs,
+    segmentStartedAt: saved.segmentStartedAt,
+    restLog: saved.restLog || [],
+    intervalId: null,
+  };
+  const button = document.querySelector(`[data-cardio-timer="${saved.exIndex}"]`);
+  if (button) button.classList.add('active');
+
+  const modal = document.getElementById('cardio-timer-modal');
+  if (modal) modal.hidden = false;
+  lockBodyScroll();
+  updateCardioTimerRestHistory(activeCardioTimer.restLog);
+  setCardioTimerPhaseUi(activeCardioTimer.phase);
+  updateCardioTimer();
+  activeCardioTimer.intervalId = setInterval(updateCardioTimer, 1000);
 }

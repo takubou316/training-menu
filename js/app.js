@@ -38,6 +38,47 @@ const PART_TO_MUSCLES = {
 
 let currentMenu = null;
 let currentSession = null;
+
+// 記録中(currentSessionがある間)の状態を随時localStorageへスナップショット保存する。
+// ブラウザ/PWAには真のバックグラウンド実行の権限が無く、OSがバックグラウンドの
+// タブ/PWAプロセスを終了させることがある(特にウォーキング中に他アプリへ長時間切り替えた場合)。
+// 復帰時にページが丸ごとリロードされるとメモリ上のcurrentSession・タイマーが失われ、
+// 計測中の時間も記録の完了もできなくなる不具合があったため追加した(復元はrestoreActiveSessionIfAny)。
+// rest-timer/hold-timerは数十秒〜数分程度の短時間な操作であり、リロードに巻き込まれても
+// 「もう一度セットを完了にする／もう一度計測ボタンを押す」程度の実害で済むため対象外にしている。
+function persistActiveSessionSnapshot() {
+  if (!currentSession) return;
+  saveActiveSessionSnapshot({
+    session: currentSession,
+    menu: currentMenu,
+    sessionStartTime,
+    cardioTimer: activeCardioTimer
+      ? {
+          exIndex: activeCardioTimer.exIndex,
+          phase: activeCardioTimer.phase,
+          accumulatedActiveMs: activeCardioTimer.accumulatedActiveMs,
+          segmentStartedAt: activeCardioTimer.segmentStartedAt,
+          restLog: activeCardioTimer.restLog,
+        }
+      : null,
+  });
+}
+
+// 起動時、前回終了できなかった記録中セッションがあれば記録画面へ復元する。
+// 戻り値は復元できたかどうか(復元した場合、URLパラメータ由来の?quickstart等の処理は
+// 記録中セッションを上書きしてしまうため呼び出し元でスキップする)。
+function restoreActiveSessionIfAny() {
+  const snapshot = loadActiveSessionSnapshot();
+  if (!snapshot || !snapshot.session) return false;
+
+  currentSession = snapshot.session;
+  currentMenu = snapshot.menu || null;
+  renderLog(currentSession);
+  showScreen('log');
+  startSessionTimer(snapshot.sessionStartTime);
+  if (snapshot.cardioTimer) restoreCardioTimer(snapshot.cardioTimer);
+  return true;
+}
 let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
 
 // 体重は回数/RPEと同じ数字ホイールで選ぶ(2026-08-14)。ただし体重は「毎回その場で選ぶ値」
@@ -1441,6 +1482,7 @@ function handleStartWorkout() {
   renderLog(currentSession);
   showScreen('log');
   startSessionTimer();
+  persistActiveSessionSnapshot();
 }
 
 // game-daily-manager(全体管理画面)のショートカットからの遷移用。URLの?quickstart=<exerciseId>と
@@ -1511,6 +1553,7 @@ function handleCardioLogInput(e) {
       calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
     }
   }
+  persistActiveSessionSnapshot();
 }
 
 function handleLogInput(e) {
@@ -1578,6 +1621,7 @@ function handleLogInput(e) {
       if (prBadge) prBadge.hidden = true;
     }
   }
+  persistActiveSessionSnapshot();
 }
 
 function handleFinishWorkout() {
@@ -1589,6 +1633,7 @@ function handleFinishWorkout() {
   finalizeSession(currentSession);
   currentSession = null;
   currentMenu = null;
+  clearActiveSessionSnapshot();
   renderRecordScreen({ selectToday: true });
   showScreen('record');
 }
@@ -1691,7 +1736,14 @@ function init() {
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
-  maybeHandleEntryParams();
+  // 前回終了できなかった記録中セッションがあれば先に復元する。復元した場合、
+  // ?quickstart等のURLパラメータ処理は記録中セッションを上書きしてしまうためスキップする。
+  if (!restoreActiveSessionIfAny()) maybeHandleEntryParams();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') persistActiveSessionSnapshot();
+  });
+  window.addEventListener('pagehide', () => persistActiveSessionSnapshot());
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {

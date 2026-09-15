@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   weeklyPlans: 'training-menu:weekly-plans',
   activeWeeklyPlanId: 'training-menu:active-weekly-plan-id',
   streak: 'training-menu:streak',
+  activeSession: 'training-menu:active-session',
 };
 
 function loadSettings() {
@@ -262,6 +263,33 @@ function deleteWeeklyPlan(id) {
   return plans;
 }
 
+// トレーニング中のセッション(currentSession)・タイマー状態のスナップショット。
+// OSがバックグラウンドのタブ/PWAプロセスを終了させ、復帰時にページが丸ごとリロードされると
+// (真のバックグラウンド実行ができないブラウザ/PWAの制約、js/cardio-timer.js冒頭コメント参照)
+// メモリ上のcurrentSessionと計測中のタイマーが両方失われ、計測中の時間も記録の完了もできなくなる
+// 不具合があったため追加した。記録中は随時ここへ保存し、次回起動時に未完了のセッションがあれば
+// 復元する(js/app.jsのrestoreActiveSessionIfAny/persistActiveSessionSnapshot)。
+function saveActiveSessionSnapshot(snapshot) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.activeSession, JSON.stringify(snapshot));
+  } catch (e) {
+    // 保存に失敗しても記録画面の操作自体は継続する
+  }
+}
+
+function loadActiveSessionSnapshot() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.activeSession);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearActiveSessionSnapshot() {
+  localStorage.removeItem(STORAGE_KEYS.activeSession);
+}
+
 function getActiveWeeklyPlanId() {
   return localStorage.getItem(STORAGE_KEYS.activeWeeklyPlanId);
 }
@@ -279,5 +307,6 @@ if (typeof module !== 'undefined') {
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId,
+    saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
   };
 }
