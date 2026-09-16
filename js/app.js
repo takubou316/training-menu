@@ -964,7 +964,11 @@ function openExercisePicker(target) {
     ? currentMenu.params.equipment
     : null;
   exercisePickerEquipmentFilterActive = true;
-  document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
+  // .picker-filter-btnは豆知識のカテゴリ絞り込みボタンとも共有しているクラスなので、
+  // ページ全体ではなく種目ピッカー内(#exercise-picker-modal)だけに絞る。絞らないと、
+  // 種目ピッカーを開くたびに豆知識側で選択中のカテゴリの見た目(active)が無関係に
+  // 消えてしまう不具合があった(2026-09-16、Codexレビュー指摘)。
+  document.querySelectorAll('#exercise-picker-modal .picker-filter-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.pickerFilter === 'all');
   });
   const searchInput = document.getElementById('exercise-picker-search');
@@ -997,10 +1001,10 @@ function handleExercisePickerSelect(id) {
 function wireExercisePicker() {
   document.getElementById('exercise-picker-search').addEventListener('input', renderExercisePickerAndResetScroll);
   document.getElementById('exercise-picker-close').addEventListener('click', closeExercisePicker);
-  document.querySelectorAll('.picker-filter-btn').forEach((btn) => {
+  document.querySelectorAll('#exercise-picker-modal .picker-filter-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       exercisePickerFilter = btn.dataset.pickerFilter;
-      document.querySelectorAll('.picker-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('#exercise-picker-modal .picker-filter-btn').forEach((b) => b.classList.toggle('active', b === btn));
       renderExercisePickerAndResetScroll();
     });
   });
@@ -1680,7 +1684,9 @@ function handleLogInput(e) {
       });
       const summaryEl = row.querySelector(`[data-set-summary="${exIndex}:${setIndex}"]`);
       if (summaryEl) {
-        summaryEl.textContent = target.checked && !set.isWarmup ? setRowSummaryText(set, exercise.holdBased) : '';
+        // js/ui.jsのrenderLog内でweightFieldを出す条件(重量スライダーを持つ種目か)と揃える。
+        const hasWeightField = !exercise.holdBased && !!WEIGHT_RANGE_BY_EQUIPMENT[exercise.equipment && exercise.equipment[0]];
+        summaryEl.textContent = target.checked && !set.isWarmup ? setRowSummaryText(set, exercise.holdBased, hasWeightField) : '';
       }
     }
     if (target.checked) {

@@ -463,6 +463,11 @@ select {
   font-weight: 600;
   cursor: pointer;
 }
+.primary-btn:disabled {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
 
 .secondary-btn {
   width: 100%;
@@ -1024,9 +1029,12 @@ body.modal-open {
 /* 完了にした後もスライダーが動かせて記録済みの値を誤って変えられてしまうという
    指摘があり、完了中はスライダーをdisabledにしている(js/app.jsのhandleLogInput)。
    あわせて行自体を縮め、消えたスライダーの代わりに.set-row-summaryへ
-   「10回・RPE7」のような1行サマリーを出す（完了を外せば元の編集可能な表示に戻る）。 */
-.set-row.is-done .slider-field,
-.set-row.is-done .set-pr-badge {
+   「10回・RPE7」のような1行サマリーを出す（完了を外せば元の編集可能な表示に戻る）。
+   .set-pr-badge(自己ベスト更新のお祝い表示)は以前はここで一緒に隠していたが、
+   セットを完了にした直後(自己ベスト達成の瞬間)にほぼ即座に非表示になってしまい、
+   お祝い表示そのものが実質的に見えなくなっていた不具合があった(2026-09-16、
+   Codexレビュー指摘)。完了状態でも表示したままにする。 */
+.set-row.is-done .slider-field {
   display: none;
 }
 .set-row-summary {
@@ -1711,7 +1719,7 @@ body.modal-open {
   cursor: pointer;
   font-size: 13px;
   color: var(--text);
-  background: var(--surface);
+  background: transparent;
   border: 1px solid var(--text-dim);
   border-radius: 999px;
   padding: 9px 12px;
@@ -1956,8 +1964,6 @@ body.modal-open {
 }
 
 .cal-day.other-month { visibility: hidden; pointer-events: none; }
-.cal-day.is-today { border-color: var(--text-dim); }
-.cal-day.is-today.has-record { border-color: transparent; }
 
 .cal-day-stamp {
   position: absolute;
@@ -1977,7 +1983,12 @@ body.modal-open {
   line-height: 1;
 }
 
-.cal-day.is-today.has-record .cal-day-num {
+/* 「今日」の強調はマス全体の枠線ではなく日付バッジのみで行う方針(記録した日のスタンプの
+   ギザギザ縁と枠線がぶつかって見た目がごちゃつくため)。以前は記録がある日(.has-record)だけ
+   このバッジ表示になり、記録がまだ無い今日はマス全体の枠線(is-today)だけが残っていて
+   方針と実装がズレていた(2026-09-16、Codexレビュー指摘)。記録の有無に関わらず.cal-day-num
+   にバッジを適用する。 */
+.cal-day.is-today .cal-day-num {
   padding: 1px 3px;
   border-radius: 4px;
   background: var(--text-dim);

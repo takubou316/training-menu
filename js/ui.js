@@ -392,7 +392,12 @@ function renderMenu(menu) {
     </div>`)
     .join('');
 
-  const mainHtml = `
+  // 生成後に✕で全種目を削除すると0件になりうる(2026-09-16、Codexレビュー指摘)。
+  // その場合は並べ替えツールバーの代わりに空状態の案内を出し、開始ボタンも
+  // 無効化する(以前はボタンが押せる状態のまま残り、押すとalert()が出るだけだった)。
+  const mainHtml = menu.main.length === 0
+    ? `<div class="reorder-list" id="menu-exercise-list"><p class="ex-note">種目がありません。「＋ 種目を追加」から追加してください。</p></div>`
+    : `
     <div class="reorder-list" id="menu-exercise-list">
       <div class="reorder-toolbar">
         <span class="reorder-hint">カードを長押しすると並べ替え・削除ができます</span>
@@ -417,6 +422,8 @@ function renderMenu(menu) {
     <div style="height:16px;"></div>
     ${cooldownHtml}
   `;
+  const startBtn = document.getElementById('start-workout-btn');
+  if (startBtn) startBtn.disabled = menu.main.length === 0;
 }
 
 // 器具ごとの現実的な重量スライダー範囲。bodyweightは重量を扱わないためスライダー自体を出さない。
@@ -443,11 +450,17 @@ function formatSliderValue(field, value, holdBased) {
 }
 
 // 完了にすると縮む(スライダー類を隠す)セット行に、代わりに表示する1行サマリー。
-// 何をやったか消えてしまわないよう、reps/RPEだけ短く残す(重量は種目によって
-// 表示形式がまちまち(自重換算等)なので、値ラベル側で既に見えている前提で含めない)。
-function setRowSummaryText(set, holdBased) {
+// 何をやったか消えてしまわないよう、reps/RPEを短く残す。
+// 2026-09-16修正: 重量は「値ラベル側で既に見えている前提」で含めていなかったが、
+// 重量スライダーの`.slider-field`自体が完了時にまるごと隠れる(値ラベルも一緒に消える)
+// ため、実際には重量を使う種目(自重換算ではなく実物の重量スライダーがある種目)は
+// 完了直後に何kgでやったか分からなくなっていた不具合があった(Codexレビュー指摘)。
+// hasWeightField(呼び出し元でその種目に重量スライダーがあるかどうか)がtrueの時だけ
+// 先頭に重量を足す。自重種目(自重換算)は元々スライダー自体が無いので対象外のまま。
+function setRowSummaryText(set, holdBased, hasWeightField) {
   const reps = holdBased ? `${set.reps}秒` : `${set.reps}回`;
-  return `${reps}・RPE${set.rpe}`;
+  const weightPart = hasWeightField ? `${set.weight}kg・` : '';
+  return `${weightPart}${reps}・RPE${set.rpe}`;
 }
 
 // sliderFieldHtml/numberWheelHtmlで共通の「ラベル＋現在値」行を組み立てる。
@@ -924,7 +937,7 @@ function renderLog(session) {
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
           <div class="set-row-head">
             <span class="set-idx">${label}</span>
-            <span class="set-row-summary" data-set-summary="${exIndex}:${setIndex}">${s.done && !s.isWarmup ? setRowSummaryText(s, ex.holdBased) : ''}</span>
+            <span class="set-row-summary" data-set-summary="${exIndex}:${setIndex}">${s.done && !s.isWarmup ? setRowSummaryText(s, ex.holdBased, !!weightField) : ''}</span>
             <label class="done-toggle">
               <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
               <span class="done-toggle-pill">完了</span>
@@ -989,7 +1002,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       <div class="ex-note" data-cardio-rest-summary="${exIndex}" ${(ex.restLog && ex.restLog.length) ? '' : 'hidden'}>${formatCardioRestSummary(ex.restLog)}</div>
       <label class="done-toggle">
         <input type="checkbox" ${ex.done ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="done">
-        完了
+        <span class="done-toggle-pill">完了</span>
       </label>
     </div>`;
 }
@@ -1200,7 +1213,12 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
     cell.type = 'button';
     cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
     cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}`);
-    cell.innerHTML = hasRecord ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>` : `${day}`;
+    // 記録が無い日も.cal-day-numで囲む(今日バッジのCSSがこのクラスに掛かっているため。
+    // css/style.cssの.cal-day.is-today .cal-day-num参照)。位置指定(絶対配置での左上表示)は
+    // .has-recordの時だけ効くので、記録が無い日は今まで通りマス中央に表示されたままになる。
+    cell.innerHTML = hasRecord
+      ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>`
+      : `<span class="cal-day-num">${day}</span>`;
     cell.addEventListener('click', () => selectRecordDate(dateStr));
     grid.appendChild(cell);
   }
