@@ -4,11 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>筋トレメニュー</title>
-<meta name="theme-color" content="#14171c">
+<meta name="theme-color" content="#1a1512" id="theme-color-meta">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/style.css">
+<script>
+// CSS読み込み前に選択済みテーマをdata-theme属性へ反映し、デフォルト配色が一瞬
+// 表示されてから切り替わる(FOUC)のを防ぐ。js/storage.jsのSTORAGE_KEYS.themeと
+// 同じキー文字列を直接書いている(このタイミングではまだ他のJSファイルが読み込まれて
+// いないため)。
+try {
+  var savedTheme = localStorage.getItem('training-menu:theme');
+  if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+} catch (e) {}
+</script>
 </head>
 <body>
 <div id="app">
@@ -204,6 +214,15 @@
 
         <details class="danger-zone">
           <summary>その他の設定</summary>
+          <div class="theme-picker">
+            <div class="theme-picker-label">テーマ</div>
+            <div class="theme-picker-options" id="theme-picker-options">
+              <button type="button" class="theme-swatch" data-theme-option="amber" aria-label="オレンジ"></button>
+              <button type="button" class="theme-swatch" data-theme-option="mono" aria-label="モノトーン"></button>
+              <button type="button" class="theme-swatch" data-theme-option="rose" aria-label="ローズ"></button>
+              <button type="button" class="theme-swatch" data-theme-option="sage" aria-label="セージグリーン"></button>
+            </div>
+          </div>
           <div class="sync-status-row" id="sync-status-row"></div>
           <button type="button" id="reset-today-btn" class="danger-link-btn">今日のデータを削除する</button>
           <button type="button" id="reset-history-btn" class="danger-link-btn">記録データをすべて削除する</button>

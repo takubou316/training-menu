@@ -9,6 +9,28 @@
 // スクロール位置が一番上に戻ってしまう既知の問題があるため、ロック時の
 // スクロール位置を覚えておき、bodyをposition:fixedでその位置に固定→
 // 解除時にwindow.scrollToで元の位置へ戻す方式にしている。
+// テーマ(配色)切り替え。data-theme属性をhtml要素に付け、css/style.cssの[data-theme]定義に
+// 切り替えを任せる。index.html<head>の即時実行スクリプトが起動時のFOUC対策として同じ属性を
+// 先に設定しているので、ここでは「保存」と「(必要なら)反映」の両方を行う。
+const THEME_META_COLORS = { amber: '#1a1512', mono: '#16171a', rose: '#16141a', sage: '#14171a' };
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  saveTheme(theme);
+  const metaEl = document.getElementById('theme-color-meta');
+  if (metaEl) metaEl.setAttribute('content', THEME_META_COLORS[theme] || THEME_META_COLORS.amber);
+  document.querySelectorAll('.theme-swatch').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeOption === theme);
+  });
+}
+
+function wireThemePicker() {
+  document.querySelectorAll('.theme-swatch').forEach((btn) => {
+    btn.addEventListener('click', () => applyTheme(btn.dataset.themeOption));
+  });
+  applyTheme(loadTheme());
+}
+
 let bodyScrollLockCount = 0;
 let bodyScrollLockSavedY = 0;
 function lockBodyScroll() {
@@ -1798,6 +1820,7 @@ function wireSyncChoiceModal() {
 }
 
 function init() {
+  wireThemePicker();
   wirePartExclusivity();
   wirePainExclusivity();
   wireBodyWeightSlider();

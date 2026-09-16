@@ -9,7 +9,26 @@ const STORAGE_KEYS = {
   activeWeeklyPlanId: 'training-menu:active-weekly-plan-id',
   streak: 'training-menu:streak',
   activeSession: 'training-menu:active-session',
+  theme: 'training-menu:theme',
 };
+
+// 選べるテーマのid一覧('amber'が既定、css/style.cssの[data-theme]・index.htmlの
+// .theme-pickerと対応させる)。想定外の値(壊れたlocalStorage等)を弾くためexport。
+const THEME_IDS = ['amber', 'mono', 'rose', 'sage'];
+
+function loadTheme() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.theme);
+    return THEME_IDS.includes(raw) ? raw : 'amber';
+  } catch (e) {
+    return 'amber';
+  }
+}
+
+function saveTheme(theme) {
+  if (!THEME_IDS.includes(theme)) return;
+  localStorage.setItem(STORAGE_KEYS.theme, theme);
+}
 
 function loadSettings() {
   try {
@@ -308,5 +327,6 @@ if (typeof module !== 'undefined') {
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
+    loadTheme, saveTheme,
   };
 }

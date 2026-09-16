@@ -1,13 +1,56 @@
-:root {
-  --bg: #14171c;
-  --surface: #1e2229;
-  --surface-2: #262b33;
-  --text: #eef1f5;
-  --text-dim: #9aa4b2;
-  --accent: #4fd1a5;
-  --accent-dim: #2f7a5e;
+/* テーマ(配色)一式。2026-09-16、黒×ミントグリーンの組み合わせが「量産型のダークモードSaaS
+   っぽい」という指摘を受け、ユーザーとmcp__visualizeで複数案を見比べた上で
+   「オレンジ(amber)」を新しい既定にし、モノトーン・ローズ・セージグリーンの3色を
+   設定から選べるようにした(js/app.jsのapplyTheme、index.htmlの.theme-picker参照)。
+   各テーマは同じ変数一式(--bg/--surface/--surface-2/--text/--text-dim/--accent/
+   --accent-dim/--border)を持たせる。--dangerは「削除」の意味を持つ共通色として
+   全テーマで固定し、テーマごとに変えない。既定(root、data-theme未設定時)は
+   [data-theme="amber"]と同じ内容にしている(初回起動時はlocalStorageに何も
+   保存されていないため)。 */
+:root,
+[data-theme="amber"] {
+  --bg: #1a1512;
+  --surface: #24201f;
+  --surface-2: #2c2929;
+  --text: #f5efe9;
+  --text-dim: #a89a8c;
+  --accent: #ff9d5c;
+  --accent-dim: #944b35;
   --danger: #e0665a;
-  --border: #313742;
+  --border: #373538;
+}
+[data-theme="mono"] {
+  --bg: #16171a;
+  --surface: #202227;
+  --surface-2: #282b31;
+  --text: #f5f4f2;
+  --text-dim: #9a9a9a;
+  --accent: #e8e6e1;
+  --accent-dim: #878583;
+  --danger: #e0665a;
+  --border: #333740;
+}
+[data-theme="rose"] {
+  --bg: #16141a;
+  --surface: #201f27;
+  --surface-2: #282831;
+  --text: #eee9ec;
+  --text-dim: #9c8c96;
+  --accent: #d98fa6;
+  --accent-dim: #7e5360;
+  --danger: #e0665a;
+  --border: #333440;
+}
+[data-theme="sage"] {
+  --bg: #14171a;
+  --surface: #1e2227;
+  --surface-2: #262b31;
+  --text: #eef2ef;
+  --text-dim: #95a89e;
+  --accent: #6fc09b;
+  --accent-dim: #406f5a;
+  --danger: #e0665a;
+  --border: #313740;
 }
 
 * { box-sizing: border-box; }
@@ -2150,6 +2193,36 @@ body.modal-open {
   display: grid;
   gap: 10px;
 }
+
+/* テーマ選択(色見本の丸ボタン)。各丸は選べる先のテーマの実際の色をそのまま表示するため、
+   現在のテーマ変数(var(--accent)等)ではなく固定の16進値で塗る(選んでいない色も
+   常に見えている必要があるため)。 */
+.theme-picker {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.theme-picker-label { font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+.theme-picker-options { display: flex; gap: 12px; }
+.theme-swatch {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+/* 選択中は枠を丸に密着させず、outline-offsetで少し離す。モノトーンのように
+   丸自体の色が--textに近いテーマだと、枠が密着(border)だと丸の色と同化して
+   選択中かどうか分かりにくくなるため、間に背景色の隙間を作って常に見えるようにする。 */
+.theme-swatch.active {
+  outline: 2px solid var(--text);
+  outline-offset: 3px;
+}
+.theme-swatch[data-theme-option="amber"] { background: #ff9d5c; }
+.theme-swatch[data-theme-option="mono"] { background: #e8e6e1; }
+.theme-swatch[data-theme-option="rose"] { background: #d98fa6; }
+.theme-swatch[data-theme-option="sage"] { background: #6fc09b; }
 
 .sync-status-row {
   margin: 14px 0;
