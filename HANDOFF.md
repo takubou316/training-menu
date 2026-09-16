@@ -9,20 +9,26 @@
 ショット付きで報告。「計測中 00:16」まで進んだのに、計測を終わった後にスライダーへ反映されている
 時間が「0分7秒」しかない、というズレがあった。
 
-**原因は2つ、いずれも根は同じ(DOM経由の間接的な値反映に頼っていたこと)**:
+**当初、原因は2つ(いずれもDOM経由の間接的な値反映に頼っていたこと)と考えて両方修正したが、
+Codexレビューの結果、確実に実害があったと言えるのは2番目のラベルバグのみで、1番目は
+「防御的には正しい改善だが、報告された症状の直接の原因だったとは確認できない」との指摘を受けた
+（下記「Codexレビュー」参照）。**
 
-1. **`ex.duration`(実際に保存される値)自体がズレる**: `js/cardio-timer.js`の`updateCardioTimer`は
-   従来、`slider.value`への代入＋`dispatchEvent('input')`だけでモデル(`currentSession.exercises[exIndex].duration`)
-   への反映を`js/app.js`の`handleCardioLogInput`に任せていた。ところが、記録中セッションの復元
-   (`restoreActiveSessionIfAny`、2026-09-15追加)直後の最初のティックは`#log-content`の
-   inputリスナーがまだ登録される前に発火するため、このイベントが誰にも届かず反映が抜け落ちる。
-   実機ではウォーキング中に画面ロック等で断続的にリロード・復元が繰り返されるとみられ、その
-   たびに最初のティック分の反映漏れが積み重なり、大きなズレになったと考えられる。
-   **修正**: `applyCardioDurationValue(exIndex, value)`という共通関数を新設し(`js/app.js`)、
-   モデル更新・ラベル表示・推定カロリー表示をこの関数が直接行うようにした。
-   `updateCardioTimer`はこれを直接呼ぶため、イベント伝播に一切依存しなくなった
-   (`dispatchEvent('input')`自体は他の汎用リスナー(スライダー塗り更新等)のために残してある)。
-2. **`.slider-value`ラベル(「時間 X分Y秒」の表示)がそもそも常に更新されない別バグ**: 調査中に
+1. **(未確認の仮説だったもの)`ex.duration`自体がズレる、という説**: `js/cardio-timer.js`の
+   `updateCardioTimer`は従来、`slider.value`への代入＋`dispatchEvent('input')`だけでモデル
+   (`currentSession.exercises[exIndex].duration`)への反映を`js/app.js`の`handleCardioLogInput`に
+   任せていた。記録中セッションの復元(`restoreActiveSessionIfAny`、2026-09-15追加)直後の
+   最初のティックは`#log-content`のinputリスナーがまだ登録される前に発火するため、このイベントが
+   誰にも届かず反映がその回だけ抜け落ちる。ただし`currentActiveMs()`は`ex.duration`ではなく
+   `accumulatedActiveMs`と絶対時刻`segmentStartedAt`から経過時間を再計算するため、次のティックや
+   停止時に自然と追いつく設計になっており、これ単体で経過時間が失われ続けるわけではない
+   （Codexレビュー指摘、当初「抜け落ちが積み重なり大きくズレる」と書いていたのは推測だった）。
+   **対応**: `applyCardioDurationValue(exIndex, value)`という共通関数を新設し(`js/app.js`)、
+   モデル更新・ラベル表示・推定カロリー表示をこの関数が直接行うようにし、`updateCardioTimer`が
+   これを直接呼ぶことでイベント伝播への依存自体は無くした（実害が確認できた修正ではないが、
+   防御的な改善として残す判断）。
+2. **(確認できた実際の原因)`.slider-value`ラベル(「時間 X分Y秒」の表示)がそもそも常に更新されない
+   バグ**: 調査中に
    発見。ラベル取得が`target.parentElement.querySelector('.slider-value')`になっていたが、
    2026-08-14に追加された「トラック両脇の範囲表示」(`.slider-track-row`)のせいで、実物の
    スライダー(重量・有酸素の時間/距離)では`target.parentElement`が`.slider-track-row`になり、
@@ -35,6 +41,22 @@
 ローカルの簡易サーバー(python)で、計測中の`ex.duration`・ラベル・モーダル表示の3つが常に
 一致すること、計測開始直後のリロード復元でも即座に一致すること、計測終了後も一致することを
 JS直接実行で確認済み。**実機での確認はまだ**。
+
+**Codexレビュー(read-only、コミット`86eedf2`が対象)で見つかった点、追加対応済み**:
+- 上記1番目の「未確認の仮説」だった点の指摘（記載済み）
+- `restoreCardioTimer`が保存された`exIndex`を検証せずに復元しており、壊れたスナップショットや
+  将来の仕様変更で現在のセッション内容と噛み合わなくなった場合、対応するスライダーが存在しない
+  まま有酸素タイマーだけが動き続ける「宙に浮いた」状態になりうる → `restoreActiveSessionIfAny`で
+  復元先が実在する有酸素種目であることを確認してから`restoreCardioTimer`を呼ぶよう修正
+- 同様に、`restoreActiveSessionIfAny`のtry/catchが`currentSession`等はリセットするが、
+  `restoreCardioTimer`側で例外が起きた場合に`activeCardioTimer`とモーダル表示が宙に浮いて
+  残ることがある → catch節で`stopCardioTimer()`による後片付けも試みるよう追加
+- (低優先度、簡素化)通常のtickごとに`applyCardioDurationValue`と`persistActiveSessionSnapshot`が
+  `dispatchEvent`経由でも二重に呼ばれてしまう(実害は無いが無駄)点の指摘 → スライダーの塗り更新
+  (`updateSliderTrackFill`)を合成`input`イベント経由ではなく直接呼ぶよう変更し、二重呼び出しを
+  解消
+- 長時間(120分＝スライダーの上限を超える)有酸素計測では、モーダル表示は上限なく伸びるが記録される
+  時間は120分に丸められる、という既存の仕様（今回のバグとは無関係、対応は見送り）の指摘あり
 
 ## 2026-09-15: 上記の記録中セッション復元機能にCodexレビューで見つかった3件のバグを修正
 

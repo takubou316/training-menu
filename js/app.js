@@ -82,12 +82,24 @@ function restoreActiveSessionIfAny() {
     renderLog(currentSession);
     showScreen('log');
     startSessionTimer(snapshot.sessionStartTime);
-    if (snapshot.cardioTimer) restoreCardioTimer(snapshot.cardioTimer);
+    if (snapshot.cardioTimer) {
+      // 保存された種目番号(exIndex)が現在のセッション内容と噛み合わない場合(壊れた
+      // スナップショットや将来の仕様変更等)、対応する有酸素スライダーが存在しないまま
+      // タイマーだけが動き続ける「宙に浮いた」状態になってしまう。有酸素種目であることを
+      // 確認できた時だけ復元する(2026-09-16、Codexレビュー指摘)。
+      const cardioEx = currentSession.exercises[snapshot.cardioTimer.exIndex];
+      if (cardioEx && cardioEx.type === 'cardio') restoreCardioTimer(snapshot.cardioTimer);
+    }
     return true;
   } catch (e) {
     currentSession = null;
     currentMenu = null;
     clearActiveSessionSnapshot();
+    // restoreCardioTimer側の途中で例外が起きた場合、activeCardioTimerとモーダルの表示だけが
+    // 宙に浮いて残ることがあるため、後片付けも試みる(失敗しても無視する)。
+    if (typeof activeCardioTimer !== 'undefined' && activeCardioTimer && typeof stopCardioTimer === 'function') {
+      try { stopCardioTimer(); } catch (e2) { /* 後片付け自体の失敗は無視 */ }
+    }
     return false;
   }
 }

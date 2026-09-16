@@ -124,22 +124,29 @@ function updateCardioTimer() {
 
   // スライダーは秒単位・1秒刻みなので、実測値(整数秒)をそのまま代入すればよい(丸めは発生しない)。
   // ex.durationへのモデル反映・ラベル・推定カロリーの更新はapplyCardioDurationValueで直接行う
-  // (js/app.js参照)。dispatchEvent('input')は、汎用のスライダー塗り更新(updateSliderTrackFill)
-  // 等のため引き続き発火させるが、データの正しさはそれに依存しない。
+  // (js/app.js参照)。スライダーの塗り更新(updateSliderTrackFill)も直接呼ぶ
+  // (以前はdispatchEvent('input')でまとめて済ませていたが、2026-09-16の修正でモデル反映を
+  // イベント伝播に頼らない形に変えたのに合わせて、視覚的な塗り更新だけのために合成イベントを
+  // 発火させ続けるのは無駄なため、Codexレビュー指摘を受けて直接呼び出しに統一した。手で
+  // ドラッグした時に発生する本物のinputイベントは従来通りjs/app.jsのhandleCardioLogInput/
+  // wireSliderEnhancementsが処理する)。
   //
-  // **2026-09-16修正の経緯**: 以前はモデル反映をこのdispatchEvent('input')が
-  // js/app.jsのhandleCardioLogInputへ伝播することだけに頼っていたが、記録中セッションの
-  // 復元(restoreActiveSessionIfAny)直後の最初のティックは`#log-content`のinputリスナーが
+  // **2026-09-16修正の経緯**: 以前はモデル反映をdispatchEvent('input')がjs/app.jsの
+  // handleCardioLogInputへ伝播することだけに頼っていたが、記録中セッションの復元
+  // (restoreActiveSessionIfAny)直後の最初のティックは`#log-content`のinputリスナーが
   // まだ登録される前に発火するため、このイベントが誰にも届かずex.durationへの反映が
-  // 抜け落ちていた(次のティックで追いつくとコメントしていたが、実機ではリロードが繰り返し
-  // 発生する状況などでこの抜け落ちが積み重なり、「計測中に表示していた時間」と「計測を
-  // 終わった後にスライダーへ反映されている時間」が大きくズレる不具合として報告された)。
+  // その回だけ抜け落ちる作りになっていた。次のティック(1秒後、リスナー登録済み)では
+  // currentActiveMs()が絶対時刻から経過時間を再計算するため自然に追いつく設計であり、
+  // これ単体で経過時間が失われ続けるわけではない(Codexレビュー指摘、当初の記録に「抜け落ちが
+  // 積み重なり大きくズレる」と書いていたのは未確認の推測だったため訂正)。実機で確認できた
+  // 確実な原因は下記コメントの「.slider-value」ラベル取得側の別バグであり、この直接呼び出しへの
+  // 変更自体はイベント伝播への依存を減らす防御的な改善という位置づけ。
   const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
   if (slider) {
     const clampedSec = Math.min(activeSec, Number(slider.max));
     slider.value = clampedSec;
     if (typeof applyCardioDurationValue === 'function') applyCardioDurationValue(exIndex, clampedSec);
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    if (typeof updateSliderTrackFill === 'function') updateSliderTrackFill(slider);
   }
 
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
