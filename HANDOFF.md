@@ -1,7 +1,40 @@
 # HANDOFF.md（training-menu）
 
-- **最終更新日時**: 2026-09-15（Claude更新）
+- **最終更新日時**: 2026-09-16（Claude更新）
 - **変更主体**: Claude（設計相談〜実装〜PCプレビュー確認〜実機バグ修正〜見た目統一〜入力方式の見直し）
+
+## 2026-09-16: 有酸素タイマーの「計測中の表示」と「記録される時間」がズレる不具合を修正
+
+**きっかけ**: ユーザーが実機(iPhone、公開URL`takubou316.github.io`)でウォーキングの計測をスクリーン
+ショット付きで報告。「計測中 00:16」まで進んだのに、計測を終わった後にスライダーへ反映されている
+時間が「0分7秒」しかない、というズレがあった。
+
+**原因は2つ、いずれも根は同じ(DOM経由の間接的な値反映に頼っていたこと)**:
+
+1. **`ex.duration`(実際に保存される値)自体がズレる**: `js/cardio-timer.js`の`updateCardioTimer`は
+   従来、`slider.value`への代入＋`dispatchEvent('input')`だけでモデル(`currentSession.exercises[exIndex].duration`)
+   への反映を`js/app.js`の`handleCardioLogInput`に任せていた。ところが、記録中セッションの復元
+   (`restoreActiveSessionIfAny`、2026-09-15追加)直後の最初のティックは`#log-content`の
+   inputリスナーがまだ登録される前に発火するため、このイベントが誰にも届かず反映が抜け落ちる。
+   実機ではウォーキング中に画面ロック等で断続的にリロード・復元が繰り返されるとみられ、その
+   たびに最初のティック分の反映漏れが積み重なり、大きなズレになったと考えられる。
+   **修正**: `applyCardioDurationValue(exIndex, value)`という共通関数を新設し(`js/app.js`)、
+   モデル更新・ラベル表示・推定カロリー表示をこの関数が直接行うようにした。
+   `updateCardioTimer`はこれを直接呼ぶため、イベント伝播に一切依存しなくなった
+   (`dispatchEvent('input')`自体は他の汎用リスナー(スライダー塗り更新等)のために残してある)。
+2. **`.slider-value`ラベル(「時間 X分Y秒」の表示)がそもそも常に更新されない別バグ**: 調査中に
+   発見。ラベル取得が`target.parentElement.querySelector('.slider-value')`になっていたが、
+   2026-08-14に追加された「トラック両脇の範囲表示」(`.slider-track-row`)のせいで、実物の
+   スライダー(重量・有酸素の時間/距離)では`target.parentElement`が`.slider-track-row`になり、
+   兄弟要素の`.slider-value`(`.slider-label`の中)へ届かなくなっていた。数字ホイール(回数・RPE・
+   体重)は`<input>`が`.slider-field`の直接の子のため無事だった。同じ理由で壊れていた箇所を
+   `js/app.js`内3箇所（`applyCardioDurationValue`・`handleCardioLogInput`の距離欄・
+   `handleLogInput`の重量欄）すべて`target.closest('.slider-field')`に統一して修正した
+   （`positionSliderBubble`は元から`.closest`を使っており無事だった）。
+
+ローカルの簡易サーバー(python)で、計測中の`ex.duration`・ラベル・モーダル表示の3つが常に
+一致すること、計測開始直後のリロード復元でも即座に一致すること、計測終了後も一致することを
+JS直接実行で確認済み。**実機での確認はまだ**。
 
 ## 2026-09-15: 上記の記録中セッション復元機能にCodexレビューで見つかった3件のバグを修正
 

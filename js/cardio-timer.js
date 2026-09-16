@@ -123,22 +123,31 @@ function updateCardioTimer() {
   }
 
   // スライダーは秒単位・1秒刻みなので、実測値(整数秒)をそのまま代入すればよい(丸めは発生しない)。
+  // ex.durationへのモデル反映・ラベル・推定カロリーの更新はapplyCardioDurationValueで直接行う
+  // (js/app.js参照)。dispatchEvent('input')は、汎用のスライダー塗り更新(updateSliderTrackFill)
+  // 等のため引き続き発火させるが、データの正しさはそれに依存しない。
+  //
+  // **2026-09-16修正の経緯**: 以前はモデル反映をこのdispatchEvent('input')が
+  // js/app.jsのhandleCardioLogInputへ伝播することだけに頼っていたが、記録中セッションの
+  // 復元(restoreActiveSessionIfAny)直後の最初のティックは`#log-content`のinputリスナーが
+  // まだ登録される前に発火するため、このイベントが誰にも届かずex.durationへの反映が
+  // 抜け落ちていた(次のティックで追いつくとコメントしていたが、実機ではリロードが繰り返し
+  // 発生する状況などでこの抜け落ちが積み重なり、「計測中に表示していた時間」と「計測を
+  // 終わった後にスライダーへ反映されている時間」が大きくズレる不具合として報告された)。
   const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
   if (slider) {
-    slider.value = Math.min(activeSec, Number(slider.max));
+    const clampedSec = Math.min(activeSec, Number(slider.max));
+    slider.value = clampedSec;
+    if (typeof applyCardioDurationValue === 'function') applyCardioDurationValue(exIndex, clampedSec);
     slider.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
   if (button) button.textContent = `■ ${formatDuration(activeSec)}`;
 
-  // 毎秒のタイマー状態のlocalStorageへの保存(js/app.jsのpersistActiveSessionSnapshot)は、
-  // 上のslider.dispatchEvent('input')がjs/app.jsのhandleCardioLogInputへ伝播した先で行われる
-  // (`#log-content`のinputリスナー経由)。ここで別途明示的に呼ぶと同じ内容を毎秒2回保存する
-  // だけの重複になるため呼ばない(2026-09-15、Codexレビュー指摘で簡素化)。唯一の例外は
-  // 起動直後のrestoreCardioTimerからの最初の呼び出しで、その時点ではまだ`#log-content`の
-  // inputリスナーが登録されておらず伝播しないが、読み込んだばかりのスナップショットと
-  // 内容が変わらないため実害はなく、次のtick(1秒後、リスナー登録済み)で追いつく。
+  // 毎秒、計測中のタイマー状態をlocalStorageへ保存する。上と同じ理由(イベント伝播への依存を
+  // 避ける)で、dispatchEvent経由でhandleCardioLogInputに呼ばせるのではなくここで直接呼ぶ。
+  if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();
 }
 
 // 「休憩」「再開」共通のトグル操作。

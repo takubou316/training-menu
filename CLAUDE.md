@@ -137,6 +137,18 @@
 記録画面から「単に他の画面を覗きに行くだけ」の操作と「記録を終了する」操作を同じ関数で
 扱わないこと。
 
+**2026-09-16: DOM経由の間接的な値反映は壊れやすい、という教訓。** 実機報告(「計測中00:16まで
+進んだのに記録された時間が0分7秒しかない」)を調査した結果、2つの独立したバグが見つかった。
+1つは有酸素タイマーの`ex.duration`更新が`slider.value`代入＋`dispatchEvent('input')`という
+間接的な方法だけに頼っており、復元直後の最初のティックでリスナー未登録により反映が抜け落ちる
+ケースがあったこと（`js/app.js`に`applyCardioDurationValue`を新設し直接呼ぶよう修正）。もう1つは
+`.slider-value`ラベル取得が`target.parentElement.querySelector('.slider-value')`になっており、
+2026-08-14の「トラック両脇の範囲表示」(`.slider-track-row`)追加以降、実物のスライダー(重量・
+有酸素の時間/距離)ではラベルへ届かなくなっていた（`target.closest('.slider-field')`に統一して
+修正、詳細はHANDOFF.mdの「2026-09-16」参照）。**今後、値の反映やラベル更新をDOMイベントの
+伝播やDOM構造の想定（親要素が何かなど）に頼って実装する時は、リスナー登録前に発火する経路が
+無いか、DOM構造が後から変わっていないかを疑うこと。**
+
 全画面タイマー(rest-timer/hold-timer)表示中は`js/app.js`の`lockBodyScroll`/`unlockBodyScroll`で
 背面ページのスクロールをロックしている。単純に`overflow:hidden`を付けるだけだと、特にiOS Safariで
 ロック解除時にスクロール位置が一番上に戻ってしまう既知の問題があるため、ロック時に`window.scrollY`を

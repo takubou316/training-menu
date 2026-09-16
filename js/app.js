@@ -1554,6 +1554,34 @@ function maybeHandleEntryParams(entryParams) {
   showScreen('record');
 }
 
+// 有酸素の「時間」欄への値反映(モデルの更新＋ラベル＋推定カロリーの表示更新)を1箇所にまとめた
+// もの。ユーザーが手でスライダーをドラッグした時(handleCardioLogInput経由)と、js/cardio-timer.js
+// の計測タイマーが毎秒ティックする時の両方から呼ぶ。
+//
+// 2026-09-16、実機で「計測中に表示していた時間(例:00:16)と、計測を終わった後にスライダーへ
+// 反映されている時間(例:0分7秒)がズレる」という不具合が報告された。原因は、計測タイマー側が
+// この更新を`slider.value`への代入＋`dispatchEvent('input')`というDOM経由の間接的な方法だけに
+// 頼っていたこと。記録中セッションの復元(restoreActiveSessionIfAny)直後の最初のティックは、
+// `#log-content`のinputリスナーがまだ登録される前に発火するため、このイベントが誰にも
+// 届かず値反映が抜け落ちる（次のティックで追いつくが、その間`ex.duration`が古い値のまま
+// 残ってしまう）。イベント伝播に頼らず、この関数を直接呼ぶことで確実に反映されるようにした。
+function applyCardioDurationValue(exIndex, value) {
+  if (!currentSession) return;
+  const ex = currentSession.exercises[exIndex];
+  if (!ex) return;
+  ex.duration = String(value);
+
+  const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
+  const valueEl = slider?.closest('.slider-field')?.querySelector('.slider-value');
+  if (valueEl) valueEl.textContent = formatMinSec(ex.duration);
+
+  const calorieEl = document.querySelector(`[data-cardio-calorie="${exIndex}"]`);
+  if (calorieEl) {
+    const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0);
+    calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
+  }
+}
+
 // 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
 // data-cardio-ex/data-cardio-fieldという別の属性でstrengthの仕組み(data-ex/data-set/data-field)
 // と衝突しないようにしている。
@@ -1561,22 +1589,22 @@ function handleCardioLogInput(e) {
   const target = e.target;
   const exIndex = Number(target.dataset.cardioEx);
   const field = target.dataset.cardioField;
-  const ex = currentSession.exercises[exIndex];
-  ex[field] = field === 'done' ? target.checked : target.value;
-
-  if (field !== 'done') {
-    const valueEl = target.parentElement.querySelector('.slider-value');
-    if (valueEl) {
-      valueEl.textContent = field === 'duration' ? formatMinSec(target.value) : `${Number(target.value).toFixed(1)}km`;
-    }
-  }
 
   if (field === 'duration') {
-    const calorieEl = document.querySelector(`[data-cardio-calorie="${exIndex}"]`);
-    if (calorieEl) {
-      const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0);
-      calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
-    }
+    // 計測タイマーのティックが直接applyCardioDurationValueを呼んだ後にも、この関数(スライダー
+    // からのinputイベント経由)が呼ばれることがあるが、同じ値を代入し直すだけなので無害。
+    applyCardioDurationValue(exIndex, target.value);
+    persistActiveSessionSnapshot();
+    return;
+  }
+
+  const ex = currentSession.exercises[exIndex];
+  ex[field] = field === 'done' ? target.checked : target.value;
+  if (field !== 'done') {
+    // .parentElementではなく.closest('.slider-field')を使う理由は下のhandleLogInputの
+    // コメント参照(2026-09-16、同じ原因の表示バグをまとめて修正)。
+    const valueEl = target.closest('.slider-field')?.querySelector('.slider-value');
+    if (valueEl) valueEl.textContent = `${Number(target.value).toFixed(1)}km`;
   }
   persistActiveSessionSnapshot();
 }
@@ -1595,7 +1623,13 @@ function handleLogInput(e) {
   set[field] = field === 'done' ? target.checked : target.value;
 
   if (field !== 'done') {
-    const valueEl = target.parentElement.querySelector('.slider-value');
+    // 数字ホイール(回数・RPE・体重)は<input>が.slider-fieldの直接の子なのでtarget.parentElement
+    // で足りるが、重量は今も実物のスライダーで、.slider-track-row(トラック両脇の範囲表示、
+    // 2026-08-14追加)に包まれているためtarget.parentElementでは.slider-valueまで届かず、
+    // ドラッグ中の値ラベルが更新されない不具合があった。.closest('.slider-field')なら
+    // どちらの構造でも共通して.slider-valueへ辿り着ける(2026-09-16、cardio-timerの
+    // 表示ズレ調査中に同じ原因の別バグとして発見・修正)。
+    const valueEl = target.closest('.slider-field')?.querySelector('.slider-value');
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 
