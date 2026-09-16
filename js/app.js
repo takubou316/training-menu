@@ -31,6 +31,33 @@ function wireThemePicker() {
   applyTheme(loadTheme());
 }
 
+// ヘッダー右上の更新ボタン(⟳)。standaloneでホーム画面に追加したPWAにはブラウザのURLバー・
+// 更新ボタンが無く、最新コードを取ってきたい手段が「一度ホーム画面から削除して開き直す」
+// くらいしか無かった(2026-09-16、ユーザー指摘)。service-worker.jsのfetchハンドラは既に
+// ネットワーク優先(cache:'no-store')なので理屈上は単純なlocation.reload()だけでも
+// 最新化されるはずだが、念のためService Workerのキャッシュ(オフライン用フォールバック)も
+// 明示的に消してから再読み込みする。
+async function hardReload(button) {
+  if (button) {
+    button.disabled = true;
+    button.classList.add('is-reloading');
+  }
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((key) => caches.delete(key)));
+    }
+  } catch (e) {
+    // 失敗してもlocation.reload()自体はネットワーク優先で最新化されるので握りつぶす
+  }
+  location.reload();
+}
+
+function wireHardReloadButton() {
+  const btn = document.getElementById('hard-reload-btn');
+  if (btn) btn.addEventListener('click', () => hardReload(btn));
+}
+
 let bodyScrollLockCount = 0;
 let bodyScrollLockSavedY = 0;
 function lockBodyScroll() {
@@ -1820,6 +1847,7 @@ function wireSyncChoiceModal() {
 }
 
 function init() {
+  wireHardReloadButton();
   wireThemePicker();
   wirePartExclusivity();
   wirePainExclusivity();

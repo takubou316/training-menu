@@ -80,6 +80,26 @@ html, body {
   top: 0;
   background: var(--bg);
   z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* standaloneでホーム画面に追加したPWAはブラウザのURLバー・更新ボタンが無く、
+   最新コードを取ってきたい時に「一度削除してから開き直す」しか手段が無かった
+   (2026-09-16、ユーザー指摘)。ここから直接location.reload()できるようにする。
+   js/app.jsのwireHardReloadButton参照。 */
+.app-header-reload {
+  flex-shrink: 0;
+  margin-left: 12px;
+  font-size: 18px;
+}
+.app-header-reload.is-reloading {
+  animation: app-header-reload-spin 0.8s linear infinite;
+}
+@keyframes app-header-reload-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .app-header h1 {
