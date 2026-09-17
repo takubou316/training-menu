@@ -1,6 +1,6 @@
 {
-  "name": "筋トレメニュー",
-  "short_name": "筋トレ",
+  "name": "Compstack",
+  "short_name": "Compstack",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
