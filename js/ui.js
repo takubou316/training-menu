@@ -1236,24 +1236,22 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
     grid.appendChild(blank);
   }
   const todayStr = localDateKey(new Date());
-  const bodyWeightLog = loadBodyWeightLog();
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = new Date(recordViewYear, recordViewMonth, day);
     const dateStr = localDateKey(date);
     const hasRecord = historyMap.has(dateStr);
-    const weightKg = bodyWeightLog[dateStr];
     const cell = document.createElement('button');
     cell.type = 'button';
-    cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${weightKg != null ? ' has-weight' : ''}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
-    cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}${weightKg != null ? `・体重${formatKg(weightKg)}` : ''}`);
+    cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
+    cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}`);
     // 記録が無い日も.cal-day-numで囲む(今日バッジのCSSがこのクラスに掛かっているため。
     // css/style.cssの.cal-day.is-today .cal-day-num参照)。位置指定(絶対配置での左上表示)は
     // .has-recordの時だけ効くので、記録が無い日は今まで通りマス中央に表示されたままになる。
-    // 体重を記録した日は、マスの下端に小さく数値を出す(.cal-day-weight)。
-    const weightHtml = weightKg != null ? `<span class="cal-day-weight">${Number(weightKg).toFixed(1)}</span>` : '';
+    // 体重はマスには出さず、日の詳細の体重行だけで見せる(2026-10-02、マス内の数値表示は
+    // 「日付のすぐ下に書くのはやめて」というユーザー指摘で撤回)。
     cell.innerHTML = hasRecord
-      ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>${weightHtml}`
-      : `<span class="cal-day-num">${day}</span>${weightHtml}`;
+      ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>`
+      : `<span class="cal-day-num">${day}</span>`;
     cell.addEventListener('click', () => selectRecordDate(dateStr));
     grid.appendChild(cell);
   }

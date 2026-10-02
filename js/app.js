@@ -701,9 +701,18 @@ function numberWheelUpdateActive(track) {
   return nearest;
 }
 
+// ホイール(横スクロールのトラック)の中だけを横に動かして、その数字を中央に合わせる。
+// 以前はitem.scrollIntoView({inline:'center', block:'nearest'})を使っていたが、scrollIntoViewは
+// 祖先のスクロール領域すべて(ページ全体=window含む)を動かすため、記録画面を開いた瞬間に
+// 各ホイールの初期位置合わせがページを縦にスクロールさせ、画面が一番上ではなく途中から
+// 表示される不具合があった(2026-10-02、実機報告)。トラック自身のscrollLeftだけを計算して動かす。
 function numberWheelScrollToValue(track, value, smooth) {
   const item = track.querySelector(`.number-wheel-item[data-n="${value}"]`);
-  if (item) item.scrollIntoView({ inline: 'center', block: 'nearest', behavior: smooth ? 'smooth' : 'instant' });
+  if (!item) return;
+  const trackRect = track.getBoundingClientRect();
+  const itemRect = item.getBoundingClientRect();
+  const left = track.scrollLeft + (itemRect.left - trackRect.left) - (trackRect.width - itemRect.width) / 2;
+  track.scrollTo({ left, behavior: smooth ? 'smooth' : 'instant' });
 }
 
 // スクロールが落ち着いた(指を離した/慣性が止まった/ドラッグを離した)瞬間に呼ぶ。
@@ -1558,6 +1567,8 @@ function handleStartWorkout() {
   currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
   renderLog(currentSession);
   showScreen('log');
+  // メニュー画面の一番下の「開始」ボタンを押した時のスクロール位置を引き継がず、記録は先頭から始める。
+  window.scrollTo(0, 0);
   startSessionTimer();
   persistActiveSessionSnapshot();
 }
