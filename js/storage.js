@@ -10,7 +10,58 @@ const STORAGE_KEYS = {
   streak: 'training-menu:streak',
   activeSession: 'training-menu:active-session',
   theme: 'training-menu:theme',
+  bodyWeightLog: 'training-menu:bodyweight-log',
+  warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
 };
+
+// 毎日の体重記録。{ 'YYYY-MM-DD'(localDateKey): kg } の形で1日1件だけ持つ(同じ日に記録し直すと上書き)。
+// 設定(settings.bodyWeightKg、自重種目の負荷推定に使う「今の体重」)とは別に、推移を見るための履歴として持つ。
+// トレーニング記録の削除(clearHistory等)の対象外。クラウド同期もしない(端末内のみ)。
+function loadBodyWeightLog() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.bodyWeightLog);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveBodyWeightEntry(dateKey, kg) {
+  const log = loadBodyWeightLog();
+  log[dateKey] = kg;
+  localStorage.setItem(STORAGE_KEYS.bodyWeightLog, JSON.stringify(log));
+  return log;
+}
+
+function deleteBodyWeightEntry(dateKey) {
+  const log = loadBodyWeightLog();
+  delete log[dateKey];
+  localStorage.setItem(STORAGE_KEYS.bodyWeightLog, JSON.stringify(log));
+  return log;
+}
+
+// 体重記録を日付の古い→新しい順の配列で返す([{ dateKey, kg }])。
+function bodyWeightEntriesSorted() {
+  return Object.entries(loadBodyWeightLog())
+    .filter(([dateKey, kg]) => /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && Number.isFinite(Number(kg)))
+    .map(([dateKey, kg]) => ({ dateKey, kg: Number(kg) }))
+    .sort((a, b) => (a.dateKey < b.dateKey ? -1 : 1));
+}
+
+// 各種目の最初にウォームアップセットを入れるか。未設定(初回)は従来通り入れる(true)。
+// 一度切り替えたらユーザーが自分で切り替えるまでその値を使い続ける。
+function loadWarmupSetsEnabled() {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.warmupSetsEnabled) !== 'false';
+  } catch (e) {
+    return true;
+  }
+}
+
+function saveWarmupSetsEnabled(enabled) {
+  localStorage.setItem(STORAGE_KEYS.warmupSetsEnabled, enabled ? 'true' : 'false');
+}
 
 // 選べるテーマのid一覧('amber'が既定、css/style.cssの[data-theme]・index.htmlの
 // .theme-pickerと対応させる)。想定外の値(壊れたlocalStorage等)を弾くためexport。
@@ -328,5 +379,7 @@ if (typeof module !== 'undefined') {
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
     loadTheme, saveTheme,
+    loadBodyWeightLog, saveBodyWeightEntry, deleteBodyWeightEntry, bodyWeightEntriesSorted,
+    loadWarmupSetsEnabled, saveWarmupSetsEnabled,
   };
 }

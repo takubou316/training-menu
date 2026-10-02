@@ -1675,6 +1675,10 @@ function handleCardioLogInput(e) {
 }
 
 function handleLogInput(e) {
+  // 記録を終えた後も記録画面のDOM(数字ホイール)は非表示のまま残っており、画面サイズの変化
+  // (端末の回転・ビューポート変更)でホイールのscrollが発火して値の確定処理が走ることがある。
+  // その時点ではcurrentSessionがnullなので何もしない(以前はTypeErrorが大量に出ていた)。
+  if (!currentSession) return;
   const target = e.target;
   if (target.dataset.cardioField) {
     handleCardioLogInput(e);
@@ -1803,6 +1807,122 @@ function openResetTodayModal() {
   document.getElementById('reset-history-modal').classList.add('open');
 }
 
+// ===== 毎日の体重記録（ホームで入力、記録タブのカレンダー・グラフで確認。描画はjs/ui.js） =====
+
+function saveBodyWeightFromForm(wrap) {
+  // ホームの入力欄は常に「今日の体重」なので、描画時の日付ではなく保存する瞬間の日付を使う
+  // (入力欄を開いたまま日付をまたぐと前日の記録を上書きしてしまうため、2026-10-02 Codexレビュー指摘)。
+  // 記録タブの日の詳細は選んだ日付の記録なので、描画時の日付のまま保存する。
+  const dateKey = wrap.closest('#home-bodyweight-section')
+    ? localDateKey(new Date())
+    : wrap.dataset.bodyweightLogDate;
+  const input = wrap.querySelector('.bodyweight-log-input');
+  const errorEl = wrap.querySelector('.bodyweight-log-error');
+  const value = Number(input.value);
+  if (!input.value || Number.isNaN(value) || value < BODYWEIGHT_MIN || value > BODYWEIGHT_MAX) {
+    errorEl.textContent = `${BODYWEIGHT_MIN}〜${BODYWEIGHT_MAX}の数字を入力してください`;
+    errorEl.hidden = false;
+    return;
+  }
+  const kg = Math.round(value * 10) / 10;
+  saveBodyWeightEntry(dateKey, kg);
+  // 一番新しい日付の記録なら、自重種目の負荷推定・消費カロリー計算に使う「今の体重」も更新する
+  // (過去の日を後から入力した時は今の体重を巻き戻さない)。設定画面の数字ホイールは0.5kg刻み
+  // なので、そちらへ渡す値だけ0.5kg単位に丸める。
+  const entries = bodyWeightEntriesSorted();
+  if (entries[entries.length - 1].dateKey === dateKey) {
+    setBodyWeightKg(Math.round(kg * 2) / 2, true);
+    renderBodyWeightFields();
+  }
+  homeBodyWeightEditing = false;
+  editingBodyWeightDateStr = null;
+  rerenderBodyWeightViews();
+}
+
+function rerenderBodyWeightViews() {
+  renderHomeBodyWeight();
+  refreshRecordViewsAfterBodyWeightChange();
+}
+
+function focusBodyWeightInput(container) {
+  const input = container && container.querySelector('.bodyweight-log-input');
+  if (input) input.focus();
+}
+
+function wireBodyWeightLog() {
+  document.addEventListener('click', (e) => {
+    const saveBtn = e.target.closest('[data-bodyweight-log-save]');
+    if (saveBtn) {
+      saveBodyWeightFromForm(saveBtn.closest('.bodyweight-log-form-wrap'));
+      return;
+    }
+    const cancelBtn = e.target.closest('[data-bodyweight-log-cancel]');
+    if (cancelBtn) {
+      if (cancelBtn.closest('#home-bodyweight-section')) homeBodyWeightEditing = false;
+      else editingBodyWeightDateStr = null;
+      rerenderBodyWeightViews();
+      return;
+    }
+    const deleteBtn = e.target.closest('[data-bodyweight-log-delete]');
+    if (deleteBtn) {
+      const dateKey = deleteBtn.closest('.bodyweight-log-form-wrap').dataset.bodyweightLogDate;
+      if (!window.confirm(`${recordDateLabel(recordDateFromKey(dateKey))}の体重の記録を削除しますか？`)) return;
+      deleteBodyWeightEntry(dateKey);
+      homeBodyWeightEditing = false;
+      editingBodyWeightDateStr = null;
+      rerenderBodyWeightViews();
+      return;
+    }
+    if (e.target.closest('[data-bodyweight-home-edit]')) {
+      homeBodyWeightEditing = true;
+      renderHomeBodyWeight();
+      focusBodyWeightInput(document.getElementById('home-bodyweight-section'));
+      return;
+    }
+    const detailEditBtn = e.target.closest('[data-bodyweight-detail-edit]');
+    if (detailEditBtn) {
+      editingBodyWeightDateStr = detailEditBtn.dataset.bodyweightDetailEdit;
+      refreshRecordViewsAfterBodyWeightChange();
+      focusBodyWeightInput(document.querySelector('.day-weight-row-editing'));
+      return;
+    }
+    const rangeBtn = e.target.closest('[data-bodyweight-range]');
+    if (rangeBtn) {
+      bodyWeightGraphRangeDays = Number(rangeBtn.dataset.bodyweightRange);
+      renderBodyWeightProgressChart();
+    }
+  });
+  // 入力欄でEnter(スマホのキーボードの「完了/改行」)を押しても記録できるようにする。
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.classList || !e.target.classList.contains('bodyweight-log-input')) return;
+    e.preventDefault();
+    saveBodyWeightFromForm(e.target.closest('.bodyweight-log-form-wrap'));
+  });
+  // 日付が変わった後にアプリへ戻ってきた時、昨日の体重を「今日の体重」として出し続けないよう描き直す。
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !homeBodyWeightEditing) renderHomeBodyWeight();
+  });
+  renderHomeBodyWeight();
+}
+
+// 「各種目の最初にウォームアップセットを入れる」スイッチ(メニュー確認画面・記録画面の
+// ウォームアップ欄、js/ui.jsのbuildWarmupHtml)。切り替えた値は保存され、自分で切り替えるまで維持される。
+function wireWarmupSetsToggle() {
+  document.addEventListener('change', (e) => {
+    if (!e.target.matches || !e.target.matches('[data-warmup-sets-toggle]')) return;
+    const enabled = e.target.checked;
+    saveWarmupSetsEnabled(enabled);
+    if (currentMenu && document.getElementById('screen-menu').classList.contains('active')) {
+      renderMenuScreen();
+    }
+    if (currentSession && document.getElementById('screen-log').classList.contains('active')) {
+      applyWarmupSetsSetting(currentSession, enabled);
+      renderLog(currentSession);
+      persistActiveSessionSnapshot();
+    }
+  });
+}
+
 function restoreLastSettings() {
   const settings = loadSettings();
   if (!settings) return;
@@ -1861,6 +1981,8 @@ function init() {
   wireModeWeeklyPlanSection();
   wireKnowledgeScreen();
   restoreLastSettings();
+  wireBodyWeightLog();
+  wireWarmupSetsToggle();
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());
@@ -2035,7 +2157,11 @@ function init() {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
-      if (target === 'mode') renderModeWeeklyPlanSection();
+      if (target === 'mode') {
+        homeBodyWeightEditing = false;
+        renderHomeBodyWeight();
+        renderModeWeeklyPlanSection();
+      }
       if (target === 'record') renderRecordScreen();
       if (target === 'weekly') enterWeeklyScreenFromNav();
       if (target === 'knowledge') renderKnowledgeScreen();

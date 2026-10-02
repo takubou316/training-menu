@@ -323,8 +323,21 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
     </div>`)
     .join('');
 
+  // 各種目の最初にウォームアップセットを入れるかのON/OFF。設定はlocalStorageに保存され、
+  // 自分で切り替えるまで維持される(js/storage.jsのloadWarmupSetsEnabled、切り替え処理はjs/app.jsの
+  // handleWarmupSetsToggle)。メニュー確認画面・記録画面の両方に同じスイッチが出る。
+  const warmupSetsEnabled = loadWarmupSetsEnabled();
   const warmupSetNoteHtml = hasStrengthExercise
-    ? '<div class="warmup-item"><div class="ex-meta">本セット前に、各種目1セット軽い重量・回数で慣らしてから始めましょう（下の各種目にもウォームアップセットとして表示されます）</div></div>'
+    ? `<label class="warmup-item warmup-sets-toggle">
+        <span class="warmup-sets-toggle-text">
+          <span class="warmup-sets-toggle-title">各種目の最初にウォームアップセットを入れる</span>
+          <span class="warmup-sets-toggle-desc">${warmupSetsEnabled
+    ? 'オン：本セットの前に、軽い重量・回数で慣らすセットが入ります'
+    : 'オフ：ウォームアップセットなしで本セットから始めます'}</span>
+        </span>
+        <input type="checkbox" class="switch-input" data-warmup-sets-toggle ${warmupSetsEnabled ? 'checked' : ''}>
+        <span class="switch-track" aria-hidden="true"></span>
+      </label>`
     : '';
 
   return `
@@ -386,7 +399,7 @@ function renderMenu(menu) {
       </div>
       <div class="ex-meta">${item.type === 'cardio'
         ? `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`
-        : `${item.warmupSets > 0 ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒`}</div>
+        : `${item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒`}</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
@@ -816,7 +829,11 @@ function buildRepsProgressionText(sets, holdBased) {
 }
 
 // 履歴画面：セッション全体の推移を見る大きめのグラフ。軸・グリッド・タップでのツールチップつき。
-function buildProgressTrendChartHtml(points, { title, valueFormatter, detailFormatter }) {
+// fitToData: 縦軸を0始まりではなく実データの最小〜最大に合わせる(体重のように値の変動幅が
+//   絶対値に比べてごく小さいものは、0始まりだと線がほぼ平らになり変化が読み取れないため)。
+// timeScale: 横軸を記録の回数ではなく実際の日付の間隔で並べる(毎日とは限らない体重記録で、
+//   間が空いた期間を詰めて見せないため)。
+function buildProgressTrendChartHtml(points, { title, valueFormatter, detailFormatter, fitToData = false, timeScale = false }) {
   if (points.length < 2) return '';
   const width = 320;
   const height = 160;
@@ -827,10 +844,22 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
   const values = points.map((p) => p.value);
-  const max = Math.max(...values) || 1;
+  let axisMin = 0;
+  let axisMax = Math.max(...values) || 1;
+  if (fitToData) {
+    const dataMin = Math.min(...values);
+    const dataMax = Math.max(...values);
+    const margin = Math.max((dataMax - dataMin) * 0.15, 0.5);
+    axisMin = Math.max(0, Math.floor((dataMin - margin) * 2) / 2);
+    axisMax = Math.ceil((dataMax + margin) * 2) / 2;
+  }
+  const axisRange = axisMax - axisMin || 1;
+  const times = points.map((p) => new Date(p.date).getTime());
+  const firstTime = times[0];
+  const timeSpan = times[times.length - 1] - firstTime || 1;
   const coords = points.map((p, i) => ({
-    x: padL + (points.length === 1 ? innerW / 2 : (i / (points.length - 1)) * innerW),
-    y: padT + innerH - (p.value / max) * innerH,
+    x: padL + (timeScale ? ((times[i] - firstTime) / timeSpan) * innerW : (i / (points.length - 1)) * innerW),
+    y: padT + innerH - ((p.value - axisMin) / axisRange) * innerH,
     p,
   }));
   const path = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
@@ -838,7 +867,8 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
   const gridLines = [0, 0.5, 1]
     .map((frac) => {
       const y = padT + innerH - frac * innerH;
-      const val = Math.round(frac * max);
+      const rawVal = axisMin + frac * axisRange;
+      const val = fitToData ? (Math.round(rawVal * 10) / 10).toString() : Math.round(rawVal);
       return `
         <line x1="${padL}" y1="${y.toFixed(1)}" x2="${width - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1" />
         <text x="${padL - 6}" y="${y.toFixed(1)}" text-anchor="end" dominant-baseline="middle" class="chart-axis-label">${val}</text>`;
@@ -1094,7 +1124,7 @@ function buildSessionCardHtml(session, { showDate = true } = {}) {
   return `
     <div class="history-item">
       ${dateHeader}
-      <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}　総挙上量 ${Math.round(session.volume)}kg${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
+      <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
       <button type="button" class="ghost-pill-btn detail-toggle-btn" data-toggle-detail="${session.id}">
         ${expanded ? '種目名だけの表示に戻す' : 'セットの詳細を見る（重量・回数）'}
       </button>
@@ -1180,8 +1210,9 @@ function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true } = {}) 
       <button type="button" class="primary-btn" id="empty-state-start-btn">＋ メニューを作る</button>
     </div>`;
   } else {
-    bodyHtml = `<p class="empty-text">この日は記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
+    bodyHtml = `<p class="empty-text">この日はトレーニングの記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
   }
+  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + bodyHtml;
   return `<div class="day-detail-header">
       ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-prev aria-label="前の日">◀</button>' : '<span></span>'}
       <div><span class="day-detail-date">${recordDateLabel(date)}</span><span class="day-detail-weekday">${recordWeekdayLabel(date)}曜日</span></div>
@@ -1205,20 +1236,24 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
     grid.appendChild(blank);
   }
   const todayStr = localDateKey(new Date());
+  const bodyWeightLog = loadBodyWeightLog();
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = new Date(recordViewYear, recordViewMonth, day);
     const dateStr = localDateKey(date);
     const hasRecord = historyMap.has(dateStr);
+    const weightKg = bodyWeightLog[dateStr];
     const cell = document.createElement('button');
     cell.type = 'button';
-    cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
-    cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}`);
+    cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${weightKg != null ? ' has-weight' : ''}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
+    cell.setAttribute('aria-label', `${recordDateLabel(date)}${hasRecord ? '・記録あり' : ''}${weightKg != null ? `・体重${formatKg(weightKg)}` : ''}`);
     // 記録が無い日も.cal-day-numで囲む(今日バッジのCSSがこのクラスに掛かっているため。
     // css/style.cssの.cal-day.is-today .cal-day-num参照)。位置指定(絶対配置での左上表示)は
     // .has-recordの時だけ効くので、記録が無い日は今まで通りマス中央に表示されたままになる。
+    // 体重を記録した日は、マスの下端に小さく数値を出す(.cal-day-weight)。
+    const weightHtml = weightKg != null ? `<span class="cal-day-weight">${Number(weightKg).toFixed(1)}</span>` : '';
     cell.innerHTML = hasRecord
-      ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>`
-      : `<span class="cal-day-num">${day}</span>`;
+      ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>${weightHtml}`
+      : `<span class="cal-day-num">${day}</span>${weightHtml}`;
     cell.addEventListener('click', () => selectRecordDate(dateStr));
     grid.appendChild(cell);
   }
@@ -1243,6 +1278,7 @@ function renderRecordDayDetail(historyMap = groupHistoryByDate(loadHistory())) {
 function selectRecordDate(dateStr) {
   recordSelectedDateStr = dateStr;
   showFullDetail = false;
+  editingBodyWeightDateStr = null;
   const date = recordDateFromKey(dateStr);
   recordViewYear = date.getFullYear();
   recordViewMonth = date.getMonth();
@@ -1306,6 +1342,7 @@ function setActiveRecordTab(tab) {
 }
 
 function renderRecordScreen({ selectToday = false } = {}) {
+  editingBodyWeightDateStr = null;
   const history = loadHistory();
   renderTrainingStreak(history);
   const historyMap = groupHistoryByDate(history);
@@ -1318,7 +1355,8 @@ function renderRecordScreen({ selectToday = false } = {}) {
   const selectedDate = recordDateFromKey(recordSelectedDateStr);
   recordViewYear = selectedDate.getFullYear();
   recordViewMonth = selectedDate.getMonth();
-  if (history.length === 0) recordViewMode = 'list';
+  // 体重だけ記録している場合は、カレンダー(体重の数値・日の詳細の体重行)で確認できるようリストに切り替えない。
+  if (history.length === 0 && bodyWeightEntriesSorted().length === 0) recordViewMode = 'list';
   setActiveRecordTab(activeRecordTab);
   setRecordViewMode(recordViewMode);
   if (recordViewMode === 'calendar') {
@@ -1351,6 +1389,7 @@ function exercisesWithHistoryOptions() {
 // 自体はカレンダー(記録タブ)側で既に分かるため、種目ごとの推移のみを表示する
 // (2026-08-14、記録一覧×カレンダー統合の設計検討時に決定・後日反映)。
 function renderProgressScreen() {
+  renderBodyWeightProgressChart();
   const select = document.getElementById('progress-exercise-select');
   const options = exercisesWithHistoryOptions();
   if (options.length === 0) {
@@ -1386,6 +1425,163 @@ function renderExerciseProgressChart(exerciseId) {
   });
   container.innerHTML = chartHtml
     || '<p class="empty-text">この種目の記録が2回分たまるとグラフが表示されます。</p>';
+}
+
+// ===== 体重記録（2026-10-02〜） =====
+// 1日1件の体重記録(js/storage.jsのloadBodyWeightLog)を、ホーム画面で入力し、記録タブの
+// カレンダー(マスの小さな数値＋日の詳細)とグラフタブ(体重の推移)で確認できるようにする。
+// 入力は他フィールドの「操作して選ぶ」方針の例外として数字の直接入力にしている(体重計の値を
+// 0.1kg単位でそのまま写すだけの操作で、数字ホイールで探すより速く正確なため)。
+
+let homeBodyWeightEditing = false; // ホームで「変更」を押して入力し直している最中か
+let editingBodyWeightDateStr = null; // 記録タブの日の詳細で体重を入力中の日付
+let bodyWeightGraphRangeDays = 30; // グラフタブの体重の表示期間(日数、0はすべて)
+
+function formatKg(kg) {
+  return `${Number(kg).toFixed(1)}kg`;
+}
+
+function previousBodyWeightEntry(dateKey) {
+  const earlier = bodyWeightEntriesSorted().filter((e) => e.dateKey < dateKey);
+  return earlier.length ? earlier[earlier.length - 1] : null;
+}
+
+function signedKgText(diff) {
+  const rounded = Math.round(diff * 10) / 10;
+  if (rounded === 0) return '±0.0kg';
+  return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toFixed(1)}kg`;
+}
+
+// 直前の記録との差。前日の記録があれば「前日比」、間が空いていれば何日の記録との比較かを明示する。
+function bodyWeightDiffText(dateKey, kg) {
+  const prev = previousBodyWeightEntry(dateKey);
+  if (!prev) return '';
+  const label = prev.dateKey === previousDateKey(dateKey)
+    ? '前日比'
+    : `${recordDateLabel(recordDateFromKey(prev.dateKey))}比`;
+  return `${label} ${signedKgText(kg - prev.kg)}`;
+}
+
+function bodyWeightFormHtml(dateKey, currentKg, { showCancel = false } = {}) {
+  const entries = bodyWeightEntriesSorted();
+  const placeholder = entries.length ? `前回 ${entries[entries.length - 1].kg.toFixed(1)}` : '例: 60.0';
+  return `
+    <div class="bodyweight-log-form-wrap" data-bodyweight-log-date="${dateKey}">
+      <div class="bodyweight-log-form">
+        <input type="number" inputmode="decimal" step="0.1" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}"
+          class="bodyweight-manual-input bodyweight-log-input" value="${currentKg != null ? Number(currentKg).toFixed(1) : ''}"
+          placeholder="${placeholder}" aria-label="体重（kg）">
+        <span class="bodyweight-log-unit">kg</span>
+        <button type="button" class="primary-btn bodyweight-log-save" data-bodyweight-log-save>記録する</button>
+      </div>
+      <p class="error-text bodyweight-log-error" hidden></p>
+      ${showCancel || currentKg != null ? `
+      <div class="bodyweight-log-actions">
+        ${showCancel ? '<button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-bodyweight-log-cancel>キャンセル</button>' : '<span></span>'}
+        ${currentKg != null ? '<button type="button" class="danger-link-btn bodyweight-log-delete" data-bodyweight-log-delete>この日の体重を削除</button>' : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+function renderHomeBodyWeight() {
+  const container = document.getElementById('home-bodyweight-section');
+  if (!container) return;
+  const today = localDateKey(new Date());
+  const kg = loadBodyWeightLog()[today];
+  if (kg != null && !homeBodyWeightEditing) {
+    const diffText = bodyWeightDiffText(today, Number(kg));
+    container.innerHTML = `
+      <div class="home-weight-panel">
+        <div class="home-weight-main">
+          <div class="home-weight-label">今日の体重</div>
+          <div class="home-weight-value">${Number(kg).toFixed(1)}<span class="home-weight-unit">kg</span></div>
+          ${diffText ? `<div class="home-weight-diff">${diffText}</div>` : ''}
+        </div>
+        <button type="button" class="ghost-pill-btn home-weight-edit-btn" data-bodyweight-home-edit>変更</button>
+      </div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="home-weight-panel home-weight-panel-input">
+      <div class="home-weight-label">今日の体重を記録</div>
+      ${bodyWeightFormHtml(today, kg, { showCancel: homeBodyWeightEditing })}
+      ${kg == null ? '<p class="hint-text home-weight-hint">記録した体重は「記録」タブのカレンダーとグラフで振り返れます。</p>' : ''}
+    </div>`;
+}
+
+// 記録タブの日の詳細に出す体重の行。未来の日は記録できないので出さない。
+// リスト表示(showEmpty=false)では、記録のある日だけ表示して「未記録」の行を並べない。
+function buildDayWeightRowHtml(dateStr, { showEmpty = true } = {}) {
+  if (dateStr > localDateKey(new Date())) return '';
+  const kg = loadBodyWeightLog()[dateStr];
+  if (editingBodyWeightDateStr === dateStr) {
+    return `<div class="day-weight-row day-weight-row-editing">
+      <div class="day-weight-label">体重</div>
+      ${bodyWeightFormHtml(dateStr, kg, { showCancel: true })}
+    </div>`;
+  }
+  if (kg == null && !showEmpty) return '';
+  const diffText = kg != null ? bodyWeightDiffText(dateStr, Number(kg)) : '';
+  return `<div class="day-weight-row">
+    <span class="day-weight-label">体重</span>
+    <span class="day-weight-value${kg == null ? ' is-empty' : ''}">${kg != null ? formatKg(kg) : '未記録'}</span>
+    ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    <button type="button" class="ghost-pill-btn bodyweight-log-small-btn day-weight-edit-btn" data-bodyweight-detail-edit="${dateStr}">${kg != null ? '変更' : '記録する'}</button>
+  </div>`;
+}
+
+// 体重の追加・変更・削除の後、表示中の記録タブ(カレンダー/リスト/グラフ)を描き直す。
+function refreshRecordViewsAfterBodyWeightChange() {
+  const historyMap = groupHistoryByDate(loadHistory());
+  if (recordViewMode === 'list') {
+    renderListView(historyMap);
+  } else {
+    renderCalendar(historyMap);
+    renderRecordDayDetail(historyMap);
+  }
+  if (activeRecordTab === 'graph') renderBodyWeightProgressChart();
+}
+
+function renderBodyWeightProgressChart() {
+  const container = document.getElementById('bodyweight-progress-content');
+  if (!container) return;
+  document.querySelectorAll('[data-bodyweight-range]').forEach((btn) => {
+    btn.classList.toggle('active', Number(btn.dataset.bodyweightRange) === bodyWeightGraphRangeDays);
+  });
+  const allEntries = bodyWeightEntriesSorted();
+  let cutoff = '';
+  if (bodyWeightGraphRangeDays > 0) {
+    const from = new Date();
+    from.setDate(from.getDate() - (bodyWeightGraphRangeDays - 1));
+    cutoff = localDateKey(from);
+  }
+  const entries = allEntries.filter((e) => e.dateKey >= cutoff);
+  if (allEntries.length === 0) {
+    container.innerHTML = '<p class="empty-text">まだ体重の記録がありません。ホーム画面の「今日の体重を記録」から記録できます。</p>';
+    return;
+  }
+  if (entries.length < 2) {
+    container.innerHTML = '<p class="empty-text">この期間の体重の記録が2日分たまるとグラフが表示されます。期間を広げるか、ホーム画面から毎日記録してみてください。</p>';
+    return;
+  }
+  const first = entries[0];
+  const last = entries[entries.length - 1];
+  const values = entries.map((e) => e.kg);
+  const rangeLabel = { 30: '1か月', 90: '3か月', 365: '1年', 0: 'すべての期間' }[bodyWeightGraphRangeDays] || '';
+  const points = entries.map((e) => ({ date: `${e.dateKey}T00:00:00`, value: e.kg }));
+  const chartHtml = buildProgressTrendChartHtml(points, {
+    title: `体重（${rangeLabel}・${entries.length}日分）`,
+    valueFormatter: (v) => formatKg(v),
+    fitToData: true,
+    timeScale: true,
+  });
+  container.innerHTML = `
+    <div class="bodyweight-summary">
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最新</span><span class="bodyweight-summary-value">${formatKg(last.kg)}</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">この期間の変化</span><span class="bodyweight-summary-value">${signedKgText(last.kg - first.kg)}</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最小〜最大(kg)</span><span class="bodyweight-summary-value">${Math.min(...values).toFixed(1)}〜${Math.max(...values).toFixed(1)}</span></div>
+    </div>
+    ${chartHtml}`;
 }
 
 // ===== 豆知識画面 =====

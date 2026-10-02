@@ -30,6 +30,9 @@ try {
   <main id="main">
     <!-- ===== モード選択画面 ===== -->
     <section id="screen-mode" class="screen active">
+      <!-- 今日の体重の入力欄／記録済みなら今日の値と前日比。renderHomeBodyWeight()(js/ui.js)が描画する。 -->
+      <div id="home-bodyweight-section"></div>
+
       <h2>今日のメニューを作る</h2>
 
       <!-- 週間プランの「今日」の予定。renderTodayFocus()(js/ui.js)が中身を出し分ける:
@@ -208,7 +211,10 @@ try {
             <span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span><span>日</span>
           </div>
           <div id="cal-grid" class="cal-grid"></div>
-          <div class="cal-legend"><span class="cal-legend-dot"></span>記録した日</div>
+          <div class="cal-legend">
+            <span class="cal-legend-item"><span class="cal-legend-dot"></span>トレーニングした日</span>
+            <span class="cal-legend-item"><span class="cal-legend-weight">65.0</span>体重（kg）</span>
+          </div>
           <div id="day-detail-inline-container"></div>
         </div>
         <div id="list-view-container" hidden></div>
@@ -231,6 +237,16 @@ try {
       </div>
 
       <div id="graph-tab-content" hidden>
+        <div class="menu-block">
+          <h3>体重の推移</h3>
+          <div class="exercise-picker-filters bodyweight-range-filters" role="group" aria-label="体重グラフの表示期間">
+            <button type="button" class="picker-filter-btn active" data-bodyweight-range="30">1か月</button>
+            <button type="button" class="picker-filter-btn" data-bodyweight-range="90">3か月</button>
+            <button type="button" class="picker-filter-btn" data-bodyweight-range="365">1年</button>
+            <button type="button" class="picker-filter-btn" data-bodyweight-range="0">すべて</button>
+          </div>
+          <div id="bodyweight-progress-content"></div>
+        </div>
         <div class="menu-block">
           <h3>種目ごとの推移</h3>
           <select id="progress-exercise-select"></select>
@@ -295,7 +311,7 @@ try {
   </main>
 
   <nav class="bottom-nav">
-    <button class="nav-btn active" data-nav="mode">メニュー作成</button>
+    <button class="nav-btn active" data-nav="mode">ホーム</button>
     <button class="nav-btn" data-nav="weekly">週間プラン</button>
     <button class="nav-btn" data-nav="record">記録</button>
     <button class="nav-btn" data-nav="knowledge">豆知識</button>

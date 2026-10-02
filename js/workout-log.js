@@ -106,13 +106,12 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       const defaultReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
       const defaultRpe = RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
-      const warmupSetEntries = Array.from({ length: item.warmupSets || 0 }, () => ({
-        weight: String(warmupWeight),
-        reps: String(defaultReps),
-        rpe: String(defaultRpe),
-        done: false,
-        isWarmup: true,
-      }));
+      // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
+      // 切り替えた時に入れ直せるよう、本来入る数と重量・回数の初期値は設定に関わらず保持しておく
+      // (applyWarmupSetsSetting参照)。
+      const warmupSetTemplate = { weight: String(warmupWeight), reps: String(defaultReps), rpe: String(defaultRpe) };
+      const plannedWarmupSets = item.warmupSets || 0;
+      const warmupSetEntries = loadWarmupSetsEnabled() ? buildWarmupSetEntries(plannedWarmupSets, warmupSetTemplate) : [];
       const workingSetEntries = Array.from({ length: item.sets }, () => ({
         weight: String(defaultWeight),
         reps: String(defaultReps),
@@ -133,29 +132,49 @@ function createSessionFromMenu(menu, bodyWeightKg) {
         holdBased: item.holdBased,
         equipment: item.equipment,
         suggestion,
+        plannedWarmupSets,
+        warmupSetTemplate,
         sets: [...warmupSetEntries, ...workingSetEntries],
       };
     }),
   };
 }
 
-function computeSessionVolume(session) {
-  return session.exercises.reduce((total, ex) => {
-    if (ex.type === 'cardio') return total; // 有酸素は重量の概念がないため挙上量には含めない
-    const exVolume = ex.sets.reduce((sum, s) => {
-      if (!s.done || s.isWarmup) return sum;
-      return sum + (Number(s.weight) || 0) * (Number(s.reps) || 0);
-    }, 0);
-    return total + exVolume;
-  }, 0);
+function buildWarmupSetEntries(count, template) {
+  return Array.from({ length: count }, () => ({ ...template, done: false, isWarmup: true }));
 }
 
+// 記録中のセッションに、ウォームアップセットのON/OFF設定を反映し直す(記録画面で切り替えた時用)。
+// OFF: まだ完了していないウォームアップセットを取り除く(完了済みのものは実際にやった記録なので残す)。
+// ON: ウォームアップセットが1つも無い種目にだけ、本来の数を先頭へ入れ直す。
+// plannedWarmupSets/warmupSetTemplateを持たない古いスナップショット(この機能の追加前に始めた記録)は
+// メニュー生成時と同じ基準(コンパウンド種目なら1セット)で補う。
+function applyWarmupSetsSetting(session, enabled) {
+  session.exercises.forEach((ex) => {
+    if (ex.type === 'cardio' || !Array.isArray(ex.sets)) return;
+    if (!enabled) {
+      ex.sets = ex.sets.filter((s) => !s.isWarmup || s.done);
+      return;
+    }
+    if (ex.sets.some((s) => s.isWarmup)) return;
+    const count = ex.plannedWarmupSets != null ? ex.plannedWarmupSets : (ex.category === 'compound' ? 1 : 0);
+    const firstWorking = ex.sets[0] || {};
+    const template = ex.warmupSetTemplate || {
+      weight: String(Math.round((Number(firstWorking.weight) || 0) * 0.5 * 2) / 2),
+      reps: firstWorking.reps || '10',
+      rpe: String(RPE_SCALE.default),
+    };
+    ex.sets = [...buildWarmupSetEntries(count, template), ...ex.sets];
+  });
+}
+
+// 総挙上量(重量×回数の単純合算)は種目をまたいで足しても意味が薄いため、2026-10-02に表示ごと廃止し、
+// 記録にも保存しなくなった(以前の記録に残っているvolumeフィールドは使われないまま残る)。
 function finalizeSession(session) {
   const record = {
     id: `session-${Date.now()}`,
     date: session.date,
     goal: session.goal,
-    volume: computeSessionVolume(session),
     durationSec: session.durationSec || 0,
     exercises: session.exercises.map((e) => (e.type === 'cardio'
       ? {
@@ -257,7 +276,7 @@ function isPersonalRecord(exercise, set) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    createSessionFromMenu, computeSessionVolume, finalizeSession, buildSuggestion,
+    createSessionFromMenu, applyWarmupSetsSetting, finalizeSession, buildSuggestion,
     exerciseProgressSeries, exerciseProgressValue, isPersonalRecord,
     estimateCardioCalories,
   };

@@ -2258,3 +2258,185 @@ body.modal-open {
   padding: 10px 14px;
   font-size: 13px;
 }
+
+/* ===== 毎日の体重記録（2026-10-02） =====
+   ホーム最上部の「今日の体重」、記録タブの日の詳細の体重行、カレンダーのマス下端の数値、
+   グラフタブの体重の推移。描画はjs/ui.jsのrenderHomeBodyWeight/buildDayWeightRowHtml/
+   renderBodyWeightProgressChart。 */
+#home-bodyweight-section { margin-bottom: 18px; }
+
+.home-weight-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.home-weight-panel-input { display: block; }
+.home-weight-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-dim);
+}
+.home-weight-panel-input .home-weight-label { margin-bottom: 8px; }
+.home-weight-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.home-weight-unit {
+  margin-left: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.home-weight-diff { font-size: 12px; color: var(--text-dim); }
+.home-weight-edit-btn { flex-shrink: 0; width: auto; }
+.home-weight-hint { margin: 8px 0 0; }
+
+.bodyweight-log-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bodyweight-log-unit { color: var(--text-dim); font-size: 14px; }
+.bodyweight-log-form .primary-btn {
+  width: auto;
+  flex-shrink: 0;
+  padding: 10px 16px;
+}
+.bodyweight-log-error { margin: 6px 0 0; }
+.bodyweight-log-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.bodyweight-log-actions .danger-link-btn { margin-top: 0; }
+.bodyweight-log-small-btn {
+  width: auto;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.day-weight-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
+.day-weight-row-editing { display: block; }
+.day-weight-row-editing .day-weight-label { margin-bottom: 6px; }
+.day-weight-label { font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.day-weight-value { font-size: 16px; font-weight: 700; color: var(--text); }
+.day-weight-value.is-empty { font-size: 13px; font-weight: 400; color: var(--text-dim); }
+.day-weight-diff { font-size: 12px; color: var(--text-dim); }
+.day-weight-edit-btn { margin-left: auto; }
+
+/* カレンダーのマス下端の体重。スタンプ画像の上に重なっても読めるよう、小さな地色付きの帯にする。 */
+.cal-day-weight {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 記録が無い日は日付が中央にあるので、数値と重ならないよう少しだけ上へ寄せる。 */
+.cal-day.no-record.has-weight .cal-day-num { margin-bottom: 10px; }
+
+.cal-legend { flex-wrap: wrap; gap: 6px 14px; }
+.cal-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.cal-legend-weight {
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.bodyweight-range-filters {
+  flex-wrap: wrap;
+  padding: 0 0 10px;
+}
+.bodyweight-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.bodyweight-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.bodyweight-summary-label { font-size: 11px; color: var(--text-dim); }
+.bodyweight-summary-value { font-size: 14px; font-weight: 700; color: var(--text); }
+
+/* ===== ウォームアップセットのON/OFFスイッチ（2026-10-02） ===== */
+.warmup-sets-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+}
+.warmup-sets-toggle-text { display: flex; flex-direction: column; gap: 2px; }
+.warmup-sets-toggle-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.warmup-sets-toggle-desc { font-size: 12px; color: var(--text-dim); }
+.switch-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.switch-track {
+  position: relative;
+  flex-shrink: 0;
+  width: 46px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.15s, background 0.15s;
+}
+.switch-input:checked + .switch-track {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+.switch-input:checked + .switch-track::after {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+.switch-input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -41,6 +41,8 @@ const EXERCISES = [
     description: '台や椅子に手をついて行う腕立て伏せ。角度が急なほど負荷が下がるので、通常のプッシュアップがきつい人はここから。' },
   { id: 'decline_pushup', name: 'デクラインプッシュアップ', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['手首', '肩'], bodyweightLoadFactor: 0.7, note: '上級者向け・負荷を上げたい時', minLevel: 'intermediate',
     description: '足を台に乗せて行う腕立て伏せ。上半身側が下がる分、通常より負荷が上がる。体幹が反らないよう腹に力を入れる。' },
+  { id: 'parallel_bar_dip', name: 'ディップス', primary: ['chest', 'triceps'], secondary: ['shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['肩'], note: '要ディップスバー（平行棒）', minLevel: 'intermediate',
+    description: '平行棒を握って腕を伸ばして体を支え、肘を曲げて肩が肘と同じ高さくらいまで下ろしてから押し上げる。上体をやや前傾させると胸、まっすぐ立てると三頭筋に効きやすい。肩に違和感がある時は深く下ろしすぎない。' },
   { id: 'db_bench_press', name: 'ダンベルベンチプレス', primary: ['chest'], secondary: ['triceps', 'shoulders'], category: 'compound', equipment: ['dumbbell'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['肩'],
     description: 'ベンチに仰向けになり、ダンベルを胸の横まで下ろしてから押し上げる。肩をすくめず、肩甲骨をベンチに寄せて固定する。' },
   { id: 'db_incline_press', name: 'ダンベルインクラインプレス', primary: ['chest'], secondary: ['shoulders', 'triceps'], category: 'compound', equipment: ['dumbbell'], pattern: 'push_horizontal', unilateral: false, riskAreas: ['肩'],
