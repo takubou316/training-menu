@@ -1923,6 +1923,110 @@ function wireBodyWeightLog() {
   renderHomeBodyWeight();
 }
 
+// ===== データのバックアップ（書き出し/読み込み。形式と対象はjs/storage.jsのbuildBackupObject参照） =====
+
+function setBackupStatus(text, isError) {
+  const el = document.getElementById('backup-status');
+  el.textContent = text;
+  el.classList.toggle('is-error', !!isError);
+}
+
+async function exportBackup() {
+  const json = JSON.stringify(buildBackupObject());
+  // 書き出したファイルが読み込み時の検証(parseBackupText)で弾かれると、古いアイコンを削除した後に
+  // 復元できなくなる。書き出す前に同じ検証を通し、通らなければ書き出さずに知らせる。
+  try {
+    parseBackupText(json);
+  } catch (e) {
+    setBackupStatus(`このデータは書き出せませんでした（${e.message}）。アイコンは削除しないでください。`, true);
+    return;
+  }
+  const fileName = `compstack-backup-${localDateKey(new Date())}.json`;
+  // iPhoneでは共有シート(「ファイルに保存」等)から保存できるようにする。共有に対応していない
+  // ブラウザ(PC等)は通常のダウンロードにフォールバックする。
+  try {
+    const file = new File([json], fileName, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Compstackのバックアップ' });
+      setBackupStatus(BACKUP_VERIFY_HINT);
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // 共有シートを閉じただけ
+    // それ以外の共有の失敗は、下の通常のダウンロードで再挑戦する
+  }
+  const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setBackupStatus(BACKUP_VERIFY_HINT);
+}
+
+// 共有シートやダウンロードが終わっても、実際にファイルが保存されたかはアプリ側からは分からない。
+// アイコンを削除する前提の機能なので、成功と言い切らず保存先の確認を促す(2026-10-03 Codexレビュー指摘)。
+const BACKUP_VERIFY_HINT = '書き出しました。ホーム画面のアイコンを削除する前に、保存したファイルが「ファイル」アプリ等に実際にあるか確認してください。';
+
+function importBackupText(text) {
+  let summary;
+  try {
+    summary = parseBackupText(text);
+  } catch (e) {
+    setBackupStatus(e.message, true);
+    return false;
+  }
+  const exported = summary.exportedAt ? new Date(summary.exportedAt) : null;
+  const exportedLabel = exported && !Number.isNaN(exported.getTime()) ? `${formatDate(summary.exportedAt)}に書き出した` : '';
+  const ok = window.confirm(
+    `${exportedLabel}バックアップ（トレーニング記録${summary.sessionCount}件・体重${summary.bodyWeightCount}日分）を読み込みます。\n`
+    + '今この端末にあるデータは、バックアップの内容にすべて置き換わります。よろしいですか？',
+  );
+  if (!ok) return false;
+  try {
+    applyBackupData(summary.data);
+  } catch (e) {
+    // applyBackupData側で書き換え前の状態に戻してある。再読み込みはしない。
+    setBackupStatus(e.message, true);
+    return false;
+  }
+  location.reload();
+  return true;
+}
+
+function wireBackup() {
+  const fileInput = document.getElementById('backup-import-file');
+  document.getElementById('backup-export-btn').addEventListener('click', () => {
+    setBackupStatus('');
+    // 記録中のセッションはバックアップに含まれないため、書き出してアイコンを削除すると失われる。
+    if (currentSession) {
+      setBackupStatus('トレーニング中の記録はバックアップに含まれません。「記録して終了」を押してから書き出してください。', true);
+      return;
+    }
+    void exportBackup();
+  });
+  document.getElementById('backup-import-btn').addEventListener('click', () => {
+    setBackupStatus('');
+    // 記録中に読み込むと、記録中のセッションと読み込んだデータが混ざるため止める。
+    if (currentSession) {
+      setBackupStatus('トレーニング中は読み込めません。記録を終えてから読み込んでください。', true);
+      return;
+    }
+    fileInput.value = '';
+    fileInput.click();
+  });
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => importBackupText(String(reader.result || ''));
+    reader.onerror = () => setBackupStatus('ファイルを読み込めませんでした', true);
+    reader.readAsText(file);
+  });
+}
+
 // 「各種目の最初にウォームアップセットを入れる」スイッチ(メニュー確認画面・記録画面の
 // ウォームアップ欄、js/ui.jsのbuildWarmupHtml)。切り替えた値は保存され、自分で切り替えるまで維持される。
 function wireWarmupSetsToggle() {
@@ -2001,6 +2105,7 @@ function init() {
   restoreLastSettings();
   wireBodyWeightLog();
   wireWarmupSetsToggle();
+  wireBackup();
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
   void initSupabaseAuth().then(() => maybeShowSyncChoiceModal());

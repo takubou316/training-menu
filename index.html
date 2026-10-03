@@ -228,6 +228,16 @@ try {
             </div>
           </div>
           <div class="sync-status-row" id="sync-status-row"></div>
+          <div class="backup-section">
+            <div class="theme-picker-label">バックアップ</div>
+            <p class="hint-text">ホーム画面に追加し直す時や機種変更の前に書き出し、新しい方で読み込むと、記録・体重・設定を引き継げます。クラウド同期を使っている場合は、書き出す前に一度ネットにつながった状態で開いてください。</p>
+            <div class="backup-actions">
+              <button type="button" class="ghost-pill-btn" id="backup-export-btn">データを書き出す</button>
+              <button type="button" class="ghost-pill-btn" id="backup-import-btn">データを読み込む</button>
+            </div>
+            <input type="file" id="backup-import-file" hidden>
+            <p class="backup-status" id="backup-status" aria-live="polite"></p>
+          </div>
           <button type="button" id="reset-day-btn" class="danger-link-btn" hidden>選択中の日のデータを削除する</button>
           <button type="button" id="reset-history-btn" class="danger-link-btn">記録データをすべて削除する</button>
         </details>

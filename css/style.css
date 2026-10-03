@@ -1360,6 +1360,17 @@ body.modal-open {
 .danger-zone[open] .danger-link-btn {
   display: block;
 }
+/* 上のdisplay:blockがhidden属性(ブラウザ標準のdisplay:none)より優先されてしまい、
+   選択日に記録が無い時も「◯月◯日のデータを削除する」が出たままになっていた(2026-10-03修正)。 */
+.danger-zone[open] .danger-link-btn[hidden] { display: none; }
+
+/* データのバックアップ（書き出し/読み込み、2026-10-03〜、js/app.jsのwireBackup） */
+.backup-section { margin-top: 14px; }
+.backup-section .hint-text { margin: 4px 0 8px; }
+.backup-actions { display: flex; gap: 8px; }
+.backup-actions .ghost-pill-btn { flex: 1; width: auto; font-size: 13px; padding: 8px 10px; }
+.backup-status { margin: 6px 0 0; font-size: 12px; color: var(--text-dim); }
+.backup-status.is-error { color: var(--danger); }
 
 .danger-link-btn {
   margin-top: 10px;

@@ -369,6 +369,135 @@ function setActiveWeeklyPlanId(id) {
   else localStorage.removeItem(STORAGE_KEYS.activeWeeklyPlanId);
 }
 
+// ===== データのバックアップ（書き出し/読み込み、2026-10-03〜） =====
+// iPhoneのホーム画面に追加したWebアプリはアイコンごとに保存領域が分かれており、アイコンを削除すると
+// データも消える。追加し直し・機種変更の前に端末内のデータを1つのJSONにまとめて書き出し、新しい方で
+// 読み込めるようにする。対象は端末内のデータだけで、クラウド同期関連(ログイン状態・同期のON/OFF・
+// 送信待ちキュー)と記録中のセッションは含めない(新しい方でログインし直せば以後は通常通り同期される。
+// 記録のidは元のまま復元されるため、Supabase側のlocal_idによるupsert/削除とも食い違わない)。
+const BACKUP_FORMAT = 'compstack-backup';
+const BACKUP_VERSION = 1;
+const BACKUP_KEYS = [
+  'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
+  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled',
+];
+// クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)。バックアップには含めない。
+const PENDING_SYNC_STORAGE_KEY = 'training-menu:pending-sync';
+
+function buildBackupObject() {
+  const data = {};
+  BACKUP_KEYS.forEach((name) => {
+    const raw = localStorage.getItem(STORAGE_KEYS[name]);
+    if (raw != null) data[STORAGE_KEYS[name]] = raw;
+  });
+  return { format: BACKUP_FORMAT, version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data };
+}
+
+// 読み込む値ごとの形の検証。読み込んだ後にアプリ側の各処理(履歴の集計・お気に入り判定・週間プラン等)が
+// 想定外の形で落ちて起動できなくなるのを防ぐため、書き込む前にすべて検証する(2026-10-03 Codexレビュー指摘)。
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+function validateHistoryValue(history) {
+  if (!Array.isArray(history)) return false;
+  const ids = new Set();
+  return history.every((s) => {
+    if (!isPlainObject(s) || typeof s.id !== 'string' || !s.id || ids.has(s.id)) return false;
+    ids.add(s.id);
+    if (Number.isNaN(new Date(s.date).getTime()) || !Array.isArray(s.exercises)) return false;
+    return s.exercises.every((ex) => isPlainObject(ex) && typeof ex.exerciseId === 'string'
+      && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every(isPlainObject))));
+  });
+}
+
+const BACKUP_VALIDATORS = {
+  settings: (v) => isPlainObject(v),
+  history: validateHistoryValue,
+  favorites: (v) => Array.isArray(v) && v.every((id) => typeof id === 'string'),
+  customTemplates: (v) => Array.isArray(v) && v.every((t) => isPlainObject(t) && typeof t.id === 'string'),
+  weeklyPlans: (v) => Array.isArray(v) && v.every((p) => isPlainObject(p) && typeof p.id === 'string' && Array.isArray(p.days)),
+  activeWeeklyPlanId: null, // 生の文字列(JSONではない)
+  streak: (v) => isPlainObject(v),
+  theme: null, // 生の文字列。loadThemeが想定外の値を既定に戻すので検証不要
+  bodyWeightLog: (v) => isPlainObject(v) && Object.values(v).every((kg) => Number.isFinite(Number(kg))),
+  warmupSetsEnabled: null, // 'true'/'false'の生文字列
+};
+
+// 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。
+function parseBackupText(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    throw new Error('バックアップのファイルとして読み取れませんでした');
+  }
+  if (!isPlainObject(parsed) || parsed.format !== BACKUP_FORMAT || !isPlainObject(parsed.data)) {
+    throw new Error('Compstackのバックアップファイルではありません');
+  }
+  if (!Number.isInteger(parsed.version) || parsed.version < 1) {
+    throw new Error('Compstackのバックアップファイルではありません');
+  }
+  if (parsed.version > BACKUP_VERSION) {
+    throw new Error('新しいバージョンのアプリで書き出されたファイルです。アプリを更新してから読み込んでください');
+  }
+  const data = {};
+  BACKUP_KEYS.forEach((name) => {
+    const key = STORAGE_KEYS[name];
+    if (!(key in parsed.data)) return; // 書き出し元に無かった項目(読み込むと空に戻る)
+    const raw = parsed.data[key];
+    // 認識できる項目なのに形が違う場合は「無かった」扱いにせず読み込み自体を止める
+    // (黙って捨てると、確認画面の件数と食い違ったまま既存データを消してしまうため)。
+    if (typeof raw !== 'string') throw new Error('バックアップの中身が壊れています');
+    const validate = BACKUP_VALIDATORS[name];
+    if (validate) {
+      let value;
+      try { value = JSON.parse(raw); } catch (e) { throw new Error('バックアップの中身が壊れています'); }
+      if (!validate(value)) throw new Error('バックアップの中身が壊れています');
+    }
+    data[key] = raw;
+  });
+  const history = JSON.parse(data[STORAGE_KEYS.history] || '[]');
+  const bodyWeightCount = Object.keys(JSON.parse(data[STORAGE_KEYS.bodyWeightLog] || '{}')).length;
+  return { data, exportedAt: parsed.exportedAt, sessionCount: history.length, bodyWeightCount };
+}
+
+// バックアップの内容で端末内のデータを置き換える(バックアップに無い項目は空に戻す)。
+// 途中で保存に失敗した(容量不足等)場合は、書き換える前の値にすべて戻してからErrorを投げる
+// (一部だけ置き換わった中途半端な状態を残さないため)。
+// クラウド同期の送信待ちキューは、置き換え後の記録と矛盾する操作だけを取り除く:
+// 復元した記録に対する削除予約(実行されるとクラウド側から消えてしまう)と、復元後に存在しない
+// 記録の送信予約。それ以外(復元した記録の送信・復元後に無い記録の削除)は正しい操作なので残す。
+function applyBackupData(data) {
+  const keys = BACKUP_KEYS.map((name) => STORAGE_KEYS[name]).concat(PENDING_SYNC_STORAGE_KEY);
+  const previous = {};
+  keys.forEach((key) => { previous[key] = localStorage.getItem(key); });
+  try {
+    BACKUP_KEYS.forEach((name) => {
+      const key = STORAGE_KEYS[name];
+      if (key in data) localStorage.setItem(key, data[key]);
+      else localStorage.removeItem(key);
+    });
+    const restoredIds = new Set(JSON.parse(data[STORAGE_KEYS.history] || '[]').map((s) => s.id));
+    let queue = [];
+    try { queue = JSON.parse(previous[PENDING_SYNC_STORAGE_KEY] || '[]'); } catch (e) { queue = []; }
+    if (Array.isArray(queue) && queue.length) {
+      const kept = queue.filter((item) => (item && item.op === 'delete'
+        ? !restoredIds.has(item.localId)
+        : item && restoredIds.has(item.localId)));
+      localStorage.setItem(PENDING_SYNC_STORAGE_KEY, JSON.stringify(kept));
+    }
+  } catch (e) {
+    keys.forEach((key) => {
+      try {
+        if (previous[key] == null) localStorage.removeItem(key);
+        else localStorage.setItem(key, previous[key]);
+      } catch (e2) { /* 元に戻す処理自体の失敗は無視(できる限り戻す) */ }
+    });
+    throw new Error('保存に失敗したため読み込みを取り消しました（端末の空き容量を確認してください）');
+  }
+}
+
 if (typeof module !== 'undefined') {
   module.exports = {
     loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, updateTrainingStreak,
