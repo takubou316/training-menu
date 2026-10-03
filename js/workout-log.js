@@ -14,8 +14,12 @@ function buildSuggestion(planItem, bodyWeightKg) {
     const estWeight = Math.round(bodyWeightKg * planItem.bodyweightLoadFactor * 2) / 2;
     const last = findLastPerformance(planItem.exerciseId);
     if (!last) {
+      // 体重を一度も記録していない間は仮の値(60kg)での推定なので、その旨とホームでの記録を案内する。
+      const hasWeight = typeof bodyWeightHasStoredValue === 'function' && bodyWeightHasStoredValue();
       return {
-        text: `初回記録です。体重${bodyWeightKg}kgから負荷を約${estWeight}kgと推定しています。フォームを優先しましょう。`,
+        text: hasWeight
+          ? `初回記録です。体重${bodyWeightKg}kgから負荷を約${estWeight}kgと推定しています。フォームを優先しましょう。`
+          : `初回記録です。仮の体重${bodyWeightKg}kgから負荷を約${estWeight}kgと推定しています（ホームで今日の体重を記録すると正確になります）。フォームを優先しましょう。`,
         weight: estWeight,
       };
     }

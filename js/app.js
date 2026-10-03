@@ -153,85 +153,31 @@ function restoreActiveSessionIfAny() {
     return false;
   }
 }
-let bodyWeightKg = 60; // 「要望から作る」「自分で作る」両方のスライダーで共有する体重
-
-// 体重は回数/RPEと同じ数字ホイールで選ぶ(2026-08-14)。ただし体重は「毎回その場で選ぶ値」
-// ではなく「一度決めたらそのまま使い続ける値」という他と違う性質を持つため、一度も
-// 設定されていない最初の1回だけは数字入力(キーボード)で素早く正確に決められるようにし、
-// 一度でも設定された後は数字ホイールに切り替える（renderBodyWeightField参照）。
-// 「操作して選ぶ、直接入力させない」という他フィールドの方針の意図的な例外。
+// 自重種目の負荷推定・有酸素の消費カロリー計算に使う体重は、ホームで毎日記録する体重
+// (js/storage.jsのloadBodyWeightLog)を参照する。今日の記録があればそれ、無ければ一番新しい記録。
+// 体重の記録が1件も無い場合だけ、以前の設定画面/自分で作る画面で入力していた値(settings.bodyWeightKg)、
+// それも無ければ60kgを仮の値として使う。
+// 2026-10-03までは「要望から作る」「自分で作る」の両画面に体重の入力欄があったが、ホームの毎日の
+// 体重記録と二重になるためユーザー要望で入力欄を完全に削除した。
 const BODYWEIGHT_MIN = 20;
 const BODYWEIGHT_MAX = 200;
-const BODYWEIGHT_STEP = 0.5;
+const BODYWEIGHT_FALLBACK_KG = 60;
 
+function getBodyWeightKg() {
+  const entries = bodyWeightEntriesSorted();
+  if (entries.length) return entries[entries.length - 1].kg;
+  const settings = loadSettings();
+  if (settings && Number.isFinite(Number(settings.bodyWeightKg)) && settings.bodyWeightKg != null) {
+    return Number(settings.bodyWeightKg);
+  }
+  return BODYWEIGHT_FALLBACK_KG;
+}
+
+// 本人が入力した体重があるか(仮の60kgではないか)。クラウド同期で体重を送るかの判定に使う(js/sync.js)。
 function bodyWeightHasStoredValue() {
+  if (bodyWeightEntriesSorted().length) return true;
   const settings = loadSettings();
   return !!(settings && settings.bodyWeightKg != null);
-}
-
-// 体重欄(設定画面/自分で作る画面の2箇所)を、保存済みの値が無ければ手入力フォームに、
-// あれば数字ホイールに描画し直す。手入力フォームで確定した瞬間にもう一方の画面も
-// まとめて数字ホイールへ切り替わる(setBodyWeightKgの後にrenderBodyWeightFields()を呼ぶ)。
-function renderBodyWeightField(containerId, inputId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  // ラベル(現在値表示)はcontainerIdから機械的に対応するidを求めて、フォーム側の
-  // 状態(未設定/設定済み)と食い違わないようここで必ず一緒に更新する。以前はHTML側に
-  // 「60 kg」を決め打ちで書いてしまっていたため、未設定のまま「60 kg」という
-  // ラベルと「体重を入力してください」という手入力フォームが同時に出て矛盾して見える
-  // 不具合があった。
-  const labelId = containerId === 'bodyweight-field' ? 'bodyweight-value' : 'bodyweight-value-custom';
-  const labelEl = document.getElementById(labelId);
-  if (!bodyWeightHasStoredValue()) {
-    if (labelEl) labelEl.textContent = '未設定';
-    container.innerHTML = `
-      <div class="bodyweight-manual-row">
-        <input type="number" inputmode="decimal" step="${BODYWEIGHT_STEP}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" class="bodyweight-manual-input" placeholder="例: 60">
-        <button type="button" class="ghost-pill-btn" data-bodyweight-manual-confirm="${inputId}">設定する</button>
-      </div>
-      <p class="error-text bodyweight-manual-error" hidden></p>`;
-    return;
-  }
-  if (labelEl) labelEl.textContent = `${getBodyWeightKg()} kg`;
-  container.innerHTML = `
-    ${numberWheelTrackHtml(BODYWEIGHT_MIN, BODYWEIGHT_MAX, BODYWEIGHT_STEP)}
-    <input type="range" id="${inputId}" min="${BODYWEIGHT_MIN}" max="${BODYWEIGHT_MAX}" step="${BODYWEIGHT_STEP}" value="${getBodyWeightKg()}" hidden>`;
-  const slider = document.getElementById(inputId);
-  slider.addEventListener('input', () => setBodyWeightKg(Number(slider.value), true));
-}
-
-function renderBodyWeightFields() {
-  renderBodyWeightField('bodyweight-field', 'bodyweight-slider');
-  renderBodyWeightField('bodyweight-field-custom', 'bodyweight-slider-custom');
-}
-
-// 手入力フォームのバリデーションエラーは、確定ボタンを押した時にだけ表示され、確定に
-// 成功するまで消えない作りだった。そのため一度入力に失敗すると、他の画面へ移動して
-// 戻ってきただけなのに「触っていないのにエラーが出ている」ように見えてしまう
-// (showScreenから呼ぶことで、体重欄がある画面を表示するたびに未入力の状態へ戻す)。
-function resetBodyWeightManualErrors() {
-  document.querySelectorAll('.bodyweight-manual-error').forEach((el) => {
-    el.hidden = true;
-    el.textContent = '';
-  });
-  document.querySelectorAll('.bodyweight-manual-input').forEach((el) => {
-    el.value = '';
-  });
-}
-
-function confirmBodyWeightManualInput(inputId) {
-  const containerId = inputId === 'bodyweight-slider' ? 'bodyweight-field' : 'bodyweight-field-custom';
-  const container = document.getElementById(containerId);
-  const input = container.querySelector('.bodyweight-manual-input');
-  const errorEl = container.querySelector('.bodyweight-manual-error');
-  const value = Number(input.value);
-  if (!input.value || Number.isNaN(value) || value < BODYWEIGHT_MIN || value > BODYWEIGHT_MAX) {
-    errorEl.textContent = `${BODYWEIGHT_MIN}〜${BODYWEIGHT_MAX}の数字を入力してください`;
-    errorEl.hidden = false;
-    return;
-  }
-  setBodyWeightKg(Math.round(value * 2) / 2, true);
-  renderBodyWeightFields();
 }
 
 // 「自分で作る」モードの状態
@@ -480,56 +426,6 @@ function getSelectedPainAreas() {
   return Array.from(document.querySelectorAll('#pain-group input:checked'))
     .map((el) => el.dataset.pain)
     .filter((v) => v !== 'none');
-}
-
-// 体重は「要望から作る」の設定画面と「自分で作る」画面の両方にスライダーがあり、
-// どちらを操作しても同じ値として扱う(片方でしか設定できないと、自分で作る派の人が
-// 一度も体重を入れないまま自重種目の負荷推定が行われてしまうため)。
-function getBodyWeightKg() {
-  return bodyWeightKg;
-}
-
-function setBodyWeightKg(value, persist) {
-  bodyWeightKg = value;
-  ['bodyweight-slider', 'bodyweight-slider-custom'].forEach((id) => {
-    const slider = document.getElementById(id);
-    if (!slider) return;
-    slider.value = value;
-    // 2つのスライダーは値を同期しているが、ドラッグ中のブラウザ標準'input'イベントは
-    // 操作した側にしか発火しない。ここで.valueを直接書き換えるだけのもう片方は
-    // 塗りつぶし(--slider-fill)の再計算が呼ばれないまま古い割合が残ってしまうため、
-    // 両方とも明示的に更新する。
-    updateSliderTrackFill(slider);
-  });
-  ['bodyweight-value', 'bodyweight-value-custom'].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = `${value} kg`;
-  });
-  if (persist) saveSettings({ ...(loadSettings() || {}), bodyWeightKg: value });
-}
-
-function wireBodyWeightSlider() {
-  renderBodyWeightFields();
-
-  // 手入力フォームの「設定する」ボタン。フォーム自体は保存済みの値が無い間だけ
-  // renderBodyWeightFieldが描画するので、コンテナへの委譲で拾う(ボタンが後から
-  // 描画されても効くように)。
-  ['bodyweight-field', 'bodyweight-field-custom'].forEach((containerId) => {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    container.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-bodyweight-manual-confirm]');
-      if (btn) confirmBodyWeightManualInput(btn.dataset.bodyweightManualConfirm);
-    });
-    // Enterキーでも確定できるようにする(スマホの数字キーボードの「完了」相当)。
-    container.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      const input = e.target.closest('.bodyweight-manual-input');
-      if (!input) return;
-      e.preventDefault();
-      confirmBodyWeightManualInput(container.id === 'bodyweight-field' ? 'bodyweight-slider' : 'bodyweight-slider-custom');
-    });
-  });
 }
 
 // ===== スライダー全般の見た目強化（塗りつぶしトラック＋ドラッグ中の値バブル） =====
@@ -1549,8 +1445,8 @@ function handleGenerate() {
   const goal = document.getElementById('goal-select').value;
   const painAreas = getSelectedPainAreas();
 
-  const bodyWeightKg = getBodyWeightKg();
-  saveSettings({ parts, equipment, minutes, level, goal, painAreas, bodyWeightKg });
+  // 以前の体重の設定値(settings.bodyWeightKg、getBodyWeightKgの最後の拠り所)を消さないよう、既存の設定に上書きする。
+  saveSettings({ ...(loadSettings() || {}), parts, equipment, minutes, level, goal, painAreas });
 
   currentMenu = generateMenu({ parts: muscleGroups, equipment, minutes, level, goal, painAreas });
   if (currentMenu.main.length === 0) {
@@ -1878,15 +1774,8 @@ function saveBodyWeightFromForm(wrap) {
     return;
   }
   const kg = Math.round(value * 10) / 10;
+  // 負荷推定等に使う体重(getBodyWeightKg)はこの記録から都度求めるので、別の設定値の更新は不要。
   saveBodyWeightEntry(dateKey, kg);
-  // 一番新しい日付の記録なら、自重種目の負荷推定・消費カロリー計算に使う「今の体重」も更新する
-  // (過去の日を後から入力した時は今の体重を巻き戻さない)。設定画面の数字ホイールは0.5kg刻み
-  // なので、そちらへ渡す値だけ0.5kg単位に丸める。
-  const entries = bodyWeightEntriesSorted();
-  if (entries[entries.length - 1].dateKey === dateKey) {
-    setBodyWeightKg(Math.round(kg * 2) / 2, true);
-    renderBodyWeightFields();
-  }
   homeBodyWeightEditing = false;
   editingBodyWeightDateStr = null;
   rerenderBodyWeightViews();
@@ -2104,7 +1993,6 @@ function restoreLastSettings() {
   if (settings.minutes) document.getElementById('minutes-select').value = settings.minutes;
   if (settings.level) document.getElementById('level-select').value = settings.level;
   if (settings.goal) document.getElementById('goal-select').value = settings.goal;
-  if (settings.bodyWeightKg) setBodyWeightKg(settings.bodyWeightKg, false);
 }
 
 // 初回起動時の同期選択モーダル(#sync-choice-modal)のボタン配線。js/sync.js・js/ui.js参照。
@@ -2129,7 +2017,6 @@ function init() {
   wireThemePicker();
   wirePartExclusivity();
   wirePainExclusivity();
-  wireBodyWeightSlider();
   wireSliderEnhancements();
   wireNumberWheels();
   wireCustomScreen();
