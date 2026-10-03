@@ -1271,6 +1271,17 @@ function renderRecordDayDetail(historyMap = groupHistoryByDate(loadHistory())) {
   if (!container || !recordSelectedDateStr) return;
   container.innerHTML = `<div class="day-detail-inline">${buildRecordDayDetailHtml(recordSelectedDateStr, historyMap)}</div>`;
   updateStickyHeaderOffset();
+  updateResetDayButton(historyMap);
+}
+
+// 「その他の設定」の「◯月◯日のデータを削除する」を、カレンダーで選択中の日に合わせて書き換える。
+// 選択中の日にトレーニング記録が無い時と、選択日の概念が無いリスト表示の時は出さない。
+function updateResetDayButton(historyMap = groupHistoryByDate(loadHistory())) {
+  const button = document.getElementById('reset-day-btn');
+  if (!button) return;
+  const show = recordViewMode === 'calendar' && !!recordSelectedDateStr && historyMap.has(recordSelectedDateStr);
+  button.hidden = !show;
+  if (show) button.textContent = `${recordDateLabel(recordDateFromKey(recordSelectedDateStr))}のデータを削除する`;
 }
 
 function selectRecordDate(dateStr) {
@@ -1323,6 +1334,7 @@ function setRecordViewMode(mode) {
     const dayDetailContainer = document.getElementById('day-detail-inline-container');
     if (dayDetailContainer) dayDetailContainer.innerHTML = '';
     renderListView(historyMap);
+    updateResetDayButton(historyMap);
   }
 }
 

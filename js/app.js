@@ -251,9 +251,11 @@ let exercisePickerEquipmentFilterActive = true;
 
 // 記録削除の確認モーダルが今どちらの対象か(nullなら「すべて削除」、文字列ならその1件のsession.id)
 let historyDeleteTargetId = null;
-// 上記とは別軸で、削除の種類を持つ('all'|'session'|'today')。「今日のデータを削除する」は
+// 上記とは別軸で、削除の種類を持つ('all'|'session'|'day')。「◯月◯日のデータを削除する」は
 // 1日に複数回記録がある場合も全部まとめて対象になるため、単一のsession.idでは表現できない。
 let historyDeleteMode = 'all';
+// historyDeleteMode==='day'の時の対象日(localDateKey形式)。確認モーダルを開いた時点の選択日を固定する。
+let historyDeleteDateKey = null;
 
 // 豆知識画面のカテゴリ絞り込み('all'またはKNOWLEDGE_CATEGORIESのいずれか)
 let knowledgeCategoryFilter = 'all';
@@ -1808,13 +1810,18 @@ function queueSessionDeleteSafe(localId) {
   }
 }
 
-// 「今日のデータを削除する」用。1日に複数回記録している場合も、今日の分をまとめて削除する
-// （記録画面：カレンダー統合の設計メモにある通り、1日に複数セッションがあり得るため）。
-function openResetTodayModal() {
-  historyDeleteMode = 'today';
+// 「◯月◯日のデータを削除する」用。カレンダーで選択中の日に行った記録を、1日に複数回記録している
+// 場合もまとめて削除する（記録画面：カレンダー統合の設計メモにある通り、1日に複数セッションがあり得るため）。
+// 以前は常に「今日」が対象だったが、2026-10-03にカレンダーで選んだ日を対象にするよう変更した。
+// 体重の記録は対象外(日の詳細の体重行から個別に削除できる)。
+function openResetDayModal() {
+  const dateKey = recordSelectedDateStr || localDateKey(new Date());
+  const label = recordDateLabel(recordDateFromKey(dateKey));
+  historyDeleteMode = 'day';
   historyDeleteTargetId = null;
-  document.getElementById('reset-history-modal-title').textContent = '今日の記録を削除しますか？';
-  document.getElementById('reset-history-modal-desc').textContent = '今日行った記録（複数回あればすべて）が消え、元に戻せません。他の日の記録には影響しません。';
+  historyDeleteDateKey = dateKey;
+  document.getElementById('reset-history-modal-title').textContent = `${label}の記録を削除しますか？`;
+  document.getElementById('reset-history-modal-desc').textContent = `${label}に行ったトレーニングの記録（複数回あればすべて）が消え、元に戻せません。他の日の記録と体重の記録には影響しません。`;
   document.getElementById('reset-history-modal').classList.add('open');
 }
 
@@ -2083,7 +2090,7 @@ function init() {
   document.getElementById('rpe-info-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-rpe-info-close]')) closeRpeInfoModal();
   });
-  document.getElementById('reset-today-btn').addEventListener('click', openResetTodayModal);
+  document.getElementById('reset-day-btn').addEventListener('click', openResetDayModal);
   document.getElementById('reset-history-btn').addEventListener('click', () => openResetHistoryModal(null));
   document.getElementById('screen-record').addEventListener('click', (e) => {
     const delBtn = e.target.closest('[data-history-delete]');
@@ -2128,11 +2135,12 @@ function init() {
     if (historyDeleteMode === 'session') {
       deleteSession(historyDeleteTargetId);
       queueSessionDeleteSafe(historyDeleteTargetId);
-    } else if (historyDeleteMode === 'today') {
-      const todayKey = localDateKey(new Date());
-      const idsToDelete = loadHistory().filter((s) => localDateKey(s.date) === todayKey).map((s) => s.id);
-      deleteSessionsByDateKey(todayKey);
+    } else if (historyDeleteMode === 'day') {
+      const dateKey = historyDeleteDateKey;
+      const idsToDelete = loadHistory().filter((s) => localDateKey(s.date) === dateKey).map((s) => s.id);
+      deleteSessionsByDateKey(dateKey);
       idsToDelete.forEach(queueSessionDeleteSafe);
+      historyDeleteDateKey = null;
     } else {
       const idsToDelete = loadHistory().map((s) => s.id);
       clearHistory();
