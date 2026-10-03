@@ -2050,13 +2050,15 @@ body.modal-open {
    ギザギザ縁と枠線がぶつかって見た目がごちゃつくため)。以前は記録がある日(.has-record)だけ
    このバッジ表示になり、記録がまだ無い今日はマス全体の枠線(is-today)だけが残っていて
    方針と実装がズレていた(2026-09-16、Codexレビュー指摘)。記録の有無に関わらず.cal-day-num
-   にバッジを適用する。 */
+   に適用する。
+   2026-10-03: グレー地のバッジは「ダサい」との指摘を受け、6案(塗り丸・下線・「今日」文字・
+   上辺ライン・点・色＋太字)を見比べてもらい、数字をアクセント色の太字にするだけの案に決定。 */
 .cal-day.is-today .cal-day-num {
-  padding: 1px 3px;
-  border-radius: 4px;
-  background: var(--text-dim);
-  color: var(--bg);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 18px;
 }
+.cal-day.has-record.is-today .cal-day-num { font-size: 12px; }
 
 .cal-day.selected {
   border-color: var(--accent);

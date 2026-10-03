@@ -1,6 +1,6 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v36';
+const CACHE_NAME = 'training-menu-v37';
 const ASSETS = [
   './',
   './index.html',
