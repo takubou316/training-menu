@@ -129,6 +129,7 @@ function restoreActiveSessionIfAny() {
     currentSession = snapshot.session;
     currentMenu = snapshot.menu || null;
     renderLog(currentSession);
+    updateFinishButtonState();
     showScreen('log');
     startSessionTimer(snapshot.sessionStartTime);
     if (snapshot.cardioTimer) {
@@ -1568,6 +1569,7 @@ function handleStartWorkout() {
   }
   currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
   renderLog(currentSession);
+  updateFinishButtonState();
   showScreen('log');
   // メニュー画面の一番下の「開始」ボタンを押した時のスクロール位置を引き継がず、記録は先頭から始める。
   window.scrollTo(0, 0);
@@ -1658,6 +1660,9 @@ function applyCardioDurationValue(exIndex, value) {
     const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0);
     calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
   }
+  // 計測タイマーはDOMイベントを経由せずここを直接呼ぶため、「記録して終了」の可否もここで更新する
+  // (時間が入れば完了を押していなくても記録できる、isCardioRecorded参照)。
+  updateFinishButtonState();
 }
 
 // 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
@@ -1767,8 +1772,38 @@ function handleLogInput(e) {
   persistActiveSessionSnapshot();
 }
 
+// 「記録して終了」は、完了したセット/有酸素が1つも無い間は押せなくする(記録が空になるため。
+// 1種目だけのメニューならその種目が未完了の間は押せない)。記録画面の描画・入力のたびに呼ぶ。
+function updateFinishButtonState() {
+  const button = document.getElementById('finish-workout-btn');
+  const hint = document.getElementById('finish-workout-hint');
+  const canFinish = sessionHasAnyRecord(currentSession);
+  button.disabled = !canFinish;
+  hint.hidden = canFinish;
+}
+
+function closeFinishIncompleteModal() {
+  document.getElementById('finish-incomplete-modal').classList.remove('open');
+}
+
+// 未完了の種目・セットがあれば、記録されない分を一覧にした軽い確認を挟む(無ければそのまま終了)。
 function handleFinishWorkout() {
+  if (!currentSession || !sessionHasAnyRecord(currentSession)) return;
+  const { skipped, partial } = sessionIncompleteSummary(currentSession);
+  if (skipped.length === 0 && partial.length === 0) {
+    finishWorkout();
+    return;
+  }
+  const lines = [];
+  if (skipped.length) lines.push(`<p>完了していない種目（記録に残りません）: ${skipped.map(escapeHtml).join('、')}</p>`);
+  if (partial.length) lines.push(`<p>一部のセットが未完了の種目（完了したセットだけ残ります）: ${partial.map(escapeHtml).join('、')}</p>`);
+  document.getElementById('finish-incomplete-desc').innerHTML = lines.join('');
+  document.getElementById('finish-incomplete-modal').classList.add('open');
+}
+
+function finishWorkout() {
   if (!currentSession) return;
+  closeFinishIncompleteModal();
   stopHoldTimer();
   stopCardioTimer();
   endRestTimer();
@@ -2040,6 +2075,7 @@ function wireWarmupSetsToggle() {
     if (currentSession && document.getElementById('screen-log').classList.contains('active')) {
       applyWarmupSetsSetting(currentSession, enabled);
       renderLog(currentSession);
+      updateFinishButtonState();
       persistActiveSessionSnapshot();
     }
   });
@@ -2139,6 +2175,13 @@ function init() {
   document.getElementById('log-content').addEventListener('input', handleLogInput);
   document.getElementById('log-content').addEventListener('change', handleLogInput);
   document.getElementById('finish-workout-btn').addEventListener('click', handleFinishWorkout);
+  document.getElementById('finish-incomplete-confirm').addEventListener('click', finishWorkout);
+  document.getElementById('finish-incomplete-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-finish-incomplete-close]')) closeFinishIncompleteModal();
+  });
+  // 入力のたびに押せるかを更新する(描き直し時はrenderLogの直後で、タイマーはapplyCardioDurationValueで更新)。
+  document.getElementById('log-content').addEventListener('change', () => updateFinishButtonState());
+  document.getElementById('log-content').addEventListener('input', () => updateFinishButtonState());
 
   document.getElementById('main').addEventListener('click', (e) => {
     const demoTrigger = e.target.closest('[data-demo]');
@@ -2265,6 +2308,7 @@ function init() {
       closeSaveTemplateModal();
       closeWeeklyDayModal();
       closeWeeklyPlanNameModal();
+      closeFinishIncompleteModal();
     }
   });
 

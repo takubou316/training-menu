@@ -2422,3 +2422,8 @@ body.modal-open {
   background: var(--accent);
 }
 .switch-input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 「記録して終了」まわり（2026-10-03）。完了が1つも無い間はボタンを無効化し、理由を下に出す。 */
+.finish-workout-hint { margin: 8px 0 0; text-align: center; }
+.finish-incomplete-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 16px; }
+.finish-incomplete-desc p { margin: 0 0 6px; }

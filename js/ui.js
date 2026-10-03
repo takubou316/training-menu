@@ -1082,7 +1082,9 @@ function toggleSessionDetail(sessionId) {
 function buildExerciseDetailHtml(ex) {
   if (ex.type === 'cardio') {
     const restSummary = formatCardioRestSummary(ex.restLog);
-    return ex.done
+    // 完了を押し忘れても時間があれば実施した扱い(isCardioRecorded)。2026-10-03以前に
+    // 完了を押さずに保存された記録も、時間が残っていればここで表示されるようになる。
+    return isCardioRecorded(ex)
       ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
       : '未記録';
   }
@@ -1387,7 +1389,7 @@ function exercisesWithHistoryOptions() {
     session.exercises.forEach((ex) => {
       if (seen.has(ex.exerciseId)) return;
       const hasRecord = ex.type === 'cardio'
-        ? ex.done && Number(ex.duration) > 0
+        ? isCardioRecorded(ex) && Number(ex.duration) > 0
         : ex.sets.some((s) => s.done && !s.isWarmup);
       if (hasRecord) seen.set(ex.exerciseId, ex.name);
     });

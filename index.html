@@ -183,6 +183,7 @@ try {
       <h2>トレーニング中</h2>
       <div id="log-content"></div>
       <button class="primary-btn" id="finish-workout-btn">記録して終了</button>
+      <p class="hint-text finish-workout-hint" id="finish-workout-hint" hidden>セットや有酸素を1つ以上「完了」にすると記録できます。</p>
     </section>
 
     <!-- ===== 履歴画面 ===== -->
@@ -459,6 +460,19 @@ try {
       <div class="reset-history-actions">
         <button type="button" class="secondary-btn" data-weekly-day-close>キャンセル</button>
         <button type="button" id="weekly-day-save" class="primary-btn">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 「記録して終了」時、未完了の種目・セットがある場合だけ出す軽い確認(js/app.jsのhandleFinishWorkout)。 -->
+  <div id="finish-incomplete-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-finish-incomplete-close></div>
+    <div class="demo-modal-content">
+      <h3 style="margin:0 0 8px;">まだ完了していないものがあります</h3>
+      <div id="finish-incomplete-desc" class="finish-incomplete-desc"></div>
+      <div class="reset-history-actions">
+        <button type="button" class="secondary-btn" data-finish-incomplete-close>戻る</button>
+        <button type="button" id="finish-incomplete-confirm" class="primary-btn">このまま記録して終了</button>
       </div>
     </div>
   </div>

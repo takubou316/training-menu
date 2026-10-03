@@ -168,15 +168,48 @@ function applyWarmupSetsSetting(session, enabled) {
   });
 }
 
+// ===== 「完了」したかの判定（2026-10-03〜） =====
+// 有酸素は「完了」を押し忘れても、時間が計測・入力されていれば実施したものとして扱う
+// (ウォーキングを計測したのに完了を押さずに記録を終え、記録に残らなかった実例があったため)。
+function isCardioRecorded(ex) {
+  return !!ex.done || Number(ex.duration) > 0;
+}
+
+// その種目に記録として残る内容があるか。筋トレ系はウォームアップ以外の完了セットが1つ以上あること。
+// ウォームアップだけ完了した種目は記録しない(履歴の表示はウォームアップを除いて出すため、残すと
+// 「未記録」の行になってしまう。2026-10-03 Codexレビューで指摘されたが、要望に沿って意図的にこの判定)。
+function exerciseHasRecord(ex) {
+  if (ex.type === 'cardio') return isCardioRecorded(ex);
+  return Array.isArray(ex.sets) && ex.sets.some((s) => s.done && !s.isWarmup);
+}
+
+function sessionHasAnyRecord(session) {
+  return !!session && session.exercises.some(exerciseHasRecord);
+}
+
+// 「記録して終了」の前の警告に出す、未完了の内訳。
+// skipped: 完了が1つも無く、記録から丸ごと外れる種目名 / partial: 一部の本セットが未完了の種目名(その分だけ外れる)
+function sessionIncompleteSummary(session) {
+  const skipped = [];
+  const partial = [];
+  session.exercises.forEach((ex) => {
+    if (!exerciseHasRecord(ex)) skipped.push(ex.name);
+    else if (ex.type !== 'cardio' && ex.sets.some((s) => !s.done && !s.isWarmup)) partial.push(ex.name);
+  });
+  return { skipped, partial };
+}
+
 // 総挙上量(重量×回数の単純合算)は種目をまたいで足しても意味が薄いため、2026-10-02に表示ごと廃止し、
 // 記録にも保存しなくなった(以前の記録に残っているvolumeフィールドは使われないまま残る)。
+// 記録として見た時に「未記録」の行ができないよう、完了が1つも無い種目と未完了のセットは保存しない
+// (2026-10-03〜。それ以前の記録には未完了の種目・セットが残っている場合がある)。
 function finalizeSession(session) {
   const record = {
     id: `session-${Date.now()}`,
     date: session.date,
     goal: session.goal,
     durationSec: session.durationSec || 0,
-    exercises: session.exercises.map((e) => (e.type === 'cardio'
+    exercises: session.exercises.filter(exerciseHasRecord).map((e) => (e.type === 'cardio'
       ? {
         exerciseId: e.exerciseId,
         name: e.name,
@@ -185,12 +218,12 @@ function finalizeSession(session) {
         distance: e.distance,
         restLog: e.restLog || [],
         met: e.met,
-        done: e.done,
+        done: true,
       }
       : {
         exerciseId: e.exerciseId,
         name: e.name,
-        sets: e.sets,
+        sets: e.sets.filter((s) => s.done),
       })),
   };
   saveSession(record);
@@ -225,7 +258,7 @@ function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
     const ex = session.exercises.find((e) => e.exerciseId === exerciseId);
     if (!ex) continue;
     if (exerciseMeta.type === 'cardio') {
-      if (!ex.done || !ex.duration) continue;
+      if (!isCardioRecorded(ex) || !ex.duration) continue;
       // 距離が測れる種目(屋外)は距離を、室内マシン系は時間を進捗の目安にする
       const value = exerciseMeta.hasDistance ? Number(ex.distance) || 0 : Number(ex.duration) || 0;
       if (value <= 0) continue;
@@ -277,6 +310,7 @@ function isPersonalRecord(exercise, set) {
 if (typeof module !== 'undefined') {
   module.exports = {
     createSessionFromMenu, applyWarmupSetsSetting, finalizeSession, buildSuggestion,
+    isCardioRecorded, exerciseHasRecord, sessionHasAnyRecord, sessionIncompleteSummary,
     exerciseProgressSeries, exerciseProgressValue, isPersonalRecord,
     estimateCardioCalories,
   };
