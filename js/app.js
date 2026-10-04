@@ -1472,11 +1472,50 @@ function handleGenerate() {
   return true;
 }
 
+// ホームの「トレーニングに戻る」・開始時の確認の「途中のトレーニングに戻る」から、記録中の画面へ戻る。
+// ナビで離れた時に止めた経過時間の表示を再開する(開始時刻はそのまま、session-timer.js参照)。
+// 記録画面のDOMはナビで離れても残っているので描き直さない(開いていた説明欄等もそのまま)。
+function resumeActiveWorkout() {
+  if (!currentSession) return;
+  closeStartOverwriteModal();
+  startSessionTimer(sessionStartTime);
+  updateFinishButtonState();
+  showScreen('log');
+  window.scrollTo(0, 0);
+}
+
+function closeStartOverwriteModal() {
+  document.getElementById('start-overwrite-modal').classList.remove('open');
+}
+
+// 記録中のトレーニングがあるのに別のメニューで開始しようとした時は、黙って上書きせず
+// 戻るか捨てるかを選んでもらう(以前は確認なしで上書きされ、入力済みのセットが消えていた。2026-10-04)。
+// 記録画面には「記録せずにやめる」手段が無いため、捨てる選択肢はここに置いている。
 function handleStartWorkout() {
   if (!currentMenu || currentMenu.main.length === 0) {
     alert('種目を1つ以上追加してください');
     return;
   }
+  if (currentSession) {
+    document.getElementById('start-overwrite-desc').textContent = `${activeSessionSummaryText(currentSession, sessionStartTime)}。新しく始めると、途中の記録は保存されずに消えます。`;
+    document.getElementById('start-overwrite-modal').classList.add('open');
+    return;
+  }
+  startNewWorkout();
+}
+
+function discardActiveWorkoutAndStart() {
+  closeStartOverwriteModal();
+  stopHoldTimer();
+  stopCardioTimer();
+  endRestTimer();
+  stopSessionTimer();
+  currentSession = null;
+  clearActiveSessionSnapshot();
+  startNewWorkout();
+}
+
+function startNewWorkout() {
   currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
   renderLog(currentSession);
   updateFinishButtonState();
@@ -2138,6 +2177,14 @@ function init() {
   document.getElementById('log-content').addEventListener('input', handleLogInput);
   document.getElementById('log-content').addEventListener('change', handleLogInput);
   document.getElementById('finish-workout-btn').addEventListener('click', handleFinishWorkout);
+  document.getElementById('start-overwrite-resume').addEventListener('click', resumeActiveWorkout);
+  document.getElementById('start-overwrite-discard').addEventListener('click', discardActiveWorkoutAndStart);
+  document.getElementById('start-overwrite-modal').addEventListener('click', (e) => {
+    if (e.target.closest('[data-start-overwrite-close]')) closeStartOverwriteModal();
+  });
+  document.getElementById('home-resume-workout-section').addEventListener('click', (e) => {
+    if (e.target.closest('[data-resume-workout]')) resumeActiveWorkout();
+  });
   document.getElementById('finish-incomplete-confirm').addEventListener('click', finishWorkout);
   document.getElementById('finish-incomplete-modal').addEventListener('click', (e) => {
     if (e.target.closest('[data-finish-incomplete-close]')) closeFinishIncompleteModal();

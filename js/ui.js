@@ -13,6 +13,8 @@ function showScreen(name) {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === name);
   });
+  // ホームへはナビ以外(設定画面の戻る等)からも来るため、ここで毎回描き直す
+  if (name === 'mode') renderHomeResumeWorkout();
 }
 
 function goalLabel(goalKey) {
@@ -239,6 +241,44 @@ function renderTodayFocus(plans, activeId, templates) {
     container.innerHTML = '<p class="today-focus-rest">今日は休みの日です</p>';
     setCardsFlat(true);
   }
+}
+
+// 記録中のトレーニングの概要(「10:32開始」「2/5種目を記録」)。ホームの「トレーニングに戻る」と、
+// 別のメニューで開始しようとした時の確認(js/app.jsのhandleStartWorkout)で使う。
+function activeSessionSummaryParts(session, startTime) {
+  const parts = [];
+  if (startTime != null) {
+    const d = new Date(startTime);
+    const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const sameDay = localDateKey(d) === localDateKey(new Date());
+    parts.push(`${sameDay ? '' : `${d.getMonth() + 1}月${d.getDate()}日 `}${time}開始`);
+  }
+  const recorded = session.exercises.filter(exerciseHasRecord).length;
+  parts.push(`${recorded}/${session.exercises.length}種目を記録`);
+  return parts;
+}
+
+function activeSessionSummaryText(session, startTime) {
+  return activeSessionSummaryParts(session, startTime).join('・');
+}
+
+// ホームの一番下の「トレーニングに戻る」。記録中(currentSession)の時だけ出す(2026-10-04)。
+// ボトムナビで別画面へ移ると記録画面に戻る手段が無く、もう一度「開始」すると記録が上書きされていた。
+function renderHomeResumeWorkout() {
+  const container = document.getElementById('home-resume-workout-section');
+  if (!container) return;
+  if (typeof currentSession === 'undefined' || !currentSession) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = `
+    <div class="today-focus-panel home-resume-panel">
+      <div class="home-resume-text">
+        <div class="today-focus-title">トレーニング中</div>
+        <div class="home-resume-desc">${activeSessionSummaryParts(currentSession, sessionStartTime).map((p) => `<span class="home-resume-desc-part">${escapeHtml(p)}</span>`).join('・')}</div>
+      </div>
+      <button type="button" class="today-focus-start-btn" data-resume-workout>トレーニングに戻る</button>
+    </div>`;
 }
 
 // モード選択画面の「週間プラン」セクション。プリセットが1つも無ければ他の2つのモードカードと

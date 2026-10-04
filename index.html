@@ -55,6 +55,10 @@ try {
       </details>
 
       <div id="weekly-plan-section"></div>
+
+      <!-- 記録中のトレーニングがある時だけ「トレーニングに戻る」を出す(ボトムナビで別画面へ移ると
+           記録画面へ戻る手段が無かったため、2026-10-04)。renderHomeResumeWorkout()(js/ui.js)が描画する。 -->
+      <div id="home-resume-workout-section"></div>
     </section>
 
     <!-- ===== 設定画面（要望から作る） ===== -->
@@ -457,6 +461,20 @@ try {
       <div class="reset-history-actions">
         <button type="button" class="secondary-btn" data-finish-incomplete-close>戻る</button>
         <button type="button" id="finish-incomplete-confirm" class="primary-btn">このまま記録して終了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 記録中のトレーニングがあるのに別のメニューで「開始」した時の確認(以前は黙って上書きしていた)。 -->
+  <div id="start-overwrite-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-start-overwrite-close></div>
+    <div class="demo-modal-content">
+      <h3 style="margin:0 0 8px;">トレーニングの途中です</h3>
+      <p id="start-overwrite-desc" style="font-size:13px; color:var(--text-dim); margin:0 0 16px; line-height:1.6;"></p>
+      <div class="start-overwrite-actions">
+        <button type="button" id="start-overwrite-resume" class="primary-btn">途中のトレーニングに戻る</button>
+        <button type="button" id="start-overwrite-discard" class="danger-btn">途中の記録を捨てて新しく始める</button>
+        <button type="button" class="secondary-btn" data-start-overwrite-close>キャンセル</button>
       </div>
     </div>
   </div>

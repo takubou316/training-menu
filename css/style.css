@@ -2473,3 +2473,18 @@ body.modal-open {
 }
 .hold-target-hint { margin: 6px 0 0; }
 .hold-target-error { margin: 4px 0 0; }
+/* ===== ホームの「トレーニングに戻る」と、開始時の上書き確認（2026-10-04） ===== */
+/* 見た目は今日の予定(.today-focus-panel)と同じ「左にアクセント線」。ホームの一番下に置く。 */
+.home-resume-panel { margin-top: 20px; }
+.home-resume-text { flex: 1; min-width: 0; }
+.home-resume-desc { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
+/* 折り返すなら「・」の位置で切れるよう、各部分の途中では折り返さない */
+.home-resume-desc-part { white-space: nowrap; }
+/* 3択なので横並びにせず縦に積む(375px幅で文言が折り返さないように) */
+.start-overwrite-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.start-overwrite-actions button { width: 100%; }
