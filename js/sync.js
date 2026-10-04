@@ -217,6 +217,9 @@ async function queueSessionDeleteForSync(localId) {
   }
   if (!isCloudSyncActive()) return;
   try {
+    // 待っている間にバックアップの読み込み等でその記録が端末内に戻っていたら、削除予約は積まない
+    // (積むと端末には残っているのにクラウドからだけ消えてしまう。2026-10-04 Codexレビュー指摘)。
+    if (loadHistory().some((s) => s.id === localId)) return;
     const userId = currentSupabaseSession.user.id;
     const queue = loadPendingSyncQueue();
     queue.push({ entryId: generateSyncEntryId(), localId, userId, op: 'delete' });
@@ -327,7 +330,8 @@ async function syncSessionToSupabase(record, userId) {
       started_at: record.date,
       goal: record.goal || null,
       duration_sec: record.durationSec || null,
-      // 送信時点ではなく、運動した日の体重を送る(再送しても値が変わらない)。
+      // 送信時点の最新体重ではなく、運動した日(以前で一番新しい)の体重を送る。その日の体重記録を
+      // 後から直した場合は、次の再送でその値に変わる。
       body_weight_kg: typeof bodyWeightKgOnDate === 'function' ? bodyWeightKgOnDate(sessionDate) : null,
     }, { onConflict: 'user_id,local_id' })
     .select('id')

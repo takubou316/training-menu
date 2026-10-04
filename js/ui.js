@@ -1045,7 +1045,7 @@ function formatDate(iso) {
 function renderTrainingStreak(history) {
   const container = document.getElementById('training-streak-summary');
   if (!container) return;
-  const streak = getTrainingStreak();
+  const streak = calculateTrainingStreak(history); // 渡された記録から計算(読み直さない)
   const today = localDateKey(new Date());
   const yesterday = previousDateKey(today);
   const streakIsCurrent = streak && (streak.last === today || streak.last === yesterday);

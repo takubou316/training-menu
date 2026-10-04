@@ -482,6 +482,8 @@ function applyBackupData(data) {
         : item && restoredIds.has(item.localId)));
       localStorage.setItem(PENDING_SYNC_STORAGE_KEY, JSON.stringify(kept));
     }
+    // バックアップ内の連続日数(古い計算方式の値の場合がある)を、読み込んだ記録に合わせて計算し直す
+    refreshTrainingStreak();
   } catch (e) {
     keys.forEach((key) => {
       try {
