@@ -107,13 +107,17 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       }
       const suggestion = buildSuggestion(item, bodyWeightKg);
       const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
-      const defaultReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
+      // 回数の初期値は目標範囲の下限。以前は回数スライダーが10刻みだった名残で10の倍数に丸めており、
+      // 筋力アップ(目標4〜6回)でも10回が入っていた(2026-10-04修正。今は1刻みの数字ホイール)。
+      const defaultReps = item.holdBased ? 20 : item.repsMin;
+      // ウォームアップセット(軽い重量)の回数は本セットより多めの従来値のまま(筋力アップで4回まで減らさない)。
+      const warmupReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
       const defaultRpe = RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
       // 切り替えた時に入れ直せるよう、本来入る数と重量・回数の初期値は設定に関わらず保持しておく
       // (applyWarmupSetsSetting参照)。
-      const warmupSetTemplate = { weight: String(warmupWeight), reps: String(defaultReps), rpe: String(defaultRpe) };
+      const warmupSetTemplate = { weight: String(warmupWeight), reps: String(warmupReps), rpe: String(defaultRpe) };
       const plannedWarmupSets = item.warmupSets || 0;
       const warmupSetEntries = loadWarmupSetsEnabled() ? buildWarmupSetEntries(plannedWarmupSets, warmupSetTemplate) : [];
       const workingSetEntries = Array.from({ length: item.sets }, () => ({
