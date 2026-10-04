@@ -208,13 +208,23 @@ async function queueSessionForSync(record) {
 // 連動するtraining_session_exercises/training_session_sets)を後追いで削除するだけの
 // ベストエフォート処理(2026-09-08追加。それまではローカル削除がクラウド側に伝播せず、
 // game-daily-manager側の「達成」表示がローカル削除後も残ってしまっていた)。
-function queueSessionDeleteForSync(localId) {
+// queueSessionForSyncと同じく、起動直後で最初のセッション確認が終わっていなければ待つ
+// (以前は待たずに判定していたため、起動直後に削除するとクラウド側が消えないことがあった。
+// 2026-10-04、Codex指摘)。await後の失敗は呼び出し元のtry/catchに届かないためここで握りつぶす。
+async function queueSessionDeleteForSync(localId) {
+  if (SUPABASE_AVAILABLE && isSyncEnabled() && !authInitDone) {
+    await waitForAuthInit();
+  }
   if (!isCloudSyncActive()) return;
-  const userId = currentSupabaseSession.user.id;
-  const queue = loadPendingSyncQueue();
-  queue.push({ entryId: generateSyncEntryId(), localId, userId, op: 'delete' });
-  savePendingSyncQueue(queue);
-  void flushSyncQueue();
+  try {
+    const userId = currentSupabaseSession.user.id;
+    const queue = loadPendingSyncQueue();
+    queue.push({ entryId: generateSyncEntryId(), localId, userId, op: 'delete' });
+    savePendingSyncQueue(queue);
+    void flushSyncQueue();
+  } catch (e) {
+    // ベストエフォート。ローカルの削除は既に完了している。
+  }
 }
 
 let isFlushingSyncQueue = false;
