@@ -233,9 +233,43 @@ async function queueSessionDeleteForSync(localId) {
 let isFlushingSyncQueue = false;
 let flushRequestedDuringRun = false;
 
-// 同じエントリがこの回数失敗し続けたら、恒久的な問題(データ不整合等)とみなして隔離する。
-// 隔離してもローカルの記録自体は消えない。クラウドへの複製だけを諦める。
+// 同じエントリがエラーコード付きでこの回数断られ続けたら、恒久的な問題(権限・データ不整合等)とみなし、
+// 自動送信をやめて「送れなかった記録」(SYNC_FAILED_KEY)へ移す。ローカルの記録自体は消えず、
+// 記録タブの「もう一度送る」(retryFailedSyncEntries)で送信待ちに戻せる。
+// 以前は通信エラーも区別せずに数えて5回で捨てており、画面も「有効」のままで気付けなかった(2026-10-04)。
 const MAX_SYNC_ATTEMPTS = 5;
+const SYNC_FAILED_KEY = 'training-menu:sync-failed';
+const SYNC_LAST_SUCCESS_KEY = 'training-menu:sync-last-success';
+
+function loadFailedSyncEntries() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SYNC_FAILED_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveFailedSyncEntries(entries) {
+  localStorage.setItem(SYNC_FAILED_KEY, JSON.stringify(entries));
+}
+
+// 圏外・通信エラー・サーバーの一時的な不調・ログインの期限切れは、時間を置けば送れる見込みがあるので
+// 失敗回数に数えず、次の機会(起動時・オンライン復帰時・次の記録時)に送り直す。supabase-jsは通信エラーを
+// code:''、サーバーの503等をcodeなしで返すため、エラーコードの有無とHTTPステータスで判定する
+// (syncSessionToSupabase等がerror.httpStatusを付けて投げる)。
+function isTransientSyncError(error) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  if (!error || !error.code) return true;
+  const status = Number(error.httpStatus) || 0;
+  if (status === 0 || status === 408 || status === 429 || status >= 500) return true;
+  return error.code === 'PGRST301'; // JWT expired: SDKのトークン更新後に送れる
+}
+
+function throwSupabaseError(error, status) {
+  if (error && typeof error === 'object') error.httpStatus = status;
+  throw error;
+}
 
 // キューに溜まった記録を古い順にSupabaseへ送信する。起動時・オンライン復帰時・ログイン成功時・
 // 記録確定時など複数の場所から呼ばれるため、同時に走らないよう簡易ロック(isFlushingSyncQueue)
@@ -264,8 +298,10 @@ async function flushSyncQueue() {
   try {
     const userId = currentSupabaseSession.user.id;
     const queue = loadPendingSyncQueue();
-    const doneEntryIds = new Set(); // 送信成功、または隔離してキューから取り除くもの
+    const doneEntryIds = new Set(); // 送信成功、または「送れなかった記録」へ移してキューから取り除くもの
     const attemptUpdates = new Map(); // entryId -> 更新後の失敗回数(まだキューに残すもの)
+    const newlyFailed = []; // 「送れなかった記録」へ移すエントリ
+    let anySuccess = false;
     let stopEarly = false;
     for (const item of queue) {
       if (stopEarly || item.userId !== userId) continue;
@@ -279,16 +315,30 @@ async function flushSyncQueue() {
           await syncSessionToSupabase(item.record, userId);
         }
         doneEntryIds.add(entryId);
+        anySuccess = true;
       } catch (e) {
+        if (isTransientSyncError(e)) {
+          // 通信の問題は後続も同じ理由で失敗する可能性が高いので打ち切り、回数は数えない
+          stopEarly = true;
+          continue;
+        }
+        // エラーコード付きで断られたものは、そのエントリだけの問題なので後続の送信は続ける
         const attempts = (item.attempts || 0) + 1;
         if (attempts >= MAX_SYNC_ATTEMPTS) {
-          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録の自動送信を停止しました(local_id: ${item.localId}, op: ${item.op || 'upsert'})`);
+          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録を「送れなかった記録」に移しました(local_id: ${item.localId}, op: ${item.op || 'upsert'})`);
           doneEntryIds.add(entryId);
+          newlyFailed.push({ ...item, attempts, lastError: String((e && (e.message || e.code)) || ''), failedAt: new Date().toISOString() });
         } else {
           attemptUpdates.set(entryId, attempts);
-          stopEarly = true;
         }
       }
+    }
+    if (newlyFailed.length > 0) {
+      // 先に「送れなかった記録」へ書いてからキューから外す(逆順だと途中で失敗した時に行方不明になる)
+      saveFailedSyncEntries([...loadFailedSyncEntries(), ...newlyFailed]);
+    }
+    if (anySuccess) {
+      try { localStorage.setItem(SYNC_LAST_SUCCESS_KEY, new Date().toISOString()); } catch (e) { /* 表示用のみ */ }
     }
     if (doneEntryIds.size > 0 || attemptUpdates.size > 0) {
       const latest = loadPendingSyncQueue();
@@ -306,7 +356,38 @@ async function flushSyncQueue() {
   if (flushRequestedDuringRun) {
     flushRequestedDuringRun = false;
     await flushSyncQueue(); // 実行中に追加された分をこの1回で拾う
+    return;
   }
+  if (typeof renderSyncStatus === 'function') renderSyncStatus(); // 送信待ち件数等の表示を更新
+}
+
+// 今ログイン中のユーザー宛ての送信待ち・送れなかった記録の件数(記録タブの同期状態の表示用)。
+function syncQueueCounts() {
+  const userId = currentSupabaseSession && currentSupabaseSession.user.id;
+  const mine = (item) => item && item.userId === userId;
+  return {
+    pending: loadPendingSyncQueue().filter(mine).length,
+    failed: loadFailedSyncEntries().filter(mine).length,
+    lastSuccessAt: localStorage.getItem(SYNC_LAST_SUCCESS_KEY),
+  };
+}
+
+// 「もう一度送る」: 今のユーザーの「送れなかった記録」を失敗回数0で送信待ちに戻して送り直す。
+// 既に送信待ちに同じエントリがあれば重複させない。
+async function retryFailedSyncEntries() {
+  if (!isCloudSyncActive()) return;
+  const userId = currentSupabaseSession.user.id;
+  const failed = loadFailedSyncEntries();
+  const mine = failed.filter((item) => item.userId === userId);
+  if (mine.length === 0) return;
+  const queue = loadPendingSyncQueue();
+  const queuedIds = new Set(queue.map((item) => item.entryId || item.localId));
+  const restored = mine
+    .filter((item) => !queuedIds.has(item.entryId || item.localId))
+    .map(({ attempts, lastError, failedAt, ...item }) => item);
+  savePendingSyncQueue([...queue, ...restored]);
+  saveFailedSyncEntries(failed.filter((item) => item.userId !== userId));
+  await flushSyncQueue();
 }
 
 // 1回分のトレーニング記録(js/workout-log.jsのfinalizeSessionが作るrecord、localStorageの
@@ -321,7 +402,7 @@ async function flushSyncQueue() {
 // 無害、未完了だった分は改めて作られる。つまり非アトミックだが、再送すれば自然に辻褄が合う。
 async function syncSessionToSupabase(record, userId) {
   const sessionDate = localDateKey(record.date);
-  const { data: sessionRow, error: sessionError } = await supabaseClient
+  const { data: sessionRow, error: sessionError, status: sessionStatus } = await supabaseClient
     .from('training_sessions')
     .upsert({
       user_id: userId,
@@ -336,13 +417,13 @@ async function syncSessionToSupabase(record, userId) {
     }, { onConflict: 'user_id,local_id' })
     .select('id')
     .single();
-  if (sessionError) throw sessionError;
+  if (sessionError) throwSupabaseError(sessionError, sessionStatus);
   const sessionId = sessionRow.id;
 
   for (let i = 0; i < record.exercises.length; i += 1) {
     const ex = record.exercises[i];
     const isCardio = ex.type === 'cardio';
-    const { data: exRow, error: exError } = await supabaseClient
+    const { data: exRow, error: exError, status: exStatus } = await supabaseClient
       .from('training_session_exercises')
       .upsert({
         user_id: userId,
@@ -357,7 +438,7 @@ async function syncSessionToSupabase(record, userId) {
       }, { onConflict: 'session_id,local_id' })
       .select('id')
       .single();
-    if (exError) throw exError;
+    if (exError) throwSupabaseError(exError, exStatus);
 
     if (isCardio || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
     // holdBased種目(プランク等)は「reps」欄に実際は保持秒数が入っている(js/ui.js等の既存表示ロジックと
@@ -376,10 +457,10 @@ async function syncSessionToSupabase(record, userId) {
       is_warmup: Boolean(s.isWarmup),
       done: Boolean(s.done),
     }));
-    const { error: setsError } = await supabaseClient
+    const { error: setsError, status: setsStatus } = await supabaseClient
       .from('training_session_sets')
       .upsert(setPayload, { onConflict: 'session_exercise_id,local_id' });
-    if (setsError) throw setsError;
+    if (setsError) throwSupabaseError(setsError, setsStatus);
   }
 }
 
@@ -387,12 +468,12 @@ async function syncSessionToSupabase(record, userId) {
 // training_session_exercises/training_session_setsはon delete cascadeで自動的に消える
 // (game-daily-manager/supabase/schema.sql参照)ため、親のtraining_sessions行だけ消せばよい。
 async function deleteSessionFromSupabase(localId, userId) {
-  const { error } = await supabaseClient
+  const { error, status } = await supabaseClient
     .from('training_sessions')
     .delete()
     .eq('user_id', userId)
     .eq('local_id', localId);
-  if (error) throw error;
+  if (error) throwSupabaseError(error, status);
 }
 
 // Googleログインを開始する。成功するとブラウザがリダイレクトされ、戻ってきた時点で

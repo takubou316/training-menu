@@ -186,6 +186,11 @@ try {
         </div>
       </div>
       <div id="training-streak-summary" class="training-streak-summary" aria-live="polite" hidden></div>
+      <!-- クラウドに送れなかった記録がある時だけ出す(詳細と再送は「その他の設定」内、renderSyncStatus) -->
+      <div id="sync-failed-notice" class="sync-failed-notice" hidden>
+        <span>クラウドに送れなかった記録があります</span>
+        <button type="button" class="ghost-pill-btn sync-retry-btn" id="sync-failed-notice-btn">確認する</button>
+      </div>
       <div class="primary-tabs" role="tablist" aria-label="記録画面の表示">
         <button type="button" id="tab-record-btn" class="active" role="tab" aria-selected="true">記録</button>
         <button type="button" id="tab-graph-btn" role="tab" aria-selected="false">グラフ</button>

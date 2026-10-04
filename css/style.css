@@ -2491,3 +2491,25 @@ body.modal-open {
 /* ===== 記録の保存失敗・自動保存失敗の表示（2026-10-04） ===== */
 .log-autosave-error { margin: 0 0 12px; }
 .finish-workout-error { margin: 0 0 10px; }
+/* ===== クラウド同期の送信待ち・送れなかった記録（2026-10-04） ===== */
+.sync-failed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0;
+}
+.sync-failed-text { margin: 0; min-height: 0; }
+.sync-retry-btn { width: auto; flex-shrink: 0; font-size: 12px; padding: 7px 12px; }
+.sync-retry-btn:disabled { opacity: 0.6; }.sync-failed-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 8px 10px 8px 12px;
+  border-left: 3px solid var(--danger);
+  font-size: 13px;
+  color: var(--danger);
+}
+.sync-failed-notice[hidden] { display: none; }

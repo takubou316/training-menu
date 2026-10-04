@@ -2195,6 +2195,13 @@ function init() {
   document.getElementById('log-content').addEventListener('input', handleLogInput);
   document.getElementById('log-content').addEventListener('change', handleLogInput);
   document.getElementById('finish-workout-btn').addEventListener('click', handleFinishWorkout);
+  // 記録タブ上部の「クラウドに送れなかった記録があります」→「その他の設定」を開いて同期の欄へ移動する
+  document.getElementById('sync-failed-notice-btn').addEventListener('click', () => {
+    const row = document.getElementById('sync-status-row');
+    const details = row && row.closest('details');
+    if (details) details.open = true;
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
   document.getElementById('start-overwrite-resume').addEventListener('click', resumeActiveWorkout);
   document.getElementById('start-overwrite-discard').addEventListener('click', discardActiveWorkoutAndStart);
   document.getElementById('start-overwrite-modal').addEventListener('click', (e) => {

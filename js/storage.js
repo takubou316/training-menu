@@ -411,8 +411,10 @@ const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
   'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets',
 ];
-// クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)。バックアップには含めない。
+// クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)と、送れなかった記録
+// (js/sync.jsのSYNC_FAILED_KEY)。どちらもバックアップには含めない。
 const PENDING_SYNC_STORAGE_KEY = 'training-menu:pending-sync';
+const FAILED_SYNC_STORAGE_KEY = 'training-menu:sync-failed';
 
 function buildBackupObject() {
   const data = {};
@@ -501,7 +503,7 @@ function parseBackupText(text) {
 // 復元した記録に対する削除予約(実行されるとクラウド側から消えてしまう)と、復元後に存在しない
 // 記録の送信予約。それ以外(復元した記録の送信・復元後に無い記録の削除)は正しい操作なので残す。
 function applyBackupData(data) {
-  const keys = BACKUP_KEYS.map((name) => STORAGE_KEYS[name]).concat(PENDING_SYNC_STORAGE_KEY);
+  const keys = BACKUP_KEYS.map((name) => STORAGE_KEYS[name]).concat(PENDING_SYNC_STORAGE_KEY, FAILED_SYNC_STORAGE_KEY);
   const previous = {};
   keys.forEach((key) => { previous[key] = localStorage.getItem(key); });
   try {
@@ -511,14 +513,17 @@ function applyBackupData(data) {
       else localStorage.removeItem(key);
     });
     const restoredIds = new Set(JSON.parse(data[STORAGE_KEYS.history] || '[]').map((s) => s.id));
-    let queue = [];
-    try { queue = JSON.parse(previous[PENDING_SYNC_STORAGE_KEY] || '[]'); } catch (e) { queue = []; }
-    if (Array.isArray(queue) && queue.length) {
-      const kept = queue.filter((item) => (item && item.op === 'delete'
-        ? !restoredIds.has(item.localId)
-        : item && restoredIds.has(item.localId)));
-      localStorage.setItem(PENDING_SYNC_STORAGE_KEY, JSON.stringify(kept));
-    }
+    // 送信待ちと「送れなかった記録」(再送で送信待ちに戻る)の両方を同じ基準で整理する
+    [PENDING_SYNC_STORAGE_KEY, FAILED_SYNC_STORAGE_KEY].forEach((syncKey) => {
+      let queue = [];
+      try { queue = JSON.parse(previous[syncKey] || '[]'); } catch (e) { queue = []; }
+      if (Array.isArray(queue) && queue.length) {
+        const kept = queue.filter((item) => (item && item.op === 'delete'
+          ? !restoredIds.has(item.localId)
+          : item && restoredIds.has(item.localId)));
+        localStorage.setItem(syncKey, JSON.stringify(kept));
+      }
+    });
     // バックアップ内の連続日数(古い計算方式の値の場合がある)を、読み込んだ記録に合わせて計算し直す
     refreshTrainingStreak();
   } catch (e) {
