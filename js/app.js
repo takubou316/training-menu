@@ -173,7 +173,21 @@ function getBodyWeightKg() {
   return BODYWEIGHT_FALLBACK_KG;
 }
 
-// 本人が入力した体重があるか(仮の60kgではないか)。クラウド同期で体重を送るかの判定に使う(js/sync.js)。
+// 指定した日(localDateKey形式)時点の体重。その日以前で一番新しい体重記録→以前の設定値の順で求め、
+// どちらも無ければnull(仮の60kgは返さない)。クラウド同期で記録に添える体重に使う(js/sync.js)。
+// 以前は送信した瞬間の最新体重を送っていたため、オフラインで記録→別の日に体重を更新→同期、の順だと
+// 過去の運動に別の日の体重が付いていた(2026-10-04修正)。
+function bodyWeightKgOnDate(dateKey) {
+  const earlier = bodyWeightEntriesSorted().filter((e) => e.dateKey <= dateKey);
+  if (earlier.length) return earlier[earlier.length - 1].kg;
+  const settings = loadSettings();
+  if (settings && settings.bodyWeightKg != null && Number.isFinite(Number(settings.bodyWeightKg))) {
+    return Number(settings.bodyWeightKg);
+  }
+  return null;
+}
+
+// 本人が入力した体重があるか(仮の60kgではないか)。
 function bodyWeightHasStoredValue() {
   if (bodyWeightEntriesSorted().length) return true;
   const settings = loadSettings();

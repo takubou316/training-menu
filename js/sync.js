@@ -317,8 +317,8 @@ async function syncSessionToSupabase(record, userId) {
       started_at: record.date,
       goal: record.goal || null,
       duration_sec: record.durationSec || null,
-      body_weight_kg: (typeof bodyWeightHasStoredValue === 'function' && typeof getBodyWeightKg === 'function' && bodyWeightHasStoredValue())
-        ? getBodyWeightKg() : null,
+      // 送信時点ではなく、運動した日の体重を送る(再送しても値が変わらない)。
+      body_weight_kg: typeof bodyWeightKgOnDate === 'function' ? bodyWeightKgOnDate(sessionDate) : null,
     }, { onConflict: 'user_id,local_id' })
     .select('id')
     .single();
