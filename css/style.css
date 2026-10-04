@@ -2488,3 +2488,6 @@ body.modal-open {
   margin-top: 4px;
 }
 .start-overwrite-actions button { width: 100%; }
+/* ===== 記録の保存失敗・自動保存失敗の表示（2026-10-04） ===== */
+.log-autosave-error { margin: 0 0 12px; }
+.finish-workout-error { margin: 0 0 10px; }

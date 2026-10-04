@@ -97,7 +97,7 @@ let currentSession = null;
 // 「もう一度セットを完了にする／もう一度計測ボタンを押す」程度の実害で済むため対象外にしている。
 function persistActiveSessionSnapshot() {
   if (!currentSession) return;
-  saveActiveSessionSnapshot({
+  const ok = saveActiveSessionSnapshot({
     session: currentSession,
     menu: currentMenu,
     sessionStartTime,
@@ -111,6 +111,10 @@ function persistActiveSessionSnapshot() {
         }
       : null,
   });
+  // 自動保存に失敗している間は記録画面に注意を出す(以前は黙って無視しており、アプリが閉じられると
+  // 途中の記録が消えることに気付けなかった。2026-10-04)。
+  const warning = document.getElementById('log-autosave-error');
+  if (warning) warning.hidden = ok;
 }
 
 // 起動時、前回終了できなかった記録中セッションがあれば記録画面へ復元する。
@@ -1516,6 +1520,8 @@ function discardActiveWorkoutAndStart() {
 }
 
 function startNewWorkout() {
+  const finishError = document.getElementById('finish-workout-error');
+  if (finishError) finishError.hidden = true; // 前の記録で保存に失敗した時の表示を持ち越さない
   currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
   renderLog(currentSession);
   updateFinishButtonState();
@@ -1750,14 +1756,26 @@ function handleFinishWorkout() {
   document.getElementById('finish-incomplete-modal').classList.add('open');
 }
 
+// 保存に成功してから終了処理(タイマー停止・画面遷移)をする。以前はタイマーを止めてから保存しており、
+// 容量不足等で保存に失敗すると処理が途中で止まり、押し直すと経過時間が0になっていた(2026-10-04)。
+// 失敗した時は記録画面に残して理由を出す(記録のidは使い回すので、押し直しても二重にならない)。
 function finishWorkout() {
   if (!currentSession) return;
   closeFinishIncompleteModal();
   stopHoldTimer();
   stopCardioTimer();
   endRestTimer();
-  currentSession.durationSec = stopSessionTimer();
-  finalizeSession(currentSession);
+  const errorEl = document.getElementById('finish-workout-error');
+  currentSession.durationSec = sessionStartTime != null ? Math.floor((Date.now() - sessionStartTime) / 1000) : 0;
+  try {
+    finalizeSession(currentSession);
+  } catch (e) {
+    if (errorEl) errorEl.hidden = false;
+    persistActiveSessionSnapshot();
+    return;
+  }
+  if (errorEl) errorEl.hidden = true;
+  stopSessionTimer();
   currentSession = null;
   currentMenu = null;
   clearActiveSessionSnapshot();

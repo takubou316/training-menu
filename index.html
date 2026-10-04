@@ -169,7 +169,9 @@ try {
     <!-- ===== トレーニング中の画面（セットを記録しながら進める） ===== -->
     <section id="screen-log" class="screen">
       <h2>トレーニング中</h2>
+      <p class="error-text log-autosave-error" id="log-autosave-error" hidden>途中の記録を自動保存できていません。この状態でアプリを閉じると途中の記録が消えるおそれがあります。端末の空き容量を確認してください。</p>
       <div id="log-content"></div>
+      <p class="error-text finish-workout-error" id="finish-workout-error" hidden>記録を保存できませんでした。端末の空き容量を確認してから、もう一度「記録して終了」を押してください（ここまでの記録は消えていません）。</p>
       <button class="primary-btn" id="finish-workout-btn">記録して終了</button>
       <p class="hint-text finish-workout-hint" id="finish-workout-hint" hidden>セットや有酸素を1つ以上「完了」にすると記録できます。</p>
     </section>

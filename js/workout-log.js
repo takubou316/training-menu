@@ -225,8 +225,11 @@ function sessionIncompleteSummary(session) {
 // 記録として見た時に「未記録」の行ができないよう、完了が1つも無い種目と未完了のセットは保存しない
 // (2026-10-03〜。それ以前の記録には未完了の種目・セットが残っている場合がある)。
 function finalizeSession(session) {
+  // 記録のidは最初に保存を試みた時に決めて使い回す。保存に失敗して「記録して終了」を押し直した時に
+  // 別idの記録が増えないようにするため(saveSessionは同じidの記録を置き換える。2026-10-04)。
+  if (!session.recordId) session.recordId = `session-${Date.now()}`;
   const record = {
-    id: `session-${Date.now()}`,
+    id: session.recordId,
     date: session.date,
     goal: session.goal,
     durationSec: session.durationSec || 0,

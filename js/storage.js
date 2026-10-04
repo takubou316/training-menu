@@ -133,8 +133,10 @@ function loadHistory() {
   }
 }
 
+// 容量不足等で書き込めない時は例外を投げる(呼び出し元のjs/app.jsのfinishWorkoutが画面に出す)。
+// 同じidの記録があれば置き換える(保存の再試行で二重にならないように)。
 function saveSession(session) {
-  const history = loadHistory();
+  const history = loadHistory().filter((s) => s.id !== session.id);
   history.unshift(session); // 新しい記録を先頭に
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
 }
@@ -364,11 +366,14 @@ function deleteWeeklyPlan(id) {
 // メモリ上のcurrentSessionと計測中のタイマーが両方失われ、計測中の時間も記録の完了もできなくなる
 // 不具合があったため追加した。記録中は随時ここへ保存し、次回起動時に未完了のセッションがあれば
 // 復元する(js/app.jsのrestoreActiveSessionIfAny/persistActiveSessionSnapshot)。
+// 保存できたかを返す(失敗しても記録画面の操作自体は継続する。失敗時は記録画面に注意を出す、
+// js/app.jsのpersistActiveSessionSnapshot)。
 function saveActiveSessionSnapshot(snapshot) {
   try {
     localStorage.setItem(STORAGE_KEYS.activeSession, JSON.stringify(snapshot));
+    return true;
   } catch (e) {
-    // 保存に失敗しても記録画面の操作自体は継続する
+    return false;
   }
 }
 
