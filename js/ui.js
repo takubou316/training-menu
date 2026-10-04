@@ -989,6 +989,9 @@ function renderLog(session) {
 function buildCardioExerciseCardHtml(ex, exIndex) {
   const bodyWeightKg = getBodyWeightKg();
   const calories = estimateCardioCalories(ex.met, bodyWeightKg, Number(ex.duration) || 0);
+  // 時間スライダーの上限は既定120分。計測で2時間を超えた記録を描き直す時は、値が切り詰められないよう
+  // 10分単位で広げる(js/cardio-timer.jsのupdateCardioTimerと同じ基準)。
+  const cardioDurationSliderMax = Math.max(7200, Math.ceil((Number(ex.duration) || 0) / 600) * 600);
   const metricInfo = progressMetricInfo(ex);
   const sparklineHtml = buildProgressSparklineHtml(
     exerciseProgressSeries(ex.exerciseId, ex, 8),
@@ -1011,8 +1014,8 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
         <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>
         <div class="slider-track-row">
           <span class="slider-bound-label slider-bound-min">0分</span>
-          <input type="range" min="0" max="7200" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
-          <span class="slider-bound-label slider-bound-max">120分</span>
+          <input type="range" min="0" max="${cardioDurationSliderMax}" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
+          <span class="slider-bound-label slider-bound-max">${cardioDurationSliderMax / 60}分</span>
         </div>
         <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
       </div>

@@ -143,9 +143,11 @@ function updateCardioTimer() {
   // 変更自体はイベント伝播への依存を減らす防御的な改善という位置づけ。
   const slider = document.querySelector(`[data-cardio-ex="${exIndex}"][data-cardio-field="duration"]`);
   if (slider) {
-    const clampedSec = Math.min(activeSec, Number(slider.max));
-    slider.value = clampedSec;
-    if (typeof applyCardioDurationValue === 'function') applyCardioDurationValue(exIndex, clampedSec);
+    // 実測値は切り捨てずに記録する。スライダーの上限(既定120分)を超えたら上限の方を10分単位で広げる
+    // (以前はここで上限に切り詰めていたため、2時間超の計測が記録・カロリーでは2時間になっていた)。
+    if (activeSec > Number(slider.max)) slider.max = String(Math.ceil(activeSec / 600) * 600);
+    slider.value = activeSec;
+    if (typeof applyCardioDurationValue === 'function') applyCardioDurationValue(exIndex, activeSec);
     if (typeof updateSliderTrackFill === 'function') updateSliderTrackFill(slider);
   }
 
