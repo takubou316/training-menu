@@ -2013,7 +2013,13 @@ function saveHoldTargetFromForm(exIndex) {
     errorEl.hidden = false;
     return;
   }
-  saveHoldTargetSec(ex.exerciseId, sec);
+  try {
+    saveHoldTargetSec(ex.exerciseId, sec);
+  } catch (e) {
+    errorEl.textContent = '保存できませんでした（端末の空き容量を確認してください）';
+    errorEl.hidden = false;
+    return;
+  }
   applyHoldTargetToExercise(ex, sec);
   renderLog(currentSession);
   updateFinishButtonState();

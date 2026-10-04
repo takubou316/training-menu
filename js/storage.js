@@ -447,7 +447,8 @@ const BACKUP_VALIDATORS = {
   theme: null, // 生の文字列。loadThemeが想定外の値を既定に戻すので検証不要
   bodyWeightLog: (v) => isPlainObject(v) && Object.values(v).every((kg) => Number.isFinite(Number(kg))),
   warmupSetsEnabled: null, // 'true'/'false'の生文字列
-  holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isFinite(Number(sec))),
+  holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isInteger(sec)
+    && sec >= HOLD_TARGET_MIN_SEC && sec <= HOLD_TARGET_MAX_SEC),
 };
 
 // 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。
