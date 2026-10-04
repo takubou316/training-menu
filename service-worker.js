@@ -1,6 +1,8 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v40';
+const CACHE_NAME = 'training-menu-v41';
+// index.htmlで読み込むローカルファイルはすべてここに入れること（漏れるとオフライン起動に失敗する）。
+// 動画(media/)は容量が大きくRangeリクエストとも相性が悪いため対象外。
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +10,7 @@ const ASSETS = [
   './css/style.css',
   './assets/stamp-record.svg',
   './js/exercises-data.js',
+  './js/knowledge-data.js',
   './js/rules.js',
   './js/menu-generator.js',
   './js/storage.js',
@@ -15,7 +18,9 @@ const ASSETS = [
   './js/ui.js',
   './js/session-timer.js',
   './js/hold-timer.js',
+  './js/cardio-timer.js',
   './js/rest-timer.js',
+  './js/sync.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -44,8 +49,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request, { cache: 'no-store' })
       .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        // 404/500等のエラー応答で正常なキャッシュを上書きしない。CDNのスクリプト(supabase)は
+        // no-corsで読まれ中身が見えない(opaque)応答になるため、それは従来どおり保存する。
+        if (res.ok || res.type === 'opaque') {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
         return res;
       })
       .catch(() => caches.match(event.request))
