@@ -1004,7 +1004,8 @@ function wireExercisePicker() {
 
 function recomputeMenuWarmupCooldown() {
   const rawExercises = currentMenu.main.map((item) => findExerciseById(item.exerciseId)).filter(Boolean);
-  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises, currentMenu.params.painAreas || []);
+  // 「要望から作る」で選んだ時間(params.minutes)に合わせたウォームアップ・クールダウンの長さを保つ
+  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises, currentMenu.params.painAreas || [], currentMenu.params.minutes);
   currentMenu.warmup = warmup;
   currentMenu.cooldown = cooldown;
 }

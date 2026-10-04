@@ -456,8 +456,28 @@ function renderMenu(menu) {
     ? `<div class="menu-block"><div class="ex-note">気になる部位（${menu.params.painAreas.join('・')}）に負担がかかりやすい種目は除外して作成しています。痛みが続く場合は自己判断せず医療・専門家にご相談ください。</div></div>`
     : '';
 
-  const shortfallNoteHtml = menu.requestedCount && menu.main.length < menu.requestedCount
-    ? `<div class="menu-block"><div class="ex-note">選んだ条件（器具・レベル・部位など）に合う種目が少なく、目安の${menu.requestedCount}種目に対して${menu.main.length}種目のメニューになりました。器具を増やす、レベルを上げる、鍛えたい部位を広げるなどすると種目を増やせます。</div></div>`
+  // 所要時間の目安(ウォームアップ・クールダウン込み)。種目の追加・削除にも追従するよう、描画のたびに
+  // 今の内容から見積もる。作成時に指定時間へ収めるために行った調整(timeAdjustments)も一言添える(2026-10-04)。
+  const estMin = Math.max(1, Math.round(estimateMenuSeconds(menu) / 60));
+  const targetMin = Number(menu.params.minutes) || 0;
+  const adjustTexts = (menu.timeAdjustments || []).map((a) => {
+    if (a === 'rest') return '休憩を短めに';
+    if (a === 'warmupSets') return 'ウォームアップセットを1セットに';
+    const [, from, to] = String(a).split(':');
+    return a.startsWith('drop:') ? `種目を${from}→${to}つに` : '';
+  }).filter(Boolean);
+  const overTarget = targetMin > 0 && estMin > targetMin + Math.max(1, Math.round(targetMin * 0.1));
+  const timeBlockHtml = `
+    <div class="menu-block">
+      <h3>所要時間</h3>
+      <div class="ex-meta">目安 約${estMin}分（ウォームアップ・クールダウン込み）${targetMin > 0 ? `・指定 ${targetMin}分` : ''}</div>
+      ${adjustTexts.length && !overTarget ? `<div class="ex-note">${targetMin}分に収めるため、${adjustTexts.join('・')}調整しました。</div>` : ''}
+      ${overTarget ? `<div class="ex-note">指定の${targetMin}分より長くなりそうです。種目を減らすか、時間を長めに選び直してください。</div>` : ''}
+    </div>`;
+
+  // 時間に収めるために減らした分は「条件に合う種目が少ない」とは別なので、選べた数(availableCount)で判定する
+  const shortfallNoteHtml = menu.requestedCount && (menu.availableCount != null ? menu.availableCount : menu.main.length) < menu.requestedCount
+    ? `<div class="menu-block"><div class="ex-note">選んだ条件（器具・レベル・部位など）に合う種目が少なく、目安の${menu.requestedCount}種目に対して${menu.availableCount != null ? menu.availableCount : menu.main.length}種目しか選べませんでした。器具を増やす、レベルを上げる、鍛えたい部位を広げるなどすると種目を増やせます。</div></div>`
     : '';
 
   const warmupHtml = buildWarmupHtml(menu.warmup, menu.main.some((item) => item.type !== 'cardio'));
@@ -499,6 +519,7 @@ function renderMenu(menu) {
 
   container.innerHTML = `
     ${goalBlockHtml}
+    ${timeBlockHtml}
     ${painNoteHtml}
     ${shortfallNoteHtml}
     ${warmupHtml}

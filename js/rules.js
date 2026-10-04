@@ -3,21 +3,27 @@
 // 筋力向上なら1-5reps・低レップ高休憩、筋持久力なら15reps以上・短休憩、というのは業界内で広く共有されている一般知識）を
 // レベル別に微調整して数値化したもの。特定文献の丸写しではない。
 
+// minRestSec: 指定時間に収まらない時に休憩をここまで短くしてよい下限(menu-generator.jsのfitMenuToTime)。
+// 上と同じ一般的な目安の範囲(筋肥大30〜90秒・筋力2〜5分・筋持久力30秒以下)の中に収まる値にしてあり、
+// 範囲の外までは削らない(2026-10-04)。
 const GOALS = {
   hypertrophy: {
     label: '筋肥大（大きくしたい）',
     repsRange: [8, 12],
     restSec: { compound: 90, isolation: 60 },
+    minRestSec: { compound: 60, isolation: 45 },
   },
   strength: {
     label: '筋力アップ（重いものを扱えるようになりたい）',
     repsRange: [4, 6],
     restSec: { compound: 180, isolation: 120 },
+    minRestSec: { compound: 120, isolation: 120 },
   },
   endurance: {
     label: '引き締め・持久力（軽い負荷で回数をこなしたい）',
     repsRange: [15, 20],
     restSec: { compound: 45, isolation: 30 },
+    minRestSec: { compound: 30, isolation: 30 },
   },
 };
 
