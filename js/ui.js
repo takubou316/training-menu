@@ -466,7 +466,7 @@ function renderMenu(menu) {
     const [, from, to] = String(a).split(':');
     return a.startsWith('drop:') ? `種目を${from}→${to}つに` : '';
   }).filter(Boolean);
-  const overTarget = targetMin > 0 && estMin > targetMin + Math.max(1, Math.round(targetMin * 0.1));
+  const overTarget = menuOverBudget(menu, targetMin); // 調整処理(fitMenuToTime)と同じ秒単位の基準
   const timeBlockHtml = `
     <div class="menu-block">
       <h3>所要時間</h3>

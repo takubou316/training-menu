@@ -290,7 +290,8 @@ function buildWarmupAndCooldown(chosen, painAreas = [], minutes = null) {
     dynamic: Array.from(patternsUsed).map((p) => {
       const info = DYNAMIC_WARMUP_BY_PATTERN[p] || DYNAMIC_WARMUP_BY_PATTERN.isolation;
       const forExercises = chosen.filter((ex) => ex.pattern === p).map((ex) => ex.name);
-      return { label: info.label, description: info.description, forExercises };
+      // estSec: 所要時間の見積もり用。有酸素は「ごく軽いペースで3〜5分」なので4分と見なす
+      return { label: info.label, description: info.description, forExercises, estSec: p === 'cardio' ? 240 : DYNAMIC_WARMUP_SEC };
     }),
     // ①有酸素→②動的な体操(上のdynamic)の後に行う、③主要部位の短い静的ストレッチ(10秒)。
     // クールダウンと同じ部位(同じ優先順位・同じ絞り込み)を対象にし、保持時間だけ短い表記に変えて流用する。
@@ -366,7 +367,7 @@ function estimateMenuSeconds(menu) {
   const warmup = menu.warmup || {};
   const cooldown = menu.cooldown || {};
   let sec = (Number(warmup.generalMin) || 5) * 60
-    + (warmup.dynamic || []).length * DYNAMIC_WARMUP_SEC
+    + (warmup.dynamic || []).reduce((sum, d) => sum + (Number(d.estSec) || DYNAMIC_WARMUP_SEC), 0)
     + (warmup.staticStretch || []).length * WARMUP_STRETCH_SEC
     + (cooldown.static || []).length * COOLDOWN_STRETCH_SEC
     + (Number(cooldown.generalSec) || COOLDOWN_GENERAL_SEC);
@@ -377,9 +378,10 @@ function estimateMenuSeconds(menu) {
       sec += CARDIO_PLANNED_SEC;
       return;
     }
-    const setSec = item.holdBased
+    const oneSideSec = item.holdBased
       ? (typeof loadHoldTargetSec === 'function' ? loadHoldTargetSec(item.exerciseId) : 30) + HOLD_SET_SETUP_SEC
       : SET_WORK_SEC;
+    const setSec = item.unilateral ? oneSideSec * 2 : oneSideSec; // 「左右それぞれ」の種目は両側分
     const n = (item.sets || 0) + (warmupSetsOn ? (item.warmupSets || 0) : 0);
     sec += n * setSec + Math.max(0, n - 1) * (item.restSec || 0);
   });
@@ -389,11 +391,24 @@ function estimateMenuSeconds(menu) {
 // 指定時間(分)に収まるよう、体への効果を損ないにくい順に調整する。本セットの数は減らさない(ユーザー判断)。
 // ①(ウォームアップ・クールダウンはbuildWarmupAndCooldownで時間に合わせ済み)②休憩を目的ごとの下限
 // (GOALS[goal].minRestSec、一般的な目安の範囲内)まで短くする ③ウォームアップセットを1セットにする
-// ④種目を減らす(sortByTrainingOrderの並びの後ろ=単関節・体幹の種目から外し、最低1種目は残す)。
-// 1割(最低1分)の超過は許容する。何をしたかをadjustmentsで返し、メニュー画面に一言添える。
-function fitMenuToTime(chosen, { level, goal, minutes, painAreas }) {
+// ④種目を減らす(並びの後ろ=単関節・体幹の種目から外し、最低1種目は残す。ただし鍛えたい部位に直接効く
+// 種目(主動筋が一致)は、補助筋つながりで補欠として入った種目より後に外す。並び順は実施順であって
+// 選んだ優先度ではないため。例: 腕を選んだ日に補欠の背中種目が残ってアームカールが消える、を防ぐ)。
+// 1割(最低1分)の超過は許容する(menuOverBudgetと同じ基準)。何をしたかをadjustmentsで返し、画面に一言添える。
+function menuToleranceSec(minutes) {
+  return Math.max(60, Number(minutes) * 60 * 0.1);
+}
+
+// 指定時間(分)を許容範囲を超えて上回るか。メニュー画面の注意(js/ui.jsのrenderMenu)とfitMenuToTimeで同じ判定を使う。
+function menuOverBudget(menu, minutes) {
   const budgetSec = Number(minutes) * 60;
-  const toleranceSec = Math.max(60, budgetSec * 0.1);
+  if (!budgetSec) return false;
+  return estimateMenuSeconds(menu) > budgetSec + menuToleranceSec(minutes);
+}
+
+function fitMenuToTime(chosen, { level, goal, minutes, painAreas, parts = [] }) {
+  const budgetSec = Number(minutes) * 60;
+  const isFocus = (ex) => parts.includes('fullbody') || (ex.primary || []).some((m) => parts.includes(m));
   const minRest = (GOALS[goal] && GOALS[goal].minRestSec) || null;
   const adjustments = [];
   let exercises = chosen.slice();
@@ -410,7 +425,7 @@ function fitMenuToTime(chosen, { level, goal, minutes, painAreas }) {
     const { warmup, cooldown } = buildWarmupAndCooldown(exercises, painAreas, minutes);
     return { warmup, main, cooldown };
   };
-  const fits = (menu) => estimateMenuSeconds(menu) <= budgetSec + toleranceSec;
+  const fits = (menu) => !menuOverBudget(menu, minutes);
 
   let menu = build();
   if (!budgetSec || fits(menu)) return { menu, adjustments };
@@ -421,7 +436,9 @@ function fitMenuToTime(chosen, { level, goal, minutes, painAreas }) {
     if (menu.main.some((m, i) => m.restSec < buildSetPlan(exercises[i], level, goal).restSec)) adjustments.push('rest');
     if (fits(menu)) return { menu, adjustments };
   }
-  if (menu.main.some((m) => m.warmupSets > 1)) {
+  // ウォームアップセットをOFFにしている時は時間に含まれないので、減らしても意味が無い(説明も誤解を招く)
+  const warmupSetsOn = typeof loadWarmupSetsEnabled !== 'function' || loadWarmupSetsEnabled();
+  if (warmupSetsOn && menu.main.some((m) => m.warmupSets > 1)) {
     singleWarmupSet = true;
     menu = build();
     adjustments.push('warmupSets');
@@ -429,7 +446,13 @@ function fitMenuToTime(chosen, { level, goal, minutes, painAreas }) {
   }
   const originalCount = exercises.length;
   while (exercises.length > 1 && !fits(menu)) {
-    exercises = exercises.slice(0, -1);
+    // 後ろから見て、鍛えたい部位に直接効かない(補欠の)種目があればそれを先に外す。無ければ一番後ろ。
+    let dropIndex = -1;
+    for (let i = exercises.length - 1; i >= 0; i -= 1) {
+      if (!isFocus(exercises[i])) { dropIndex = i; break; }
+    }
+    if (dropIndex === -1) dropIndex = exercises.length - 1;
+    exercises = exercises.filter((_, i) => i !== dropIndex);
     menu = build();
   }
   if (exercises.length < originalCount) adjustments.push(`drop:${originalCount}:${exercises.length}`);
@@ -449,7 +472,7 @@ function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }
   const chosen = sortByTrainingOrder(chosenRaw);
 
   // 種目数の目安(exerciseCount)で選んだ後、セット数・休憩込みの所要時間が指定時間に収まるよう調整する
-  const { menu: fitted, adjustments } = fitMenuToTime(chosen, { level, goal, minutes, painAreas });
+  const { menu: fitted, adjustments } = fitMenuToTime(chosen, { level, goal, minutes, painAreas, parts });
 
   return {
     warmup: fitted.warmup,
