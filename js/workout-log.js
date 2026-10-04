@@ -231,7 +231,7 @@ function finalizeSession(session) {
       })),
   };
   saveSession(record);
-  updateTrainingStreak(record.date);
+  refreshTrainingStreak();
   // ローカル保存が完了した後に、クラウド同期が有効な場合だけ後追いで複製する(js/sync.js参照)。
   // 失敗してもローカルの記録には一切影響しない(常にローカルが正)、という設計方針を徹底するため
   // try/catchで包む(2026-09-07Codexレビュー指摘: queueSessionForSync内のlocalStorage書き込みが

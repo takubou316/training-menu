@@ -153,40 +153,34 @@ function calculateTrainingStreak(history) {
   return { last: dateKeys[0], count };
 }
 
-// 既存履歴がある状態で機能を追加した場合も、初回更新時に過去の連続日数を引き継ぐ。
+// 連続日数は常に記録(history)から計算し直す。以前は保存値を優先していたため、記録を削除しても
+// 連続日数が減らなかった(2026-10-04修正)。保存値(streakキー)はバックアップ互換のため同期して残すだけで、
+// 表示には使わない。同日中の複数記録は1日として扱う。
 function getTrainingStreak() {
-  const saved = loadTrainingStreak();
-  if (saved) return saved;
-  const derived = calculateTrainingStreak(loadHistory());
-  if (derived) saveTrainingStreak(derived);
-  return derived;
+  return calculateTrainingStreak(loadHistory());
 }
 
-// セッションを記録した日単位で継続日数を更新する。同日中の複数記録は1日として扱う。
-function updateTrainingStreak(sessionDate) {
-  const today = localDateKey(sessionDate);
-  if (!today) return loadTrainingStreak();
-
-  const current = getTrainingStreak();
-  if (current && current.last === today) return current;
-
-  const next = {
-    last: today,
-    count: current && current.last === previousDateKey(today) ? current.count + 1 : 1,
-  };
-  saveTrainingStreak(next);
-  return next;
+// 記録を追加・削除した後に呼び、保存値を記録の内容に合わせる。
+function refreshTrainingStreak() {
+  const streak = getTrainingStreak();
+  try {
+    if (streak) saveTrainingStreak(streak);
+    else localStorage.removeItem(STORAGE_KEYS.streak);
+  } catch (e) { /* 保存値は表示に使わないため、書き込めなくても問題ない */ }
+  return streak;
 }
 
 // トレーニング記録だけを削除する（お気に入り・体重などの設定は残す）。
 function clearHistory() {
   localStorage.removeItem(STORAGE_KEYS.history);
+  refreshTrainingStreak();
 }
 
 // 記録一覧から特定の1回分だけを削除する（他の記録には影響しない）。
 function deleteSession(id) {
   const history = loadHistory().filter((s) => s.id !== id);
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+  refreshTrainingStreak();
   return history;
 }
 
@@ -195,6 +189,7 @@ function deleteSession(id) {
 function deleteSessionsByDateKey(dateKey) {
   const history = loadHistory().filter((s) => localDateKey(s.date) !== dateKey);
   localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+  refreshTrainingStreak();
   return history;
 }
 
@@ -500,7 +495,7 @@ function applyBackupData(data) {
 
 if (typeof module !== 'undefined') {
   module.exports = {
-    loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, updateTrainingStreak,
+    loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, refreshTrainingStreak,
     clearHistory, deleteSession, deleteSessionsByDateKey, findLastPerformance,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
