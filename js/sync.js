@@ -273,16 +273,18 @@ function throwSupabaseError(error, status) {
 
 // キューに溜まった記録を古い順にSupabaseへ送信する。起動時・オンライン復帰時・ログイン成功時・
 // 記録確定時など複数の場所から呼ばれるため、同時に走らないよう簡易ロック(isFlushingSyncQueue)
-// を掛けている。今ログイン中のユーザー宛てのものだけを対象にする。1件失敗したら(オフライン等、
-// 同じ理由で以降も失敗する可能性が高いため)以降は打ち切り、次回に持ち越す。ただし同じエントリが
-// MAX_SYNC_ATTEMPTS回失敗し続けた場合は、それだけ隔離して後続の正常なエントリの送信を止めない
-// ようにする(2026-09-07Codexレビュー指摘: 恒久的に失敗するエントリが先頭に居座ると、それより
-// 後ろの正常なエントリが永久に送信されなくなる問題への対応)。
+// を掛けている。今ログイン中のユーザー宛てのものだけを対象にする。
+// - 通信の問題(isTransientSyncError)で失敗したら、後続も同じ理由で失敗する可能性が高いので打ち切る
+// - エラーコード付きで断られたら、別の記録の送信は続けるが、**同じ記録(localId)への後続の操作は
+//   今回は送らない**(順番を守るため。例: 送信→削除の順に積まれた記録で、送信が断られたまま削除だけ
+//   成功すると、後日送信が通った時に端末では削除済みの記録がクラウドに復活してしまう。2026-10-04 Codexレビュー指摘)
+// - MAX_SYNC_ATTEMPTS回断られたら「送れなかった記録」へ移す。削除に成功した時は、同じ記録の
+//   「送れなかった送信」も取り除く(再送で復活させないため)
 //
 // 2026-09-07Codexレビュー指摘を反映: 「flush開始時に読んだキュー」をそのまま上書き保存すると、
 // 実行中に他の呼び出し(記録確定直後に立て続けにもう1件記録した場合など)がキューへ追加した分を
 // まるごと消してしまう競合があった(read-modify-writeの非アトミック性)。書き戻す直前に最新の
-// キューを再読込し、「今回処理し終えたlocalIdの集合」だけを差し引くマージ方式に変更して解消した。
+// キューを再読込し、「今回処理し終えたentryIdの集合」だけを差し引くマージ方式に変更して解消した。
 //
 // 上記の修正だけでは、実行中に届いた新しいエントリがロックのせいでスキップされたまま
 // 放置される(データは消えないが送信もされない)別の問題が残っていたため、ロック中に
@@ -301,16 +303,20 @@ async function flushSyncQueue() {
     const doneEntryIds = new Set(); // 送信成功、または「送れなかった記録」へ移してキューから取り除くもの
     const attemptUpdates = new Map(); // entryId -> 更新後の失敗回数(まだキューに残すもの)
     const newlyFailed = []; // 「送れなかった記録」へ移すエントリ
+    const blockedLocalIds = new Set(); // 今回断られた記録。同じ記録への後続の操作は送らない
+    const deletedLocalIds = new Set(); // 今回クラウドから削除できた記録
     let anySuccess = false;
     let stopEarly = false;
     for (const item of queue) {
       if (stopEarly || item.userId !== userId) continue;
+      if (blockedLocalIds.has(item.localId)) continue;
       // entryIdを持たない古いエントリ(この仕組み導入前にキューに積まれたもの)はlocalIdで代用する。
       // 古い形式は常にupsertのみだったため、localId単位の管理でも従来通り正しく動く。
       const entryId = item.entryId || item.localId;
       try {
         if (item.op === 'delete') {
           await deleteSessionFromSupabase(item.localId, userId);
+          deletedLocalIds.add(item.localId);
         } else {
           await syncSessionToSupabase(item.record, userId);
         }
@@ -322,23 +328,42 @@ async function flushSyncQueue() {
           stopEarly = true;
           continue;
         }
-        // エラーコード付きで断られたものは、そのエントリだけの問題なので後続の送信は続ける
+        // エラーコード付きで断られた。別の記録の送信は続けるが、同じ記録の後続の操作は順番を守るため送らない
+        blockedLocalIds.add(item.localId);
         const attempts = (item.attempts || 0) + 1;
         if (attempts >= MAX_SYNC_ATTEMPTS) {
-          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録を「送れなかった記録」に移しました(local_id: ${item.localId}, op: ${item.op || 'upsert'})`);
-          doneEntryIds.add(entryId);
           newlyFailed.push({ ...item, attempts, lastError: String((e && (e.message || e.code)) || ''), failedAt: new Date().toISOString() });
         } else {
           attemptUpdates.set(entryId, attempts);
         }
       }
     }
-    if (newlyFailed.length > 0) {
-      // 先に「送れなかった記録」へ書いてからキューから外す(逆順だと途中で失敗した時に行方不明になる)
-      saveFailedSyncEntries([...loadFailedSyncEntries(), ...newlyFailed]);
+    // 「送れなかった記録」を更新する: 今回移すものを足し、今回クラウドから削除できた記録の古い送信は取り除く。
+    // 先に書いてからキューから外す(逆順だと途中で失敗した時に行方不明になる)。書き込めなければ
+    // (容量不足等)キューに残したまま回数だけ更新し、次の機会にまた移す。
+    if (newlyFailed.length > 0 || deletedLocalIds.size > 0) {
+      const failedNow = loadFailedSyncEntries();
+      const nextFailed = failedNow
+        .filter((item) => !(item.userId === userId && deletedLocalIds.has(item.localId)))
+        .concat(newlyFailed);
+      try {
+        if (nextFailed.length !== failedNow.length || newlyFailed.length > 0) saveFailedSyncEntries(nextFailed);
+        newlyFailed.forEach((item) => {
+          console.warn(`training-menu: クラウド同期に${MAX_SYNC_ATTEMPTS}回失敗したため、この記録を「送れなかった記録」に移しました(local_id: ${item.localId}, op: ${item.op || 'upsert'})`);
+          doneEntryIds.add(item.entryId || item.localId);
+        });
+      } catch (e) {
+        newlyFailed.forEach((item) => attemptUpdates.set(item.entryId || item.localId, item.attempts));
+      }
     }
     if (anySuccess) {
-      try { localStorage.setItem(SYNC_LAST_SUCCESS_KEY, new Date().toISOString()); } catch (e) { /* 表示用のみ */ }
+      try {
+        let lastByUser = null;
+        try { lastByUser = JSON.parse(localStorage.getItem(SYNC_LAST_SUCCESS_KEY) || '{}'); } catch (e) { lastByUser = null; }
+        const next = lastByUser && typeof lastByUser === 'object' && !Array.isArray(lastByUser) ? lastByUser : {};
+        next[userId] = new Date().toISOString();
+        localStorage.setItem(SYNC_LAST_SUCCESS_KEY, JSON.stringify(next));
+      } catch (e) { /* 表示用のみ */ }
     }
     if (doneEntryIds.size > 0 || attemptUpdates.size > 0) {
       const latest = loadPendingSyncQueue();
@@ -350,6 +375,10 @@ async function flushSyncQueue() {
         });
       savePendingSyncQueue(merged);
     }
+  } catch (e) {
+    // キューの書き戻し自体に失敗した(容量不足等)。キューは書き換わっていないので次の機会に送り直される。
+    // ここで投げると下の再実行・表示の更新まで飛ばされるため握りつぶす。
+    console.warn('training-menu: 送信待ちの更新に失敗しました', e);
   } finally {
     isFlushingSyncQueue = false;
   }
@@ -365,15 +394,23 @@ async function flushSyncQueue() {
 function syncQueueCounts() {
   const userId = currentSupabaseSession && currentSupabaseSession.user.id;
   const mine = (item) => item && item.userId === userId;
+  // 最後に送れた日時はアカウントごと({userId: ISO日時})。別アカウントの日時を出して誤認させないため。
+  let lastSuccessAt = null;
+  try {
+    const lastByUser = JSON.parse(localStorage.getItem(SYNC_LAST_SUCCESS_KEY) || '{}');
+    if (lastByUser && typeof lastByUser === 'object' && typeof lastByUser[userId] === 'string') lastSuccessAt = lastByUser[userId];
+  } catch (e) { /* 表示しないだけ */ }
   return {
     pending: loadPendingSyncQueue().filter(mine).length,
     failed: loadFailedSyncEntries().filter(mine).length,
-    lastSuccessAt: localStorage.getItem(SYNC_LAST_SUCCESS_KEY),
+    lastSuccessAt,
   };
 }
 
 // 「もう一度送る」: 今のユーザーの「送れなかった記録」を失敗回数0で送信待ちに戻して送り直す。
-// 既に送信待ちに同じエントリがあれば重複させない。
+// 既に送信待ちに同じエントリがあれば重複させない。端末でもう削除した記録の送信は戻さずに捨てる
+// (戻すと、送信待ちに後から積まれた削除より後ろに並び、クラウドに復活してしまうため)。
+// localStorageに書けない時は例外を投げる(呼び出し元の記録タブが失敗を表示する)。
 async function retryFailedSyncEntries() {
   if (!isCloudSyncActive()) return;
   const userId = currentSupabaseSession.user.id;
@@ -382,8 +419,10 @@ async function retryFailedSyncEntries() {
   if (mine.length === 0) return;
   const queue = loadPendingSyncQueue();
   const queuedIds = new Set(queue.map((item) => item.entryId || item.localId));
+  const localIds = new Set(loadHistory().map((s) => s.id));
   const restored = mine
     .filter((item) => !queuedIds.has(item.entryId || item.localId))
+    .filter((item) => item.op === 'delete' || localIds.has(item.localId))
     .map(({ attempts, lastError, failedAt, ...item }) => item);
   savePendingSyncQueue([...queue, ...restored]);
   saveFailedSyncEntries(failed.filter((item) => item.userId !== userId));

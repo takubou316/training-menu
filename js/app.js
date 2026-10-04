@@ -2344,6 +2344,7 @@ function init() {
       closeWeeklyDayModal();
       closeWeeklyPlanNameModal();
       closeFinishIncompleteModal();
+      closeStartOverwriteModal();
     }
   });
 

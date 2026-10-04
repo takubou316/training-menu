@@ -93,21 +93,26 @@ function maybeShowSyncChoiceModal() {
 // isCloudSyncActive()（同期フラグも見る）に変更した。以前はセッションさえあれば無条件で
 // 「有効」と表示していたため、setSyncEnabled(true)が実行されずに同期フラグが立っていない
 // 状態でも画面上は「有効」に見えてしまい、実際には記録が一切同期されない不具合に気づけなかった。
+// 同期欄のエラーメッセージ(ログイン/ログアウト/再送の失敗)。送信が終わるたびにrenderSyncStatusで
+// 欄ごと描き直すため、DOMではなくここに覚えておき、描き直しても消えないようにする(2026-10-04 Codexレビュー指摘)。
+let syncStatusMessage = '';
+
 function renderSyncStatus() {
   const container = document.getElementById('sync-status-row');
   if (!container) return; // 記録画面をまだ開いていない場合はDOMが無いので何もしない
+  const counts = SUPABASE_AVAILABLE && isCloudSyncActive() ? syncQueueCounts() : null;
   // 記録タブ上部の「送れなかった記録があります」(詳細は折りたたみの中なので、気付けるように上にも出す)
   const notice = document.getElementById('sync-failed-notice');
-  if (notice) notice.hidden = !(isCloudSyncActive() && syncQueueCounts().failed > 0);
+  if (notice) notice.hidden = !(counts && counts.failed > 0);
   if (!SUPABASE_AVAILABLE) {
     container.innerHTML = `<p class="hint-text">クラウド同期は現在利用できません（読み込みに失敗した可能性があります）。記録はこの端末のみに保存されます。</p>`;
     return;
   }
-  if (isCloudSyncActive()) {
+  if (counts) {
     const email = escapeHtml(currentSupabaseSession.user?.email || '');
     // 送信待ち・送れなかった記録・最後に送れた日時(2026-10-04〜。以前は「有効」としか出さず、
     // 送れていないことに気付けなかった)。
-    const { pending, failed, lastSuccessAt } = syncQueueCounts();
+    const { pending, failed, lastSuccessAt } = counts;
     const lastDate = lastSuccessAt ? new Date(lastSuccessAt) : null;
     const lastText = lastDate && !Number.isNaN(lastDate.getTime())
       ? `${lastDate.getMonth() + 1}月${lastDate.getDate()}日 ${lastDate.getHours()}:${String(lastDate.getMinutes()).padStart(2, '0')}`
@@ -122,33 +127,40 @@ function renderSyncStatus() {
       </div>` : ''}
       ${lastText ? `<p class="hint-text">最後に送れた日時: ${lastText}</p>` : ''}
       <button type="button" class="secondary-btn" id="sync-signout-btn">ログアウトする</button>
-      <p class="error-text" id="sync-status-error"></p>`;
+      <p class="error-text" id="sync-status-error">${escapeHtml(syncStatusMessage)}</p>`;
     const retryBtn = document.getElementById('sync-retry-btn');
     if (retryBtn) retryBtn.addEventListener('click', async () => {
       retryBtn.disabled = true;
       retryBtn.textContent = '送信中…';
+      syncStatusMessage = '';
       try {
         await retryFailedSyncEntries();
+      } catch (e) {
+        syncStatusMessage = '再送の準備に失敗しました。端末の空き容量を確認してください。';
       } finally {
         renderSyncStatus();
       }
     });
     const btn = document.getElementById('sync-signout-btn');
     if (btn) btn.addEventListener('click', async () => {
-      const errorEl = document.getElementById('sync-status-error');
+      syncStatusMessage = '';
       const { error } = await signOutFromSync();
-      if (error && errorEl) errorEl.textContent = 'ログアウトに失敗しました。もう一度お試しください。';
+      if (error) syncStatusMessage = 'ログアウトに失敗しました。もう一度お試しください。';
+      renderSyncStatus();
     });
   } else {
     container.innerHTML = `
       <p class="hint-text">クラウド同期: 未使用（この端末だけで記録しています）</p>
       <button type="button" class="secondary-btn" id="sync-signin-btn">Googleでログインする</button>
-      <p class="error-text" id="sync-status-error"></p>`;
+      <p class="error-text" id="sync-status-error">${escapeHtml(syncStatusMessage)}</p>`;
     const btn = document.getElementById('sync-signin-btn');
     if (btn) btn.addEventListener('click', async () => {
-      const errorEl = document.getElementById('sync-status-error');
+      syncStatusMessage = '';
       const { error } = await signInWithGoogleForSync();
-      if (error && errorEl) errorEl.textContent = 'ログインに失敗しました。もう一度お試しください。';
+      if (error) {
+        syncStatusMessage = 'ログインに失敗しました。もう一度お試しください。';
+        renderSyncStatus();
+      }
     });
   }
 }
