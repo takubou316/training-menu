@@ -396,7 +396,7 @@ function renderMenu(menu) {
       </div>
       <div class="ex-meta">${item.type === 'cardio'
         ? `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`
-        : `${item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.repsMin}〜${item.repsMax}回　休憩${item.restSec}秒`}</div>
+        : `${item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.holdBased ? `${loadHoldTargetSec(item.exerciseId)}秒` : `${item.repsMin}〜${item.repsMax}回`}　休憩${item.restSec}秒`}</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
@@ -927,7 +927,7 @@ function renderLog(session) {
           ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}${ex.holdBased ? '秒' : '回'}　休憩${ex.restSec}秒</div>
+      ${ex.holdBased ? buildHoldTargetMetaHtml(ex, exIndex) : `<div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}回　休憩${ex.restSec}秒</div>`}
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       ${buildPrefatigueNoteHtml(session, exIndex)}
@@ -981,6 +981,31 @@ function renderLog(session) {
     </div>`))
     .join('');
   container.innerHTML = warmupHtml + exercisesHtml + cooldownHtml;
+}
+
+// 保持時間系(プランク等)の目標秒数の表示と、その場で書き換える入力欄(「変更」で開く)。
+// 目標は種目ごとに保存され次回以降も使われる(storage.jsのloadHoldTargetSec)。保存処理はjs/app.jsの
+// wireHoldTargetEdit。holdTargetSecを持たない古いスナップショットは保存済みの目標で補う。
+function buildHoldTargetMetaHtml(ex, exIndex) {
+  const sec = ex.holdTargetSec != null ? ex.holdTargetSec : loadHoldTargetSec(ex.exerciseId);
+  return `
+      <div class="ex-meta hold-target-meta" data-hold-target-meta="${exIndex}">
+        <span>目標 ${sec}秒</span>
+        <button type="button" class="ghost-pill-btn hold-target-edit-btn" data-hold-target-edit="${exIndex}">変更</button>
+        <span>休憩${ex.restSec}秒</span>
+      </div>
+      <div class="hold-target-form-wrap" data-hold-target-form="${exIndex}" hidden>
+        <div class="hold-target-form">
+          <span class="hold-target-label">目標</span>
+          <input type="number" inputmode="numeric" step="1" min="${HOLD_TARGET_MIN_SEC}" max="${HOLD_TARGET_MAX_SEC}"
+            class="bodyweight-manual-input hold-target-input" value="${sec}" aria-label="目標の秒数">
+          <span class="hold-target-unit">秒</span>
+          <button type="button" class="primary-btn" data-hold-target-save="${exIndex}">保存</button>
+          <button type="button" class="ghost-pill-btn hold-target-cancel-btn" data-hold-target-cancel="${exIndex}">キャンセル</button>
+        </div>
+        <p class="hint-text hold-target-hint">次回からもこの秒数が目標になります。完了していないセットの秒数も変わります。</p>
+        <p class="error-text hold-target-error" hidden></p>
+      </div>`;
 }
 
 // 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)を

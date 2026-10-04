@@ -2427,3 +2427,49 @@ body.modal-open {
 .finish-workout-hint { margin: 8px 0 0; text-align: center; }
 .finish-incomplete-desc { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 16px; }
 .finish-incomplete-desc p { margin: 0 0 6px; }
+
+/* ===== 保持時間系(プランク等)の目標秒数の変更（2026-10-04） ===== */
+/* 「目標 30秒 [変更] 休憩60秒」の1行と、その場で開く入力欄。display指定があると[hidden]が
+   効かなくなるため(2026-10-03に同じ原因の不具合あり)、[hidden]も明示している。 */
+.exercise-card .hold-target-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.exercise-card .hold-target-meta[hidden],
+.hold-target-form-wrap[hidden] { display: none; }
+.hold-target-edit-btn {
+  position: relative;
+  width: auto;
+  font-size: 12px;
+  padding: 4px 12px;
+}
+/* 見た目は小さいままで、押せる範囲だけ上下に広げる(高さ約44px) */
+.hold-target-edit-btn::after {
+  content: '';
+  position: absolute;
+  inset: -9px -4px;
+}
+.hold-target-form-wrap { margin-bottom: 8px; }
+.hold-target-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hold-target-label,
+.hold-target-unit { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
+.hold-target-form .hold-target-input { width: 5em; flex: 0 1 auto; }
+.hold-target-form .primary-btn {
+  width: auto;
+  flex-shrink: 0;
+  padding: 10px 14px;
+}
+.hold-target-cancel-btn {
+  width: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+.hold-target-hint { margin: 6px 0 0; }
+.hold-target-error { margin: 4px 0 0; }

@@ -12,7 +12,37 @@ const STORAGE_KEYS = {
   theme: 'training-menu:theme',
   bodyWeightLog: 'training-menu:bodyweight-log',
   warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
+  holdTargets: 'training-menu:hold-targets',
 };
+
+// 保持時間系(プランク等、holdBased)の目標秒数。{ exerciseId: 秒 } で種目ごとに1つ持ち、記録画面の
+// 「変更」から本人が書き換える。未設定なら30秒(根拠のある研究値は見当たらないため、一般的によく
+// 使われる数字をユーザーと相談して初期値にした。2026-10-04)。以前は回数用の目標(8〜12)が
+// そのまま「目標 8〜12秒」と表示されていた。
+const HOLD_TARGET_DEFAULT_SEC = 30;
+const HOLD_TARGET_MIN_SEC = 5;
+const HOLD_TARGET_MAX_SEC = 300; // 記録画面の秒数ホイールの上限と同じ
+
+function loadHoldTargets() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.holdTargets);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function loadHoldTargetSec(exerciseId) {
+  const sec = Number(loadHoldTargets()[exerciseId]);
+  return Number.isInteger(sec) && sec >= HOLD_TARGET_MIN_SEC && sec <= HOLD_TARGET_MAX_SEC ? sec : HOLD_TARGET_DEFAULT_SEC;
+}
+
+function saveHoldTargetSec(exerciseId, sec) {
+  const targets = loadHoldTargets();
+  targets[exerciseId] = sec;
+  localStorage.setItem(STORAGE_KEYS.holdTargets, JSON.stringify(targets));
+}
 
 // 毎日の体重記録。{ 'YYYY-MM-DD'(localDateKey): kg } の形で1日1件だけ持つ(同じ日に記録し直すと上書き)。
 // 設定(settings.bodyWeightKg、自重種目の負荷推定に使う「今の体重」)とは別に、推移を見るための履歴として持つ。
@@ -374,7 +404,7 @@ const BACKUP_FORMAT = 'compstack-backup';
 const BACKUP_VERSION = 1;
 const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
-  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled',
+  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets',
 ];
 // クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)。バックアップには含めない。
 const PENDING_SYNC_STORAGE_KEY = 'training-menu:pending-sync';
@@ -417,6 +447,7 @@ const BACKUP_VALIDATORS = {
   theme: null, // 生の文字列。loadThemeが想定外の値を既定に戻すので検証不要
   bodyWeightLog: (v) => isPlainObject(v) && Object.values(v).every((kg) => Number.isFinite(Number(kg))),
   warmupSetsEnabled: null, // 'true'/'false'の生文字列
+  holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isFinite(Number(sec))),
 };
 
 // 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。

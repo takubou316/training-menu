@@ -109,9 +109,11 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       const defaultWeight = suggestion.weight != null ? suggestion.weight : 0;
       // 回数の初期値は目標範囲の下限。以前は回数スライダーが10刻みだった名残で10の倍数に丸めており、
       // 筋力アップ(目標4〜6回)でも10回が入っていた(2026-10-04修正。今は1刻みの数字ホイール)。
-      const defaultReps = item.holdBased ? 20 : item.repsMin;
+      // 保持時間系は本人が設定した目標秒数(未設定なら30秒、storage.jsのloadHoldTargetSec)を初期値にする。
+      const holdTargetSec = item.holdBased ? loadHoldTargetSec(item.exerciseId) : null;
+      const defaultReps = item.holdBased ? holdTargetSec : item.repsMin;
       // ウォームアップセット(軽い重量)の回数は本セットより多めの従来値のまま(筋力アップで4回まで減らさない)。
-      const warmupReps = item.holdBased ? 20 : Math.max(10, Math.round(item.repsMin / 10) * 10);
+      const warmupReps = item.holdBased ? holdTargetSec : Math.max(10, Math.round(item.repsMin / 10) * 10);
       const defaultRpe = RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
@@ -138,6 +140,7 @@ function createSessionFromMenu(menu, bodyWeightKg) {
         description: item.description,
         demoMedia: item.demoMedia,
         holdBased: item.holdBased,
+        holdTargetSec,
         equipment: item.equipment,
         suggestion,
         plannedWarmupSets,
@@ -146,6 +149,16 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       };
     }),
   };
+}
+
+// 記録中に保持時間系の目標秒数を変えた時、その種目の目標と、まだ完了していないセットの秒数を揃える
+// (完了済みのセットは実際にやった記録なので変えない)。目標の保存(saveHoldTargetSec)は呼び出し側で行う。
+function applyHoldTargetToExercise(exercise, sec) {
+  exercise.holdTargetSec = sec;
+  exercise.sets.forEach((s) => {
+    if (!s.done) s.reps = String(sec);
+  });
+  if (exercise.warmupSetTemplate) exercise.warmupSetTemplate.reps = String(sec);
 }
 
 function buildWarmupSetEntries(count, template) {

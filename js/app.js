@@ -1984,6 +1984,61 @@ function wireWarmupSetsToggle() {
   });
 }
 
+// 記録画面の保持時間系(プランク等)の「目標 ◯秒」の「変更」(js/ui.jsのbuildHoldTargetMetaHtml)。
+// 保存すると種目ごとの目標として次回以降も使い、今回の記録の未完了セットの秒数も揃える。
+function setHoldTargetFormOpen(exIndex, open) {
+  const meta = document.querySelector(`[data-hold-target-meta="${exIndex}"]`);
+  const form = document.querySelector(`[data-hold-target-form="${exIndex}"]`);
+  if (!meta || !form) return;
+  meta.hidden = open;
+  form.hidden = !open;
+  if (open) {
+    const input = form.querySelector('.hold-target-input');
+    const ex = currentSession && currentSession.exercises[exIndex];
+    if (ex) input.value = ex.holdTargetSec != null ? ex.holdTargetSec : loadHoldTargetSec(ex.exerciseId);
+    form.querySelector('.hold-target-error').hidden = true;
+    input.focus();
+  }
+}
+
+function saveHoldTargetFromForm(exIndex) {
+  const ex = currentSession && currentSession.exercises[exIndex];
+  const form = document.querySelector(`[data-hold-target-form="${exIndex}"]`);
+  if (!ex || !form) return;
+  const input = form.querySelector('.hold-target-input');
+  const errorEl = form.querySelector('.hold-target-error');
+  const sec = Number(input.value);
+  if (!input.value || !Number.isInteger(sec) || sec < HOLD_TARGET_MIN_SEC || sec > HOLD_TARGET_MAX_SEC) {
+    errorEl.textContent = `${HOLD_TARGET_MIN_SEC}〜${HOLD_TARGET_MAX_SEC}の整数を入力してください`;
+    errorEl.hidden = false;
+    return;
+  }
+  saveHoldTargetSec(ex.exerciseId, sec);
+  applyHoldTargetToExercise(ex, sec);
+  renderLog(currentSession);
+  updateFinishButtonState();
+  persistActiveSessionSnapshot();
+}
+
+function wireHoldTargetEdit() {
+  const logContent = document.getElementById('log-content');
+  logContent.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-hold-target-edit]');
+    if (editBtn) { setHoldTargetFormOpen(editBtn.dataset.holdTargetEdit, true); return; }
+    const cancelBtn = e.target.closest('[data-hold-target-cancel]');
+    if (cancelBtn) { setHoldTargetFormOpen(cancelBtn.dataset.holdTargetCancel, false); return; }
+    const saveBtn = e.target.closest('[data-hold-target-save]');
+    if (saveBtn) saveHoldTargetFromForm(Number(saveBtn.dataset.holdTargetSave));
+  });
+  // 入力欄でEnter(iPhoneのキーボードの「開く/改行」)を押しても保存できるようにする
+  logContent.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.classList.contains('hold-target-input')) return;
+    e.preventDefault();
+    const wrap = e.target.closest('[data-hold-target-form]');
+    if (wrap) saveHoldTargetFromForm(Number(wrap.dataset.holdTargetForm));
+  });
+}
+
 function restoreLastSettings() {
   const settings = loadSettings();
   if (!settings) return;
@@ -2042,6 +2097,7 @@ function init() {
   restoreLastSettings();
   wireBodyWeightLog();
   wireWarmupSetsToggle();
+  wireHoldTargetEdit();
   wireBackup();
   renderModeWeeklyPlanSection();
   wireSyncChoiceModal();
