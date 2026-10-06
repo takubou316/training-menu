@@ -2789,3 +2789,33 @@ body.modal-open {
   flex-wrap: wrap;
   gap: 4px 10px;
 }
+
+/* 週のまとめ（2026-10-07）。描画はjs/ui.jsのrenderWeeklySummary */
+.weekly-summary-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.weekly-summary-nav .day-nav-btn:disabled { opacity: 0.3; }
+.weekly-summary-range { font-size: 14px; font-weight: 700; color: var(--text); text-align: center; }
+.weekly-summary-label { display: block; font-size: 11px; font-weight: 400; color: var(--text-dim); }
+.weekly-summary-other { margin: 0 0 10px; }
+.weekly-muscle-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.weekly-muscle-table th,
+.weekly-muscle-table td {
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+  color: var(--text);
+}
+.weekly-muscle-table th[scope="row"],
+.weekly-muscle-table thead th:first-child { text-align: left; font-weight: 600; }
+.weekly-muscle-table thead th { font-size: 11px; font-weight: 400; color: var(--text-dim); }
+.weekly-summary-note { margin: 8px 0 0; font-size: 11px; }

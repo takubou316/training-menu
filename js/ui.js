@@ -1870,6 +1870,7 @@ function exercisesWithHistoryOptions() {
 // 自体はカレンダー(記録タブ)側で既に分かるため、種目ごとの推移のみを表示する
 // (2026-08-14、記録一覧×カレンダー統合の設計検討時に決定・後日反映)。
 function renderProgressScreen() {
+  renderWeeklySummary();
   renderBodyWeightProgressChart();
   renderWaistProgressChart();
   const select = document.getElementById('progress-exercise-select');
@@ -2049,6 +2050,115 @@ function refreshRecordViewsAfterBodyWeightChange() {
     renderBodyWeightProgressChart();
     renderWaistProgressChart();
   }
+}
+
+// ===== 週のまとめ（2026-10-07〜、数え方はCodexと相談して決定） =====
+// 既存の記録から計算するだけ(入力は増やさない)。週は月曜始まり(週間プランと揃える)。
+// - 筋トレ: 筋トレ系の種目(有酸素以外)を記録した「日数」。同じ日に2回記録しても1日
+// - 本セット: 完了した本セット。ウォームアップと未完了は数えない。サーキットも各セットを数える(3周×3種目=9セット)
+// - 部位ごと: 種目データのprimary(主に使う)とsecondary(補助で使う)を分けて数え、補助を0.5セット等に換算しない。
+//   1つの種目が複数の部位を主に使う場合はそれぞれに数えるので、部位の合計は本セット数と一致しない
+// - 有酸素: 記録した時間の合計(ウォーキングを先頭に、種目ごと)
+// 今週は「途中」と表示し、先週と比べて足りない等の判定はしない。数字は種目の分類による目安で、筋肉への刺激の精密な量ではない。
+let weeklySummaryOffset = 0; // 0=今週、-1=先週…
+
+function mondayKeyOf(dateKey) {
+  const offset = (recordDateFromKey(dateKey).getDay() + 6) % 7; // 月曜=0
+  return shiftDateKey(dateKey, -offset);
+}
+
+function computeWeeklySummary(history, mondayKey) {
+  const sundayKey = shiftDateKey(mondayKey, 6);
+  const trainingDays = new Set();
+  const muscles = {}; // { muscle: { primary, secondary } }
+  const cardio = new Map(); // exerciseId → { name, sec }
+  let workSets = 0;
+  history.forEach((session) => {
+    const dateKey = localDateKey(session.date);
+    if (!dateKey || dateKey < mondayKey || dateKey > sundayKey) return;
+    (session.exercises || []).forEach((ex) => {
+      if (ex.type === 'cardio') {
+        if (!isCardioRecorded(ex)) return;
+        const cur = cardio.get(ex.exerciseId) || { name: ex.name, sec: 0 };
+        cur.sec += Number(ex.duration) || 0;
+        cardio.set(ex.exerciseId, cur);
+        return;
+      }
+      // 2026-10-03より前の記録には未完了のセットも残っているので、完了したものだけ数える
+      const sets = (ex.sets || []).filter((s) => s.done && !s.isWarmup).length;
+      if (sets === 0) return;
+      trainingDays.add(dateKey);
+      workSets += sets;
+      const data = EXERCISES.find((e) => e.id === ex.exerciseId);
+      if (!data) return;
+      (data.primary || []).forEach((m) => {
+        muscles[m] = muscles[m] || { primary: 0, secondary: 0 };
+        muscles[m].primary += sets;
+      });
+      (data.secondary || []).forEach((m) => {
+        muscles[m] = muscles[m] || { primary: 0, secondary: 0 };
+        muscles[m].secondary += sets;
+      });
+    });
+  });
+  const cardioList = [...cardio.entries()]
+    .map(([id, v]) => ({ id, ...v }))
+    .sort((a, b) => (a.id === 'walking' ? -1 : b.id === 'walking' ? 1 : b.sec - a.sec));
+  return { mondayKey, sundayKey, trainingDays: trainingDays.size, workSets, muscles, cardioList };
+}
+
+// 週の期間の表示。今年以外・年をまたぐ週は年も出す(前の週へいくらでも戻れるため。Codexレビュー指摘)
+function weekRangeText(mondayKey, sundayKey) {
+  const thisYear = new Date().getFullYear();
+  const [y1] = mondayKey.split('-').map(Number);
+  const [y2] = sundayKey.split('-').map(Number);
+  const showYear = y1 !== thisYear || y2 !== thisYear;
+  const fmt = (key, y) => `${showYear ? `${y}/` : ''}${shortDateFromKey(key)}`;
+  return `${fmt(mondayKey, y1)}(月)〜${fmt(sundayKey, y2)}(日)`;
+}
+
+function formatHourMin(totalSec) {
+  const min = Math.round(Number(totalSec) / 60);
+  if (min < 60) return `${min}分`;
+  return `${Math.floor(min / 60)}時間${min % 60 ? `${min % 60}分` : ''}`;
+}
+
+function renderWeeklySummary() {
+  const container = document.getElementById('weekly-summary-content');
+  if (!container) return;
+  const thisMonday = mondayKeyOf(localDateKey(new Date()));
+  const mondayKey = shiftDateKey(thisMonday, weeklySummaryOffset * 7);
+  const s = computeWeeklySummary(loadHistory(), mondayKey);
+  const label = weeklySummaryOffset === 0 ? '今週（途中）' : weeklySummaryOffset === -1 ? '先週' : '';
+  const walking = s.cardioList.find((c) => c.id === 'walking');
+  const otherCardio = s.cardioList.filter((c) => c.id !== 'walking');
+  const muscleRows = Object.keys(MUSCLE_GROUPS)
+    .filter((m) => s.muscles[m])
+    .sort((a, b) => s.muscles[b].primary - s.muscles[a].primary || s.muscles[b].secondary - s.muscles[a].secondary)
+    .map((m) => `<tr><th scope="row">${MUSCLE_GROUPS[m]}</th><td>${s.muscles[m].primary || '−'}</td><td>${s.muscles[m].secondary || '−'}</td></tr>`)
+    .join('');
+  container.innerHTML = `
+    <div class="weekly-summary-nav">
+      <button type="button" class="day-nav-btn" data-weekly-summary-nav="-1" aria-label="前の週">◀</button>
+      <div class="weekly-summary-range">${weekRangeText(s.mondayKey, s.sundayKey)}${label ? `<span class="weekly-summary-label">${label}</span>` : ''}</div>
+      <button type="button" class="day-nav-btn" data-weekly-summary-nav="1" aria-label="次の週"${weeklySummaryOffset >= 0 ? ' disabled' : ''}>▶</button>
+    </div>
+    <div class="bodyweight-summary">
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">筋トレ</span><span class="bodyweight-summary-value">${s.trainingDays}日</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">本セット</span><span class="bodyweight-summary-value">${s.workSets}セット</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">ウォーキング</span><span class="bodyweight-summary-value">${walking ? formatHourMin(walking.sec) : '−'}</span></div>
+    </div>
+    ${otherCardio.length ? `<p class="hint-text weekly-summary-other">その他の有酸素: ${otherCardio.map((c) => `${escapeHtml(c.name || '')} ${formatHourMin(c.sec)}`).join('、')}</p>` : ''}
+    ${muscleRows ? `
+    <table class="weekly-muscle-table">
+      <thead><tr><th scope="col">部位</th><th scope="col">主に使った</th><th scope="col">補助で使った</th></tr></thead>
+      <tbody>${muscleRows}</tbody>
+    </table>
+    <p class="hint-text weekly-summary-note">本セットの数（ウォームアップは数えない）。「主に使った」はその部位を主に鍛える種目、「補助で使った」は補助として使う種目のセット数です。1つの種目が複数の部位を使うので、部位ごとの数を足しても本セット数とは一致しません。種目の分類による目安です。</p>`
+    : s.workSets > 0
+      // 種目データに無い種目だけを記録した週など(部位が分からない)。上の「本セット」と食い違う「記録なし」は出さない
+      ? '<p class="hint-text weekly-summary-note">この週の種目は部位の情報が無いため、部位ごとの数は出せません。</p>'
+      : '<p class="empty-text">この週の筋トレの記録はありません。</p>'}`;
 }
 
 // ===== 腹囲の記録（2026-10-06〜） =====

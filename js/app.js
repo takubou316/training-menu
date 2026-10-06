@@ -2380,6 +2380,12 @@ function wireBodyWeightLog() {
       focusBodyWeightInput(document.querySelector('.day-weight-row-editing'));
       return;
     }
+    const weekNavBtn = e.target.closest('[data-weekly-summary-nav]');
+    if (weekNavBtn && !weekNavBtn.disabled) {
+      weeklySummaryOffset = Math.min(0, weeklySummaryOffset + Number(weekNavBtn.dataset.weeklySummaryNav));
+      renderWeeklySummary();
+      return;
+    }
     const rangeBtn = e.target.closest('[data-bodyweight-range]');
     if (rangeBtn) {
       bodyWeightGraphRangeDays = Number(rangeBtn.dataset.bodyweightRange);
