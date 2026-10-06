@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="通知実験">
+<meta name="theme-color" content="#1b1714">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="../../icons/icon-192.png">
+<title>通知実験</title>
+<!--
+  有酸素の目標時間を「アプリを閉じている間も」知らせるため、プッシュ通知案(2026-10-06)が
+  iPhoneで使えるかを確かめる使い捨ての実験ページ。Compstack本体とは無関係。
+  送り手は本番ではSupabaseの予定だが、実験ではPCのスクリプト(~/.compstack-push-experiment)が代わりに送る。
+  確かめること: 他のアプリ中・ロック中・アプリを完全に閉じた時に届くか、音が鳴るか、何秒遅れるか、押すとアプリが開くか。
+-->
+<style>
+  :root {
+    --bg: #f6f3ef; --surface: #ffffff; --surface-2: #efe9e2; --text: #241f1a; --text-dim: #6d645b;
+    --accent: #b8572f; --accent-text: #ffffff; --border: #ddd3c8; --ok: #2e7d4f; --warn: #a2611a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1b1714; --surface: #262019; --surface-2: #322a22; --text: #f1ebe4; --text-dim: #ab9f93;
+      --accent: #f0a06a; --accent-text: #1b1714; --border: #3d342b; --ok: #7fcf9d; --warn: #f0b46a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1b1714; --surface: #262019; --surface-2: #322a22; --text: #f1ebe4; --text-dim: #ab9f93;
+    --accent: #f0a06a; --accent-text: #1b1714; --border: #3d342b; --ok: #7fcf9d; --warn: #f0b46a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 15px; line-height: 1.6;
+    padding: calc(12px + env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 4px 0; }
+  h2 { font-size: 17px; margin: 0 0 8px; }
+  p { margin: 6px 0; }
+  .lead { color: var(--text-dim); font-size: 14px; }
+  .mode {
+    margin: 12px 0 16px; padding: 10px 12px; border-radius: 10px; font-weight: 700;
+    background: var(--surface-2); border-left: 4px solid var(--accent);
+  }
+  .mode small { display: block; font-weight: 400; color: var(--text-dim); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin: 0 0 14px; }
+  .step-num {
+    display: inline-block; min-width: 24px; height: 24px; border-radius: 12px; margin-right: 6px;
+    background: var(--accent); color: var(--accent-text); text-align: center; font-size: 13px; line-height: 24px;
+  }
+  ol { padding-left: 20px; margin: 6px 0; }
+  li { margin: 4px 0; }
+  .btn {
+    display: block; width: 100%; min-height: 48px; margin: 10px 0 4px; border: 0; border-radius: 12px;
+    background: var(--accent); color: var(--accent-text); font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .btn.secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .btn:disabled { opacity: 0.5; }
+  fieldset { border: 0; padding: 0; margin: 12px 0 0; }
+  legend { font-weight: 700; font-size: 14px; margin-bottom: 4px; padding: 0; }
+  .choice { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
+  .choice input { width: 20px; height: 20px; margin: 2px 0 0; flex-shrink: 0; accent-color: var(--accent); }
+  textarea {
+    width: 100%; min-height: 64px; margin-top: 6px; padding: 8px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); font: inherit; font-size: 16px;
+  }
+  .note { font-size: 13px; color: var(--text-dim); }
+  .status { font-size: 14px; min-height: 1.4em; margin: 6px 0; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .log {
+    font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all;
+    background: var(--surface-2); border-radius: 8px; padding: 8px; max-height: 240px; overflow-y: auto; margin: 8px 0;
+  }
+  .received {
+    padding: 10px 12px; border-radius: 10px; background: var(--surface-2); margin: 8px 0; font-variant-numeric: tabular-nums;
+  }
+  .received b { color: var(--accent); }
+  details summary { cursor: pointer; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <h1>通知実験</h1>
+  <p class="lead">アプリを閉じている間やロック中でも、プッシュ通知で目標時間を知らせられるか確かめるページです。実験ではPCが通知の送り手になります。</p>
+
+  <div class="mode" id="mode"></div>
+
+  <section class="card">
+    <h2><span class="step-num">1</span>準備</h2>
+    <ol>
+      <li>Safariで共有ボタン →「ホーム画面に追加」（iPhoneはホーム画面に追加したアプリでないと通知を受け取れません）</li>
+      <li>ホーム画面の「通知実験」から開き直す</li>
+      <li>下の「通知を許可して登録」を押し、出てきた確認で「許可」</li>
+    </ol>
+    <button type="button" class="btn" id="subscribe">通知を許可して登録</button>
+    <div class="status" id="subscribe-status" role="status"></div>
+    <div id="sub-box" hidden>
+      <p>登録できました。<b>下の「登録情報をコピー」を押して、Claudeとのチャットに貼り付けてください。</b>これでPCからこのiPhoneに通知を送れるようになります。</p>
+      <button type="button" class="btn" id="copy-sub">登録情報をコピー</button>
+      <div class="status" id="copy-sub-status" role="status"></div>
+    </div>
+    <button type="button" class="btn secondary" id="local-test">この場で通知を出してみる（表示の確認）</button>
+    <p class="note">PCを使わず、この画面から通知を1つ出します。通知の見た目と音の確認用です。</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-num">2</span>PCから送ってもらう</h2>
+    <p>チャットで「◯秒後に送って」と頼み、その間に次のどれかの状態にして待ってください。</p>
+    <ol>
+      <li><b>ほかのアプリを開いている</b></li>
+      <li><b>画面をロックしている</b></li>
+      <li><b>アプリを完全に閉じている</b>（下から上にスワイプしてアプリ一覧から消す）</li>
+      <li><b>集中モード・消音モード中</b>（任意）</li>
+    </ol>
+    <p>届いたら、通知を押してこのページを開いてください。下の「届いた通知」に、PCが送った時刻と届いた時刻が出ます。</p>
+    <div id="received-list"><p class="note">まだ届いていません</p></div>
+    <button type="button" class="btn secondary" id="reload-log">届いた通知を読み込み直す</button>
+  </section>
+
+  <section class="card">
+    <h2><span class="step-num">3</span>結果</h2>
+    <fieldset>
+      <legend>ほかのアプリを開いている時</legend>
+      <label class="choice"><input type="radio" name="r_other" value="届いた・音が鳴った">届いた・音が鳴った</label>
+      <label class="choice"><input type="radio" name="r_other" value="届いたが音は鳴らなかった">届いたが音は鳴らなかった</label>
+      <label class="choice"><input type="radio" name="r_other" value="届かなかった">届かなかった</label>
+      <label class="choice"><input type="radio" name="r_other" value="試していない">試していない</label>
+    </fieldset>
+    <fieldset>
+      <legend>画面をロックしている時</legend>
+      <label class="choice"><input type="radio" name="r_lock" value="届いた・音が鳴った">届いた・音が鳴った</label>
+      <label class="choice"><input type="radio" name="r_lock" value="届いたが音は鳴らなかった">届いたが音は鳴らなかった</label>
+      <label class="choice"><input type="radio" name="r_lock" value="届かなかった">届かなかった</label>
+      <label class="choice"><input type="radio" name="r_lock" value="試していない">試していない</label>
+    </fieldset>
+    <fieldset>
+      <legend>アプリを完全に閉じている時</legend>
+      <label class="choice"><input type="radio" name="r_killed" value="届いた・音が鳴った">届いた・音が鳴った</label>
+      <label class="choice"><input type="radio" name="r_killed" value="届いたが音は鳴らなかった">届いたが音は鳴らなかった</label>
+      <label class="choice"><input type="radio" name="r_killed" value="届かなかった">届かなかった</label>
+      <label class="choice"><input type="radio" name="r_killed" value="試していない">試していない</label>
+    </fieldset>
+    <fieldset>
+      <legend>このアプリを開いている時（画面を見ている時）</legend>
+      <label class="choice"><input type="radio" name="r_open" value="通知が上から出た">通知が上から出た</label>
+      <label class="choice"><input type="radio" name="r_open" value="何も出なかった">何も出なかった</label>
+      <label class="choice"><input type="radio" name="r_open" value="試していない">試していない</label>
+    </fieldset>
+    <fieldset>
+      <legend>通知を押した時</legend>
+      <label class="choice"><input type="radio" name="r_tap" value="このアプリが開いた">このアプリが開いた</label>
+      <label class="choice"><input type="radio" name="r_tap" value="Safariが開いた">Safariが開いた</label>
+      <label class="choice"><input type="radio" name="r_tap" value="何も開かなかった">何も開かなかった</label>
+    </fieldset>
+    <fieldset>
+      <legend>気づいたこと・感想</legend>
+      <textarea name="memo" placeholder="音の大きさ、バイブ、ロック画面での見え方など"></textarea>
+    </fieldset>
+    <button type="button" class="btn" id="copy-result">結果をコピー</button>
+    <div class="status" id="copy-result-status" role="status"></div>
+  </section>
+
+  <details class="card">
+    <summary>自動で取っている記録を見る</summary>
+    <div class="log" id="log"></div>
+    <button type="button" class="btn secondary" id="clear">記録と入力を全部消す</button>
+  </details>
+</main>
+
+<script>
+(function () {
+  // PC側(~/.compstack-push-experiment/vapid.json)の公開鍵。秘密鍵はリポジトリに入れない
+  const VAPID_PUBLIC_KEY = 'BMRDXsvZlsojfOzrzQMKzxHH6_hubzuHeAkTUI5XVfDGuTFRgv0UVuCmkqVTN3wtRT8uypNLhws4yKheky7lv7g';
+  const LOG_KEY = 'push-exp:log';
+  const FORM_KEY = 'push-exp:form';
+  const LOG_CACHE = 'push-exp-log';
+
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const modeLabel = isStandalone ? 'ホーム画面のアプリ' : 'Safari（ブラウザ）';
+  const supportText = [
+    `通知: ${'Notification' in window ? Notification.permission : '使えない'}`,
+    `プッシュ: ${'PushManager' in window ? '使える' : '使えない'}`,
+  ].join('・');
+
+  function loadJson(key, fallback) {
+    try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch (e) { return fallback; }
+  }
+  function saveJson(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* 保存できなくても実験は続ける */ }
+  }
+  const p2 = (n) => String(n).padStart(2, '0');
+  function timeText(ms) {
+    const d = new Date(ms);
+    return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  }
+
+  let log = loadJson(LOG_KEY, []);
+  function addLog(text) {
+    log.push({ t: Date.now(), text });
+    if (log.length > 200) log = log.slice(-200);
+    saveJson(LOG_KEY, log);
+    renderLog();
+  }
+  function renderLog() {
+    const el = document.getElementById('log');
+    el.textContent = log.length ? log.map((e) => `${timeText(e.t)} ${e.text}`).join('\n') : 'まだ記録はありません';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  const params = new URLSearchParams(location.search);
+  const openedId = params.get('opened');
+  document.getElementById('mode').innerHTML = `今は「${modeLabel}」で開いています<small>${supportText}</small>`
+    + (openedId ? '<small>通知を押してこのページが開きました</small>' : '')
+    + (!isStandalone ? '<small>実験は、ホーム画面に追加した「通知実験」から開いて行ってください。</small>' : '');
+  addLog(`ページを開いた（${modeLabel}・${supportText}${openedId ? '・通知から' : ''}）`);
+  if (openedId) history.replaceState(null, '', location.pathname);
+
+  let hiddenAt = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      hiddenAt = Date.now();
+      addLog('ページから離れた');
+    } else {
+      addLog(`ページに戻った${hiddenAt ? `（離れていた時間 ${Math.round((Date.now() - hiddenAt) / 1000)}秒）` : ''}`);
+      hiddenAt = null;
+      loadReceived();
+    }
+  });
+
+  // サービスワーカー(このフォルダ専用)
+  let swReg = null;
+  const swReady = 'serviceWorker' in navigator
+    ? navigator.serviceWorker.register('sw.js', { scope: './' }).then((reg) => { swReg = reg; return navigator.serviceWorker.ready; })
+      .catch((e) => { addLog(`サービスワーカーの登録に失敗: ${e.message}`); return null; })
+    : Promise.resolve(null);
+
+  function urlBase64ToUint8Array(base64) {
+    const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  }
+
+  let subscriptionJson = null;
+  function showSubscription(sub) {
+    subscriptionJson = JSON.stringify(sub);
+    document.getElementById('sub-box').hidden = false;
+  }
+
+  function setStatus(id, text, kind) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = `status${kind ? ` ${kind}` : ''}`;
+  }
+
+  document.getElementById('subscribe').addEventListener('click', async () => {
+    if (!('Notification' in window) || !('PushManager' in window)) {
+      setStatus('subscribe-status', 'この開き方では通知を使えません。ホーム画面の「通知実験」から開いてください。', 'warn');
+      return;
+    }
+    try {
+      // 許可を求めるのは、ボタンを押した操作の中でないとiPhoneでは出ない
+      const permission = await Notification.requestPermission();
+      addLog(`通知の許可: ${permission}`);
+      if (permission !== 'granted') {
+        setStatus('subscribe-status', '通知が許可されませんでした。設定アプリ →「通知」→「通知実験」で許可できます。', 'warn');
+        return;
+      }
+      const reg = await swReady;
+      if (!reg) throw new Error('サービスワーカーが使えません');
+      const sub = await reg.pushManager.getSubscription()
+        || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      addLog('プッシュの登録ができた');
+      setStatus('subscribe-status', '登録できました', 'ok');
+      showSubscription(sub);
+    } catch (e) {
+      addLog(`登録に失敗: ${e.message}`);
+      setStatus('subscribe-status', `登録できませんでした: ${e.message}`, 'warn');
+    }
+  });
+
+  // 登録済みなら最初から登録情報を出す
+  swReady.then(async (reg) => {
+    if (!reg || !('PushManager' in window)) return;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      setStatus('subscribe-status', '登録済みです', 'ok');
+      showSubscription(sub);
+    }
+  });
+
+  async function copyText(text, statusId, fallbackEl) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus(statusId, 'コピーしました。チャットに貼り付けてください。', 'ok');
+    } catch (e) {
+      fallbackEl.textContent = text;
+      const details = fallbackEl.closest('details');
+      if (details) details.open = true;
+      setStatus(statusId, 'コピーできなかったので、下の「自動で取っている記録」の欄に全文を出しました。長押しで選んでコピーしてください。', 'warn');
+    }
+  }
+
+  document.getElementById('copy-sub').addEventListener('click', () => {
+    if (!subscriptionJson) return;
+    copyText(`【通知実験の登録情報】\n${subscriptionJson}`, 'copy-sub-status', document.getElementById('log'));
+  });
+
+  document.getElementById('local-test').addEventListener('click', async () => {
+    try {
+      if (Notification.permission !== 'granted') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+      }
+      const reg = await swReady;
+      await reg.showNotification('通知実験（この場で出した通知）', { body: '見た目と音の確認です', tag: 'local-test', icon: '../../icons/icon-192.png', data: { id: 'local-test' } });
+      addLog('この場で通知を出した');
+    } catch (e) {
+      addLog(`この場の通知に失敗: ${e.message}`);
+    }
+  });
+
+  // サービスワーカーが記録した「届いた時刻」を読む
+  let received = [];
+  async function loadReceived() {
+    if (!('caches' in window)) return;
+    try {
+      const cache = await caches.open(LOG_CACHE);
+      const keys = await cache.keys();
+      const entries = await Promise.all(keys.map((req) => cache.match(req).then((res) => res.json())));
+      received = entries.sort((a, b) => a.receivedAt - b.receivedAt);
+    } catch (e) {
+      received = [];
+    }
+    const listEl = document.getElementById('received-list');
+    if (received.length === 0) {
+      listEl.innerHTML = '<p class="note">まだ届いていません</p>';
+      return;
+    }
+    listEl.innerHTML = received.map((r) => {
+      const delay = r.sentAt ? Math.round((r.receivedAt - r.sentAt) / 100) / 10 : null;
+      return `<div class="received">${r.label ? `${r.label}<br>` : ''}送った ${r.sentAt ? timeText(r.sentAt) : '不明'} → 届いた ${timeText(r.receivedAt)}${delay != null ? `（<b>${delay}秒</b>）` : ''}</div>`;
+    }).join('');
+  }
+  document.getElementById('reload-log').addEventListener('click', loadReceived);
+  loadReceived();
+
+  // 結果の入力の保存と復元
+  const form = loadJson(FORM_KEY, {});
+  document.querySelectorAll('input[type="radio"], textarea').forEach((el) => {
+    if (el.type === 'radio') el.checked = form[el.name] === el.value;
+    else el.value = form[el.name] || '';
+    el.addEventListener(el.type === 'radio' ? 'change' : 'input', () => {
+      form[el.name] = el.value;
+      saveJson(FORM_KEY, form);
+    });
+  });
+
+  const QUESTIONS = [
+    ['r_other', 'ほかのアプリ中'], ['r_lock', 'ロック中'], ['r_killed', '完全に閉じた時'],
+    ['r_open', 'アプリを開いている時'], ['r_tap', '通知を押した時'], ['memo', '感想'],
+  ];
+  document.getElementById('copy-result').addEventListener('click', async () => {
+    await loadReceived();
+    const lines = ['【通知実験の結果】', `開き方: ${modeLabel}（${supportText}）`, `端末: ${navigator.userAgent}`, ''];
+    QUESTIONS.forEach(([name, label]) => lines.push(`${label}: ${form[name] || '（未回答）'}`));
+    lines.push('', '【届いた通知】');
+    received.forEach((r) => lines.push(`${r.label || r.id}: 送った ${r.sentAt ? timeText(r.sentAt) : '不明'} → 届いた ${timeText(r.receivedAt)}${r.sentAt ? `（${Math.round((r.receivedAt - r.sentAt) / 100) / 10}秒）` : ''}`));
+    lines.push('', '【自動の記録】', ...log.map((e) => `${timeText(e.t)} ${e.text}`));
+    copyText(lines.join('\n'), 'copy-result-status', document.getElementById('log'));
+  });
+
+  document.getElementById('clear').addEventListener('click', async () => {
+    if (!confirm('自動の記録・届いた通知の記録・入力した結果を全部消しますか？（通知の登録は残ります）')) return;
+    log = [];
+    Object.keys(form).forEach((k) => delete form[k]);
+    saveJson(LOG_KEY, log);
+    saveJson(FORM_KEY, form);
+    if ('caches' in window) await caches.delete(LOG_CACHE);
+    document.querySelectorAll('input[type="radio"]').forEach((el) => { el.checked = false; });
+    document.querySelectorAll('textarea').forEach((el) => { el.value = ''; });
+    renderLog();
+    loadReceived();
+  });
+
+  renderLog();
+})();
+</script>
+</body>
+</html>
