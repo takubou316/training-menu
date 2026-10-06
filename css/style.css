@@ -2743,3 +2743,20 @@ body.modal-open {
 
 /* 週間プラン「一日おき」の前回やった日など、今日の予定の下の小さい補足 */
 .today-focus-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+/* 体重・腹囲の数字の部分も押せる範囲にする（2026-10-06、ユーザー要望「数字の部分を押したら入力できるように」）。
+   押すと右の「変更/記録する」と同じ入力欄が開く。js/ui.jsのrow-tap-area */
+.row-tap-area {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  border-radius: 8px;
+}
+.row-tap-area:active { opacity: 0.6; }
+.day-row-tap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}

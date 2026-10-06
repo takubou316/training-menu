@@ -1933,7 +1933,7 @@ function renderHomeBodyWeight() {
     const diffText = bodyWeightDiffText(today, Number(kg));
     container.innerHTML = `
       <div class="home-weight-panel">
-        <div class="home-weight-main">
+        <div class="home-weight-main row-tap-area" data-bodyweight-home-edit>
           <div class="home-weight-label">今日の体重</div>
           <div class="home-weight-value">${Number(kg).toFixed(1)}<span class="home-weight-unit">kg</span></div>
           ${diffText ? `<div class="home-weight-diff">${diffText}</div>` : ''}
@@ -1964,9 +1964,11 @@ function buildDayWeightRowHtml(dateStr, { showEmpty = true } = {}) {
   if (kg == null && !showEmpty) return '';
   const diffText = kg != null ? bodyWeightDiffText(dateStr, Number(kg)) : '';
   return `<div class="day-weight-row">
-    <span class="day-weight-label">体重</span>
-    <span class="day-weight-value${kg == null ? ' is-empty' : ''}">${kg != null ? formatKg(kg) : '未記録'}</span>
-    ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    <span class="day-row-tap row-tap-area" data-bodyweight-detail-edit="${dateStr}">
+      <span class="day-weight-label">体重</span>
+      <span class="day-weight-value${kg == null ? ' is-empty' : ''}">${kg != null ? formatKg(kg) : '未記録'}</span>
+      ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    </span>
     <button type="button" class="ghost-pill-btn bodyweight-log-small-btn day-weight-edit-btn" data-bodyweight-detail-edit="${dateStr}">${kg != null ? '変更' : '記録する'}</button>
   </div>`;
 }
@@ -2092,7 +2094,7 @@ function renderHomeWaist() {
   }
   container.innerHTML = `
     <div class="home-waist-panel${due ? ' is-due' : ''}">
-      <div class="home-waist-main"><span class="home-waist-label">腹囲</span>${mainHtml}</div>
+      <div class="home-waist-main row-tap-area" data-waist-home-edit><span class="home-waist-label">腹囲</span>${mainHtml}</div>
       <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-waist-home-edit>${todayCm != null ? '変更' : '記録する'}</button>
     </div>`;
 }
@@ -2114,9 +2116,11 @@ function buildDayWaistRowHtml(dateStr, { showEmpty = true } = {}) {
   }
   const diffText = waistDiffText(dateStr, Number(cm));
   return `<div class="day-weight-row">
-    <span class="day-weight-label">腹囲</span>
-    <span class="day-weight-value">${formatCm(cm)}</span>
-    ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    <span class="day-row-tap row-tap-area" data-waist-detail-edit="${dateStr}">
+      <span class="day-weight-label">腹囲</span>
+      <span class="day-weight-value">${formatCm(cm)}</span>
+      ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    </span>
     <button type="button" class="ghost-pill-btn bodyweight-log-small-btn day-weight-edit-btn" data-waist-detail-edit="${dateStr}">変更</button>
   </div>`;
 }
