@@ -95,12 +95,20 @@ let currentSession = null;
 // 計測中の時間も記録の完了もできなくなる不具合があったため追加した(復元はrestoreActiveSessionIfAny)。
 // rest-timer/hold-timerは数十秒〜数分程度の短時間な操作であり、リロードに巻き込まれても
 // 「もう一度セットを完了にする／もう一度計測ボタンを押す」程度の実害で済むため対象外にしている。
-function persistActiveSessionSnapshot() {
+// 記録中のトレーニングを最後に操作した時刻(2026-10-07〜)。開き直した時、しばらく操作していなければ
+// 記録画面ではなくホームで開くために使う。アプリを閉じた・別画面へ移っただけの保存(passive)では更新しない。
+let sessionLastActivityAt = null;
+// 最後の操作からこれ以上たっていたら、開き直した時にホームで開く(ユーザー判断「しばらく空いたらホーム」、3時間)
+const STALE_SESSION_MS = 3 * 60 * 60 * 1000;
+
+function persistActiveSessionSnapshot({ passive = false } = {}) {
   if (!currentSession) return;
+  if (!passive || sessionLastActivityAt == null) sessionLastActivityAt = Date.now();
   const ok = saveActiveSessionSnapshot({
     session: currentSession,
     menu: currentMenu,
     sessionStartTime,
+    lastActivityAt: sessionLastActivityAt,
     cardioTimer: activeCardioTimer
       ? {
           exIndex: activeCardioTimer.exIndex,
@@ -133,10 +141,21 @@ function restoreActiveSessionIfAny() {
   try {
     currentSession = snapshot.session;
     currentMenu = snapshot.menu || null;
+    // 古いスナップショット(lastActivityAt無し)は開始時刻で代用する
+    sessionLastActivityAt = Number(snapshot.lastActivityAt) || Number(snapshot.sessionStartTime) || Date.now();
     renderLog(currentSession);
     updateFinishButtonState();
-    showScreen('log');
+    // 最後の操作から3時間以上たっていたら、もうやるつもりが無い記録かもしれないので記録画面ではなくホームで開く
+    // (ホームの「トレーニング中」欄から戻るかやめるかを選べる。2026-10-07 ユーザー要望)。
+    // 有酸素の計測中は画面を閉じていても計測が続いている扱いなので、時間に関係なく記録画面に戻す。
+    const stale = !snapshot.cardioTimer && Date.now() - sessionLastActivityAt >= STALE_SESSION_MS;
     startSessionTimer(snapshot.sessionStartTime);
+    if (stale) {
+      pauseSessionTimerDisplay();
+      showScreen('mode');
+    } else {
+      showScreen('log');
+    }
     if (snapshot.cardioTimer) {
       // 保存された種目番号(exIndex)が現在のセッション内容と噛み合わない場合(壊れた
       // スナップショットや将来の仕様変更等)、対応する有酸素スライダーが存在しないまま
@@ -1891,6 +1910,41 @@ function resumeActiveWorkout() {
   updateFinishButtonState();
   showScreen('log');
   window.scrollTo(0, 0);
+  // 自分で戻ったので「操作した」扱いにする(しばらく空いてホームで開いた後に戻り、すぐ閉じた時にまたホームで開かないように)
+  persistActiveSessionSnapshot();
+}
+
+// ホームの「トレーニング中」欄の「やめる」。途中の記録を保存せずに捨てる(2026-10-07 ユーザー要望。
+// 以前は「下のタブで抜けられる」として捨てる手段を開始時の確認にしか置いていなかったが、やめた記録が
+// 残り続けて開き直すたびに記録画面になってしまっていた)。
+function discardActiveWorkout() {
+  if (!currentSession) return;
+  if (!window.confirm(`${activeSessionSummaryText(currentSession, sessionStartTime)}。\nこのトレーニングを記録せずにやめますか？入力した内容は消え、元に戻せません。`)) return;
+  clearActiveWorkoutState();
+  renderHomeResumeWorkout();
+}
+
+// 途中のトレーニングを保存せずに捨てる時の後片付け(ホームの「やめる」と、開始時の「捨てて新しく始める」で共通)。
+// 止めるタイマー等を増やした時は、ここだけ直せば両方に効く。
+function clearActiveWorkoutState() {
+  stopHoldTimer();
+  stopCardioTimer();
+  endRestTimer();
+  stopSessionTimer();
+  currentSession = null;
+  sessionLastActivityAt = null;
+  clearActiveSessionSnapshot();
+}
+
+// アプリが裏で生きたまま(再読み込みなしで)戻ってきた時にも、起動時と同じ「しばらく操作していなければホーム」を
+// 当てはめる(iPhoneのホーム画面アプリは裏で残ることが多く、起動時の判定だけでは足りない。2026-10-07 Codexレビュー指摘)。
+function moveStaleWorkoutToHomeIfNeeded() {
+  if (!currentSession || activeCardioTimer || sessionLastActivityAt == null) return;
+  if (!document.getElementById('screen-log').classList.contains('active')) return;
+  if (Date.now() - sessionLastActivityAt < STALE_SESSION_MS) return;
+  pauseSessionTimerDisplay();
+  showScreen('mode');
+  window.scrollTo(0, 0);
 }
 
 function closeStartOverwriteModal() {
@@ -1915,12 +1969,7 @@ function handleStartWorkout() {
 
 function discardActiveWorkoutAndStart() {
   closeStartOverwriteModal();
-  stopHoldTimer();
-  stopCardioTimer();
-  endRestTimer();
-  stopSessionTimer();
-  currentSession = null;
-  clearActiveSessionSnapshot();
+  clearActiveWorkoutState();
   startNewWorkout();
 }
 
@@ -2688,12 +2737,15 @@ function init() {
   if (!restoreActiveSessionIfAny()) maybeHandleEntryParams(entryParams);
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') persistActiveSessionSnapshot();
+    if (document.visibilityState === 'hidden') persistActiveSessionSnapshot({ passive: true });
     // 開いたまま日付が変わった時、週間プランの今日の予定(特に「一日おき」の今日やった/休み)を前日のまま
     // 出し続けないよう、戻ってきたら描き直す(2026-10-06 Codexレビュー指摘)。
-    if (document.visibilityState === 'visible') renderModeWeeklyPlanSection();
+    if (document.visibilityState === 'visible') {
+      renderModeWeeklyPlanSection();
+      moveStaleWorkoutToHomeIfNeeded();
+    }
   });
-  window.addEventListener('pagehide', () => persistActiveSessionSnapshot());
+  window.addEventListener('pagehide', () => persistActiveSessionSnapshot({ passive: true }));
 
   document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
@@ -2729,6 +2781,7 @@ function init() {
   });
   document.getElementById('home-resume-workout-section').addEventListener('click', (e) => {
     if (e.target.closest('[data-resume-workout]')) resumeActiveWorkout();
+    if (e.target.closest('[data-discard-workout]')) discardActiveWorkout();
   });
   document.getElementById('finish-incomplete-confirm').addEventListener('click', finishWorkout);
   document.getElementById('finish-incomplete-modal').addEventListener('click', (e) => {
@@ -2905,7 +2958,7 @@ function init() {
       // 無く、単に別画面を見に行くだけ)ため、sessionStartTimeは消さずに表示更新だけ止める
       // (stopSessionTimerとの違いはjs/session-timer.jsのコメント参照)。
       pauseSessionTimerDisplay();
-      persistActiveSessionSnapshot();
+      persistActiveSessionSnapshot({ passive: true });
       showScreen(target);
     });
   });

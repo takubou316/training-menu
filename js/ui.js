@@ -382,7 +382,10 @@ function renderHomeResumeWorkout() {
         <div class="today-focus-title">トレーニング中</div>
         <div class="home-resume-desc">${activeSessionSummaryParts(currentSession, sessionStartTime).map((p) => `<span class="home-resume-desc-part">${escapeHtml(p)}</span>`).join('・')}</div>
       </div>
-      <button type="button" class="today-focus-start-btn" data-resume-workout>トレーニングに戻る</button>
+      <div class="home-resume-actions">
+        <button type="button" class="today-focus-start-btn" data-resume-workout>トレーニングに戻る</button>
+        <button type="button" class="ghost-pill-btn home-resume-discard-btn" data-discard-workout>やめる（記録しない）</button>
+      </div>
     </div>`;
 }
 

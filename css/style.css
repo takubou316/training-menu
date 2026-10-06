@@ -2559,6 +2559,19 @@ body.modal-open {
 .home-resume-desc { margin-top: 2px; font-size: 12px; color: var(--text-dim); }
 /* 折り返すなら「・」の位置で切れるよう、各部分の途中では折り返さない */
 .home-resume-desc-part { white-space: nowrap; }
+/* 「トレーニングに戻る」の下に控えめな「やめる（記録しない）」を縦に積む（2026-10-07） */
+.home-resume-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.home-resume-discard-btn {
+  width: auto;
+  font-size: 12px;
+  padding: 6px 10px;
+}
 /* 3択なので横並びにせず縦に積む(375px幅で文言が折り返さないように) */
 .start-overwrite-actions {
   display: flex;
