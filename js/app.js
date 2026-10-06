@@ -108,6 +108,7 @@ function persistActiveSessionSnapshot() {
           accumulatedActiveMs: activeCardioTimer.accumulatedActiveMs,
           segmentStartedAt: activeCardioTimer.segmentStartedAt,
           restLog: activeCardioTimer.restLog,
+          targetNotified: activeCardioTimer.targetNotified,
         }
       : null,
   });
@@ -922,9 +923,11 @@ function confirmSaveTemplate() {
     exerciseIds: customExercises.map((ex) => ex.id),
     restSec: { ...customRestSec },
     format: customFormat,
+    // 有酸素種目は目標時間(分、目標なしはnull)を{cardioMin}として持つ
     targets: Object.fromEntries(customExercises
-      .filter((ex) => ex.type !== 'cardio')
-      .map((ex) => [ex.id, customTargetFor(ex)])),
+      .map((ex) => [ex.id, ex.type === 'cardio'
+        ? { cardioMin: customCardioTargetMin(ex, customTargets[ex.id]) }
+        : customTargetFor(ex)])),
   });
   // 保存した直後にそのまま始めた記録も、この組み合わせをやったものとして数える
   customTemplateId = id;
@@ -1047,6 +1050,100 @@ function wireCustomTargetSheet() {
   });
 }
 
+// ===== 有酸素種目の目標時間の編集画面（下から出るシート、2026-10-06〜） =====
+// 「自分で作る」の一覧(context.kind==='custom'、組み合わせの目標customTargetsを変える)と、記録画面の
+// 有酸素カード(context.kind==='log'、今回の記録のtargetSecを変える)の両方から開く。どちらで決めても、
+// 組み合わせを使わない経路(クイックスタート等)の次回の初期値として種目ごとに覚える(saveCardioTargetMin)。
+let cardioTargetSheetContext = null;
+
+function cardioTargetSheetExercise() {
+  const c = cardioTargetSheetContext;
+  if (!c) return null;
+  if (c.kind === 'custom') return customExercises.find((item) => item.id === c.exerciseId) || null;
+  return (currentSession && currentSession.exercises[c.exIndex]) || null;
+}
+
+function currentCardioTargetMin() {
+  const c = cardioTargetSheetContext;
+  const ex = cardioTargetSheetExercise();
+  if (!ex) return null;
+  if (c.kind === 'custom') return customCardioTargetMin(ex, customTargets[ex.id]);
+  return ex.targetSec ? Math.round(ex.targetSec / 60) : null;
+}
+
+function renderCardioTargetSheetNow() {
+  const ex = cardioTargetSheetExercise();
+  if (!ex) return;
+  renderCardioTargetSheet(ex.name, currentCardioTargetMin());
+  document.querySelectorAll('#cardio-target-sheet .number-wheel-track').forEach(initNumberWheel);
+}
+
+function openCardioTargetSheet(context) {
+  cardioTargetSheetContext = context;
+  if (!cardioTargetSheetExercise()) {
+    cardioTargetSheetContext = null;
+    return;
+  }
+  document.getElementById('cardio-target-sheet').classList.add('open');
+  lockBodyScroll();
+  renderCardioTargetSheetNow();
+}
+
+function closeCardioTargetSheet() {
+  const sheet = document.getElementById('cardio-target-sheet');
+  if (!sheet.classList.contains('open')) return;
+  flushNumberWheels(sheet);
+  sheet.classList.remove('open');
+  unlockBodyScroll();
+  const wasCustom = cardioTargetSheetContext && cardioTargetSheetContext.kind === 'custom';
+  cardioTargetSheetContext = null;
+  if (wasCustom) renderCustomExerciseListNow();
+}
+
+function setCardioTargetMin(min) {
+  const c = cardioTargetSheetContext;
+  const ex = cardioTargetSheetExercise();
+  if (!ex) return;
+  if (c.kind === 'custom') {
+    customTargets[ex.id] = { cardioMin: min };
+  } else {
+    ex.targetSec = min ? min * 60 : null;
+    // カードの表示はその場で書き換える(記録画面全体を描き直すと入力途中のホイール等まで作り直されるため)
+    const textEl = document.querySelector(`[data-cardio-target-log="${c.exIndex}"] [data-cardio-target-text]`);
+    if (textEl) textEl.textContent = cardioTargetText(min);
+    if (typeof onCardioTargetChanged === 'function') onCardioTargetChanged(c.exIndex);
+    persistActiveSessionSnapshot();
+  }
+  saveCardioTargetMin(ex.exerciseId || ex.id, min);
+}
+
+function wireCardioTargetSheet() {
+  const sheet = document.getElementById('cardio-target-sheet');
+  sheet.addEventListener('click', (e) => {
+    if (e.target.closest('[data-cardio-target-close]')) {
+      closeCardioTargetSheet();
+      return;
+    }
+    const modeBtn = e.target.closest('[data-cardio-target-mode]');
+    if (!modeBtn) return;
+    flushNumberWheels(sheet);
+    const on = modeBtn.dataset.cardioTargetMode === 'on';
+    if (on === !!currentCardioTargetMin()) return;
+    setCardioTargetMin(on ? CARDIO_TARGET_DEFAULT_MIN : null);
+    renderCardioTargetSheetNow();
+  });
+  sheet.addEventListener('input', (e) => {
+    const input = e.target.closest('[data-cardio-target-field]');
+    if (!input) return;
+    const value = Number(input.value);
+    setCardioTargetMin(value);
+    const wrap = input.closest('.slider-field');
+    const numEl = wrap && wrap.querySelector('[data-sheet-value-num]');
+    if (numEl) numEl.textContent = String(value);
+    if (wrap) refreshWheelPresetMarks(wrap);
+  });
+}
+
 function wireCustomScreen() {
   document.getElementById('custom-add-exercise-btn').addEventListener('click', () => openExercisePicker('custom'));
 
@@ -1072,6 +1169,7 @@ function wireCustomScreen() {
   });
 
   wireCustomTargetSheet();
+  wireCardioTargetSheet();
 
   document.getElementById('custom-wu-cd').addEventListener('click', (e) => {
     // ⓘ(data-info-toggle)は#mainの共通ハンドラで処理されるのでここでは扱わない
@@ -1126,7 +1224,7 @@ function wireCustomScreen() {
     }
     errorEl.textContent = '';
     const main = customExercises.map((ex) => (ex.type === 'cardio'
-      ? buildCustomCardioPlan(ex)
+      ? buildCustomCardioPlan(ex, customCardioTargetMin(ex, customTargets[ex.id]))
       : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90, customTargetFor(ex), customFormat)));
     currentMenu = {
       warmup: customWarmup,
@@ -2601,6 +2699,8 @@ function init() {
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
     customExercises = [];
     customRestSec = {};
+    // 前に読み込んだ組み合わせの目標を持ち越さない(有酸素は最後に決めた目標が初期値になる。Codexレビュー指摘)
+    customTargets = {};
     document.getElementById('custom-error').textContent = '';
     renderCustomScreen();
     showScreen('custom');
@@ -2653,6 +2753,13 @@ function init() {
     if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
     const cardioTimerTrigger = e.target.closest('[data-cardio-timer]');
     if (cardioTimerTrigger) toggleCardioTimer(cardioTimerTrigger);
+    const cardioTargetTrigger = e.target.closest('[data-cardio-target-custom], [data-cardio-target-log]');
+    if (cardioTargetTrigger) {
+      openCardioTargetSheet(cardioTargetTrigger.dataset.cardioTargetCustom != null
+        ? { kind: 'custom', exerciseId: cardioTargetTrigger.dataset.cardioTargetCustom }
+        : { kind: 'log', exIndex: Number(cardioTargetTrigger.dataset.cardioTargetLog) });
+      return;
+    }
     const rpeInfoTrigger = e.target.closest('[data-rpe-info-toggle]');
     if (rpeInfoTrigger) openRpeInfoModal();
     const favTrigger = e.target.closest('[data-fav-toggle]');

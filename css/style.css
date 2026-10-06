@@ -822,6 +822,8 @@ body.modal-open {
   align-items: center;
   gap: 4px;
 }
+/* display指定があると[hidden]が効かず、休憩していないのに「休憩 00:00」が出ていた(2026-07-16〜10-06) */
+.cardio-timer-row[hidden] { display: none; }
 
 /* 休憩を一度でも始めたら運動時間の下に並べて表示する、休憩用の一回り小さいタイマー表示 */
 .timer-value-sub {
@@ -2663,6 +2665,20 @@ body.modal-open {
 }
 .custom-target-summary { font-weight: 600; font-variant-numeric: tabular-nums; }
 .custom-target-chevron { flex-shrink: 0; color: var(--accent); font-size: 13px; font-weight: 600; }
+/* 有酸素種目の「目標 20分　変更 ›」(自分で作るの一覧・記録画面の有酸素カード) */
+.cardio-target-btn { margin-top: 8px; }
+
+/* 有酸素の計測タイマーの「目標 20:00・残り 5:12」。達成したら強調する */
+.cardio-timer-target {
+  font-size: 15px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.cardio-timer-target.is-reached {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 18px;
+}
 
 /* 下から出る編集シート。中央に出す.demo-modal-contentとは別の置き方にしている。 */
 .sheet-modal .sheet-content {

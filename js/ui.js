@@ -520,7 +520,9 @@ function buildCooldownHtml(cooldown) {
 
 // メニュー確認画面の種目1つ分の「何セット×何回」。
 function menuItemMetaText(item, isCircuit) {
-  if (item.type === 'cardio') return `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`;
+  if (item.type === 'cardio') {
+    return `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録${item.targetSec ? `・目標${Math.round(item.targetSec / 60)}分` : ''}）`;
+  }
   const valueText = item.holdBased
     ? `${item.targetSec != null ? item.targetSec : loadHoldTargetSec(item.exerciseId)}秒`
     : item.fixedTarget ? `${item.repsMin}回` : `${item.repsMin}〜${item.repsMax}回`;
@@ -845,9 +847,10 @@ function renderCustomExerciseList(customExercises, customRestSec, customTargets 
 
   const itemsHtml = customExercises
     .map((ex, i) => {
-      // 有酸素種目は回数・セット・休憩という概念がないため、「有酸素種目」のバッジだけを表示する
+      // 有酸素種目は回数・セット・休憩という概念がないため、「有酸素種目」のバッジと目標時間だけを表示する
       const bodyHtml = ex.type === 'cardio'
-        ? '<span class="picker-item-cardio-badge">有酸素種目</span>'
+        ? `<span class="picker-item-cardio-badge">有酸素種目</span>
+      ${cardioTargetButtonHtml(customCardioTargetMin(ex, customTargets[ex.id]), `data-cardio-target-custom="${ex.id}"`, ex.name)}`
         : (() => {
           const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
           const target = normalizeCustomTarget(ex, customTargets[ex.id]);
@@ -894,7 +897,7 @@ function wheelPresetButtonsHtml(presets, value, unit) {
 
 // 編集画面の中の、ホイール1つ分(大きな現在値＋ホイール＋よく使う値)。
 // field: 'value'(回数/秒数) | 'rest'(休憩) | 'sets'(6以上のセット数)。値は非表示の<input>に入る。
-function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, presets }) {
+function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, presets, inputAttr = 'data-custom-target-field' }) {
   return `
       <div class="slider-field sheet-wheel-field" data-sheet-field="${field}">
         <div class="sheet-field-head">
@@ -902,7 +905,7 @@ function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, preset
           <span class="sheet-big-value"><span class="slider-value" data-sheet-value-num>${value}</span><span class="sheet-big-unit">${unit}</span></span>
         </div>
         ${numberWheelTrackHtml(min, max, step, { label, unit })}
-        <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-custom-target-field="${field}" hidden>
+        <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${inputAttr}="${field}" hidden>
         ${presets ? wheelPresetButtonsHtml(presets, value, unit) : ''}
       </div>`;
 }
@@ -943,6 +946,40 @@ function renderCustomTargetSheet(ex, target, restSec, format) {
       ${valueHtml}
       ${setsHtml}
       <p class="hint-text sheet-wheel-hint">数字は左右に動かすか、見えている数字をタップして選べます。</p>`;
+}
+
+// ===== 有酸素種目の目標時間（2026-10-06〜） =====
+// 「自分で作る」の一覧と記録画面の有酸素カードに出す「目標 20分　変更 ›」。押すと下から
+// 目標時間の編集シート(renderCardioTargetSheet、js/app.jsのwireCardioTargetSheet)が出る。
+const CARDIO_TARGET_PRESETS = [10, 15, 20, 30, 45, 60];
+const CARDIO_TARGET_DEFAULT_MIN = 20; // 「目標あり」に切り替えた時の最初の値
+
+function cardioTargetText(min) {
+  return min ? `目標 ${min}分` : '目標なし';
+}
+
+function cardioTargetButtonHtml(min, attr, name) {
+  return `
+      <button type="button" class="custom-target-btn cardio-target-btn" ${attr} aria-label="${escapeHtml(name)}の目標時間を変える">
+        <span class="custom-target-summary" data-cardio-target-text>${cardioTargetText(min)}</span>
+        <span class="custom-target-chevron" aria-hidden="true">変更 ›</span>
+      </button>`;
+}
+
+function renderCardioTargetSheet(name, min) {
+  const body = document.getElementById('cardio-target-sheet-body');
+  const title = document.getElementById('cardio-target-sheet-title');
+  if (!body) return;
+  if (title) title.textContent = name;
+  body.innerHTML = `
+      <div class="segmented" role="radiogroup" aria-label="目標時間">
+        <button type="button" class="segmented-btn" role="radio" aria-checked="${!!min}" data-cardio-target-mode="on">目標を決める</button>
+        <button type="button" class="segmented-btn" role="radio" aria-checked="${!min}" data-cardio-target-mode="off">決めない</button>
+      </div>
+      ${min ? `
+      ${sheetWheelFieldHtml({ field: 'cardioMin', label: '目標時間', unit: '分', min: CARDIO_TARGET_MIN_MIN, max: CARDIO_TARGET_MIN_MAX, step: 1, value: min, presets: CARDIO_TARGET_PRESETS, inputAttr: 'data-cardio-target-field' })}
+      <p class="hint-text sheet-wheel-hint">計測中にこの時間になると音で知らせます（計測は止まりません）。他のアプリを開いている間は鳴らず、Compstackに戻った時に知らせます（音が出ない時は計測画面をタップ）。iPhoneの消音モード中は鳴りません。</p>` : `
+      <p class="hint-text sheet-wheel-hint">目標を決めると、計測中にその時間になった時に音で知らせます。</p>`}`;
 }
 
 // 「自分で作る」画面の上部、保存済みの種目組み合わせ一覧(折りたたみ内)。
@@ -1436,6 +1473,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       </div>
       <div class="ex-meta">有酸素種目</div>
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
+      ${cardioTargetButtonHtml(ex.targetSec ? Math.round(ex.targetSec / 60) : null, `data-cardio-target-log="${exIndex}"`, ex.name)}
       ${sparklineHtml}
       <div class="slider-field">
         <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>

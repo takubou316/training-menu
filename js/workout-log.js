@@ -112,6 +112,8 @@ function createSessionFromMenu(menu, bodyWeightKg) {
           duration: 0,
           distance: item.hasDistance ? 0 : null,
           restLog: [], // cardio-timer.jsの「休憩」で記録される休憩区間(開始時刻・秒数)の履歴
+          // 目標時間(秒、無ければnull)。計測タイマーがこの時間に達したら音で知らせる(計測は止めない)
+          targetSec: item.targetSec || null,
           done: false,
         };
       }

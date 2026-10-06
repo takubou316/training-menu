@@ -333,6 +333,17 @@ function defaultCustomTarget(exercise) {
   };
 }
 
+// 「自分で作る」の有酸素種目の目標時間(分、nullなら目標なし)。customTargets[id]に{cardioMin}があればそれ
+// (nullも「目標なしと決めた」として尊重する)、まだ決めていなければ最後に決めた目標(loadCardioTargetMin)。
+function customCardioTargetMin(exercise, target) {
+  if (target && typeof target === 'object' && 'cardioMin' in target) {
+    const min = Math.round(Number(target.cardioMin));
+    return target.cardioMin != null && Number.isFinite(min)
+      ? Math.min(CARDIO_TARGET_MIN_MAX, Math.max(CARDIO_TARGET_MIN_MIN, min)) : null;
+  }
+  return typeof loadCardioTargetMin === 'function' ? loadCardioTargetMin(exercise.id) : null;
+}
+
 // 保存データなど外から来た目標を、範囲内のきれいな値に直す(足りない項目は既定で補う)。
 function normalizeCustomTarget(exercise, target) {
   const base = defaultCustomTarget(exercise);
@@ -385,11 +396,15 @@ function buildCustomSetPlan(exercise, restSec, target, format) {
 // 有酸素種目(type:'cardio')用のプラン。セット/レップ/重量の概念がないため、
 // buildCustomSetPlanとは別の専用ビルダーにしている。「自分で作る」「今日のメニュー」
 // どちらから追加しても同じものを使う（目的・レベルの選択に依存しないため）。
-function buildCustomCardioPlan(exercise) {
+// targetMinは目標時間(分、nullなら目標なし)。省略時は最後に決めた目標(storage.jsのloadCardioTargetMin)を使う。
+function buildCustomCardioPlan(exercise, targetMin) {
+  const min = targetMin !== undefined ? targetMin
+    : (typeof loadCardioTargetMin === 'function' ? loadCardioTargetMin(exercise.id) : null);
   return {
     exerciseId: exercise.id,
     name: exercise.name,
     type: 'cardio',
+    targetSec: min ? min * 60 : null,
     primary: exercise.primary,
     hasDistance: exercise.hasDistance,
     met: exercise.met,
@@ -409,7 +424,7 @@ const HOLD_SET_SETUP_SEC = 15;    // 保持時間系は目標秒数＋姿勢を�
 const EXERCISE_TRANSITION_SEC = 60; // 種目の切り替え(器具の準備・移動)
 const REP_SEC = 2.5;              // 「自分で作る」で回数を決めた種目の1回あたり(50回なら約2分。40秒では収まらないため)
 const CIRCUIT_TRANSITION_SEC = 15; // サーキットの種目の切り替え(休憩なしで次の種目へ)
-const CARDIO_PLANNED_SEC = 600;   // 有酸素はメニュー時点で時間が決まっていないので10分と見なす
+const CARDIO_PLANNED_SEC = 600;   // 有酸素は目標時間が無ければ10分と見なす(目標があればその時間)
 const DYNAMIC_WARMUP_SEC = 40;    // 動的ウォームアップ1つ(「スクワット10回」等)
 const WARMUP_STRETCH_SEC = 20;    // ウォームアップの10秒ストレッチ1つ(左右ある分を含む)
 const COOLDOWN_STRETCH_SEC = 50;  // クールダウンの20〜30秒ストレッチ1つ(左右ある分を含む)
@@ -436,18 +451,19 @@ function estimateMenuSeconds(menu) {
     const roundRestSec = Number(circuit.roundRestSec) || 0;
     // 有酸素種目は周回に入れず、全周の後に1回だけ行う(記録画面もそう表示する)ので、周回とは別に1回分だけ足す
     const items = (menu.main || []).filter((item) => item.type !== 'cardio');
-    const cardioCount = (menu.main || []).length - items.length;
+    const cardioSec = (menu.main || []).filter((item) => item.type === 'cardio')
+      .reduce((sum, item) => sum + (item.targetSec || CARDIO_PLANNED_SEC) + EXERCISE_TRANSITION_SEC, 0);
     const oneRoundSec = items.reduce((sum, item, i) => {
       const workSec = item.holdBased ? holdSecOf(item) + HOLD_SET_SETUP_SEC : repsWorkSec(item);
       return sum + (item.unilateral ? workSec * 2 : workSec) + (i > 0 ? CIRCUIT_TRANSITION_SEC : 0);
     }, 0);
     const roundsSec = items.length > 0 ? rounds * oneRoundSec + Math.max(0, rounds - 1) * roundRestSec : 0;
-    return sec + roundsSec + cardioCount * (CARDIO_PLANNED_SEC + EXERCISE_TRANSITION_SEC);
+    return sec + roundsSec + cardioSec;
   }
   (menu.main || []).forEach((item, i) => {
     if (i > 0) sec += EXERCISE_TRANSITION_SEC;
     if (item.type === 'cardio') {
-      sec += CARDIO_PLANNED_SEC;
+      sec += item.targetSec || CARDIO_PLANNED_SEC;
       return;
     }
     const oneSideSec = item.holdBased ? holdSecOf(item) + HOLD_SET_SETUP_SEC : repsWorkSec(item);
@@ -585,7 +601,7 @@ function proposeWeeklySplit(trainingDaysPerWeek) {
 if (typeof module !== 'undefined') {
   module.exports = {
     generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan, proposeWeeklySplit,
-    defaultCustomTarget, normalizeCustomTarget,
+    defaultCustomTarget, normalizeCustomTarget, customCardioTargetMin,
     sortByTrainingOrder, estimateMenuSeconds, fitMenuToTime,
   };
 }

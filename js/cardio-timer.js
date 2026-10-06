@@ -8,9 +8,82 @@
 // 休憩の開始時刻・長さはexercise.restLogに記録として残し、記録画面・履歴で後から見られるようにする。
 // 一度でも休憩すると、以降は運動時間(上)と休憩時間(下)を同時に2段表示にする
 // (休憩から再開しても1段表示には戻さない。詳細はsetCardioTimerPhaseUi参照)。
+//
+// 目標時間(exercise.targetSec、「自分で作る」・記録画面で決める)があれば、運動時間がそこに達した時に
+// 1回だけ音とバイブで知らせ、表示を「目標達成」に変える。計測は止めない(有酸素は目標より長くやることも
+// あるため、ユーザー判断 2026-10-06)。PWAは裏に回るとJSが止まるので、他のアプリを開いている間は鳴らせない。
+// 戻ってきた最初のティックで目標を過ぎていれば、その時に鳴らす(鳴らしたかはtargetNotifiedで覚え、
+// スナップショットにも残すので、再読み込みで二重に鳴らない)。
 
 let activeCardioTimer = null;
-// { exIndex, phase: 'running'|'resting', accumulatedActiveMs, segmentStartedAt, restLog, intervalId }
+// { exIndex, phase: 'running'|'resting', accumulatedActiveMs, segmentStartedAt, restLog, targetNotified, intervalId }
+
+function cardioTargetSecOf(exIndex) {
+  const ex = typeof currentSession !== 'undefined' && currentSession && currentSession.exercises[exIndex];
+  return ex && ex.targetSec ? Number(ex.targetSec) : null;
+}
+
+// 目標達成の合図。音声ファイルは使わず、hold-timer.jsのWeb Audioのビープを共用する。
+// 歩いている最中でも気づけるよう、上がっていく3音を2回鳴らす。
+// 鳴らせる状態(AudioContextが'running')でなければ鳴らさずfalseを返す。再読み込みで復元した直後や
+// 他のアプリから戻った直後は、iPhoneでは画面に触れるまで音を出せないことがあるため、呼び出し側は
+// 「知らせ済み」にせず次のティックでまた試す(Codexレビュー指摘)。
+function playCardioTargetReachedSound() {
+  if (typeof ensureHoldTimerAudioCtx !== 'function') return false;
+  const ctx = ensureHoldTimerAudioCtx();
+  if (!ctx || ctx.state !== 'running') return false;
+  if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+  [0, 900].forEach((offset) => {
+    setTimeout(() => playHoldTimerBeep(880, 0.15), offset);
+    setTimeout(() => playHoldTimerBeep(1046, 0.15), offset + 200);
+    setTimeout(() => playHoldTimerBeep(1318, 0.35), offset + 400);
+  });
+  return true;
+}
+
+function updateCardioTimerTargetDisplay(activeSec) {
+  const el = document.getElementById('cardio-timer-target');
+  if (!el || !activeCardioTimer) return;
+  const targetSec = cardioTargetSecOf(activeCardioTimer.exIndex);
+  if (!targetSec) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  const reached = activeSec >= targetSec;
+  el.classList.toggle('is-reached', reached);
+  el.textContent = reached
+    ? `目標 ${formatDuration(targetSec)} 達成！`
+    : `目標 ${formatDuration(targetSec)}・残り ${formatDuration(targetSec - activeSec)}`;
+}
+
+// 目標時間に達したら1回だけ知らせる
+function checkCardioTargetReached(activeSec) {
+  if (!activeCardioTimer || activeCardioTimer.targetNotified) return;
+  const targetSec = cardioTargetSecOf(activeCardioTimer.exIndex);
+  if (!targetSec || activeSec < targetSec) return;
+  if (playCardioTargetReachedSound()) activeCardioTimer.targetNotified = true;
+}
+
+// 計測画面のどこかに触れたら音の準備をし直す(鳴らせずに待っている目標達成の合図を、次のティックで鳴らすため)
+function wireCardioTimerAudioUnlock() {
+  const modal = document.getElementById('cardio-timer-modal');
+  if (!modal) return;
+  modal.addEventListener('pointerdown', () => {
+    if (activeCardioTimer && typeof ensureHoldTimerAudioCtx === 'function') ensureHoldTimerAudioCtx();
+  });
+}
+document.addEventListener('DOMContentLoaded', wireCardioTimerAudioUnlock);
+
+// 記録画面で目標時間を変えた時(js/app.jsのsetCardioTargetMin)。計測中の種目なら表示を合わせ、
+// まだ届いていない時間へ延ばしたなら、もう一度知らせられるように戻す。
+function onCardioTargetChanged(exIndex) {
+  if (!activeCardioTimer || activeCardioTimer.exIndex !== exIndex) return;
+  const activeSec = Math.floor(currentActiveMs() / 1000);
+  const targetSec = cardioTargetSecOf(exIndex);
+  activeCardioTimer.targetNotified = !!targetSec && activeSec >= targetSec;
+  updateCardioTimerTargetDisplay(activeSec);
+}
 
 function cardioRestTotalSec(restLog) {
   return (restLog || []).reduce((sum, r) => sum + r.durationSec, 0);
@@ -86,8 +159,12 @@ function toggleCardioTimer(button) {
     accumulatedActiveMs: 0,
     segmentStartedAt: Date.now(),
     restLog: [],
+    // 計測は0秒から始まるので、目標時間が既にあっても最初は「まだ知らせていない」
+    targetNotified: false,
     intervalId: null,
   };
+  // iPhoneは操作(タップ)の中で音の準備をしておかないと後で鳴らせないため、開始ボタンを押した時に用意する
+  if (typeof ensureHoldTimerAudioCtx === 'function') ensureHoldTimerAudioCtx();
   button.classList.add('active');
   updateCardioTimerRestHistory([]); // 前回このモーダルを使った時の休憩履歴が一瞬見えないようにリセット
 
@@ -114,6 +191,8 @@ function updateCardioTimer() {
   // 運動時間は休憩を挟んでも常にこの表示を使う(休憩中はここで増えるのを止めているだけで、隠しはしない)
   const valueEl = document.getElementById('cardio-timer-value');
   if (valueEl) valueEl.textContent = formatDuration(activeSec);
+  updateCardioTimerTargetDisplay(activeSec);
+  checkCardioTargetReached(activeSec);
 
   // 休憩時間は休憩中だけ数え、計測中は0のまま(次の休憩に備えてリセットした状態)にする
   const restValueEl = document.getElementById('cardio-timer-rest-value');
@@ -162,6 +241,8 @@ function updateCardioTimer() {
 // 「休憩」「再開」共通のトグル操作。
 function toggleCardioRest() {
   if (!activeCardioTimer) return;
+  // 再読み込みで復元したタイマーは開始ボタンを押していないので、ここでも音の準備をしておく
+  if (typeof ensureHoldTimerAudioCtx === 'function') ensureHoldTimerAudioCtx();
   if (activeCardioTimer.phase === 'running') pauseCardioTimerForRest();
   else resumeCardioTimerFromRest();
 }
@@ -228,6 +309,8 @@ function stopCardioTimer() {
     modal.hidden = true;
     modal.classList.remove('cardio-timer-resting');
   }
+  const targetEl = document.getElementById('cardio-timer-target');
+  if (targetEl) targetEl.hidden = true;
   unlockBodyScroll();
   activeCardioTimer = null;
   // タイマーを止めたことをスナップショットにも反映する(消し忘れると、次回起動時に
@@ -246,6 +329,7 @@ function restoreCardioTimer(saved) {
     accumulatedActiveMs: saved.accumulatedActiveMs,
     segmentStartedAt: saved.segmentStartedAt,
     restLog: saved.restLog || [],
+    targetNotified: !!saved.targetNotified,
     intervalId: null,
   };
   const button = document.querySelector(`[data-cardio-timer="${saved.exIndex}"]`);

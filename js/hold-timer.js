@@ -13,7 +13,8 @@ function ensureHoldTimerAudioCtx() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
   if (!holdTimerAudioCtx) holdTimerAudioCtx = new Ctx();
-  if (holdTimerAudioCtx.state === 'suspended') holdTimerAudioCtx.resume();
+  // iOS Safariは他のアプリから戻ると'interrupted'になることがあるので、'suspended'以外も再開を試みる
+  if (holdTimerAudioCtx.state !== 'running') holdTimerAudioCtx.resume().catch(() => {});
   return holdTimerAudioCtx;
 }
 

@@ -381,6 +381,7 @@ try {
     <div class="cardio-timer-row">
       <div class="rest-timer-label" id="cardio-timer-label">計測中</div>
       <div id="cardio-timer-value" class="timer-value">00:00</div>
+      <div id="cardio-timer-target" class="cardio-timer-target" hidden></div>
     </div>
     <div class="cardio-timer-row" id="cardio-timer-rest-row" hidden>
       <div class="rest-timer-label">休憩</div>
@@ -450,6 +451,16 @@ try {
       <h3 id="custom-target-sheet-title" class="sheet-title"></h3>
       <div id="custom-target-sheet-body"></div>
       <button type="button" class="primary-btn sheet-done-btn" data-custom-target-close>完了</button>
+    </div>
+  </div>
+
+  <!-- 有酸素種目の目標時間の編集画面(「自分で作る」・記録画面の両方から開く、js/ui.jsのrenderCardioTargetSheet)。 -->
+  <div id="cardio-target-sheet" class="demo-modal sheet-modal">
+    <div class="demo-modal-backdrop" data-cardio-target-close></div>
+    <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="cardio-target-sheet-title">
+      <h3 id="cardio-target-sheet-title" class="sheet-title"></h3>
+      <div id="cardio-target-sheet-body"></div>
+      <button type="button" class="primary-btn sheet-done-btn" data-cardio-target-close>完了</button>
     </div>
   </div>
 

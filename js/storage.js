@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   waistLog: 'training-menu:waist-log',
   warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
   holdTargets: 'training-menu:hold-targets',
+  cardioTargets: 'training-menu:cardio-targets',
   circuitLast: 'training-menu:circuit-last',
 };
 
@@ -70,6 +71,40 @@ function saveHoldTargetSec(exerciseId, sec) {
   const targets = loadHoldTargets();
   targets[exerciseId] = sec;
   localStorage.setItem(STORAGE_KEYS.holdTargets, JSON.stringify(targets));
+}
+
+// 有酸素種目の目標時間(分)。{exerciseId: 分}、目標なしの種目はキー自体を持たない(2026-10-06〜)。
+// 「自分で作る」の組み合わせは自分の目標を持つが、クイックスタート・「今日のメニュー」に足した有酸素は
+// 組み合わせが無いので、最後に決めた目標をここに覚えて次回の初期値にする。
+const CARDIO_TARGET_MIN_MIN = 1;
+const CARDIO_TARGET_MIN_MAX = 180;
+
+function isValidCardioTargetMin(min) {
+  return Number.isInteger(min) && min >= CARDIO_TARGET_MIN_MIN && min <= CARDIO_TARGET_MIN_MAX;
+}
+
+function loadCardioTargets() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.cardioTargets) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+// 目標なし(未設定・壊れた値)はnull
+function loadCardioTargetMin(exerciseId) {
+  const min = Number(loadCardioTargets()[exerciseId]);
+  return isValidCardioTargetMin(min) ? min : null;
+}
+
+function saveCardioTargetMin(exerciseId, min) {
+  const targets = loadCardioTargets();
+  if (isValidCardioTargetMin(min)) targets[exerciseId] = min;
+  else delete targets[exerciseId];
+  try {
+    localStorage.setItem(STORAGE_KEYS.cardioTargets, JSON.stringify(targets));
+  } catch (e) { /* 次回の初期値を覚えるだけなので、保存できなくても今回の操作は続ける */ }
 }
 
 // 毎日の体重記録。{ 'YYYY-MM-DD'(localDateKey): kg } の形で1日1件だけ持つ(同じ日に記録し直すと上書き)。
@@ -541,7 +576,7 @@ const BACKUP_FORMAT = 'compstack-backup';
 const BACKUP_VERSION = 1;
 const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
-  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog',
+  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog', 'cardioTargets',
 ];
 // クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)と、送れなかった記録
 // (js/sync.jsのSYNC_FAILED_KEY)。どちらもバックアップには含めない。
@@ -592,6 +627,7 @@ const BACKUP_VALIDATORS = {
   waistLog: (v) => isPlainObject(v) && Object.entries(v).every(([dateKey, cm]) => DATE_KEY_PATTERN.test(dateKey) && isValidWaistCm(cm)),
   holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isInteger(sec)
     && sec >= HOLD_TARGET_MIN_SEC && sec <= HOLD_TARGET_MAX_SEC),
+  cardioTargets: (v) => isPlainObject(v) && Object.values(v).every(isValidCardioTargetMin),
 };
 
 // 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。
