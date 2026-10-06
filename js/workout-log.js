@@ -127,9 +127,9 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       const defaultReps = item.holdBased ? holdTargetSec : item.repsMin;
       // ウォームアップセット(軽い重量)の回数は本セットより多めの従来値のまま(筋力アップで4回まで減らさない)。
       const warmupReps = item.holdBased ? holdTargetSec : Math.max(10, Math.round(item.repsMin / 10) * 10);
-      // サーキットは休まず次々に進むため、セットごとのRPEは聞かない(空のまま記録する。
-      // 表示側は空のRPEを出さず、同期側はnullにする)。
-      const defaultRpe = isCircuit ? '' : RPE_SCALE.default;
+      // サーキットも通常と同じくセットごとにRPEを記録する(当初は聞かない設計だったが、ユーザー要望で
+      // 2026-10-06に追加)。それより前のサーキットの記録はRPEが空(表示側は出さず、同期はnull)。
+      const defaultRpe = RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
       // 切り替えた時に入れ直せるよう、本来入る数と重量・回数の初期値は設定に関わらず保持しておく

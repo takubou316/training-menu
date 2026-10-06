@@ -1221,7 +1221,7 @@ function buildDoneToggleHtml(exIndex, setIndex, s) {
 // サーキットの記録画面(2026-10-06〜)。記録の形は通常と同じ「種目×セット」(n周目＝各種目のn番目のセット、
 // js/workout-log.jsのcreateSessionFromMenu参照)だが、種目ごとのカードに並べると1周するたびに
 // 画面を上下に行き来することになるため、「1周目」「2周目」…の周回ごとに、その周でやる種目を順に並べる。
-// RPEは聞かない(休まず次々に進むため)。data-ex/data-setは通常の記録画面と同じなので、入力の処理
+// RPEも通常と同じくセットごとに記録する(2026-10-06にユーザー要望で追加)。data-ex/data-setは通常の記録画面と同じなので、入力の処理
 // (js/app.jsのhandleLogInput)・計測タイマー・前回実績・保存はすべて共通。
 function buildCircuitRoundsHtml(session) {
   const { rounds, roundRestSec } = session.circuit;
@@ -1252,6 +1252,7 @@ function buildCircuitRoundsHtml(session) {
           <div class="set-pr-badge" data-pr-badge="${exIndex}:${r}" hidden>🏆 自己ベスト更新！</div>
           ${weightField}
           ${buildRepsWheelHtml(ex, exIndex, r, s)}
+          ${numberWheelHtml({ exIndex, setIndex: r, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done })}
         </div>`;
     }).join('');
     return `
