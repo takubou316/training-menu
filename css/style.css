@@ -2373,7 +2373,9 @@ body.modal-open {
 }
 .bodyweight-summary {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* 項目数(体重2・腹囲1〜3)に合わせて等分する */
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
   gap: 6px;
   margin-bottom: 12px;
 }
@@ -2387,6 +2389,68 @@ body.modal-open {
 }
 .bodyweight-summary-label { font-size: 11px; color: var(--text-dim); }
 .bodyweight-summary-value { font-size: 14px; font-weight: 700; color: var(--text); }
+
+/* 体重の7日平均の比較（2026-10-06）。描画はjs/ui.jsのbuildBodyWeightAverageCompareHtml */
+.bw-avg-compare {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.bw-avg-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.bw-avg-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+.bw-avg-row-label { font-size: 13px; color: var(--text); }
+.bw-avg-range { margin-left: 6px; font-size: 11px; color: var(--text-dim); }
+.bw-avg-row-value { display: flex; align-items: baseline; gap: 6px; flex-shrink: 0; }
+.bw-avg-kg { font-size: 16px; font-weight: 700; color: var(--text); }
+.bw-avg-none { font-size: 13px; color: var(--text-dim); }
+.bw-avg-count { font-size: 11px; color: var(--text-dim); }
+.bw-avg-count.is-weak { color: var(--accent); }
+.bw-avg-diff {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-size: 13px;
+  color: var(--text);
+}
+.bw-avg-diff strong { font-size: 16px; }
+.bw-avg-diff-note { margin: 6px 0 0; }
+.chart-legend-note { margin: 0 0 6px; font-size: 11px; }
+.chart-overlay-label { font-size: 10px; font-weight: 700; fill: var(--accent); }
+
+/* 腹囲（2026-10-06）。ホームの体重欄の下に常設する小さな行。描画はjs/ui.jsのrenderHomeWaist */
+#home-waist-section { margin: -8px 0 18px; }
+.home-waist-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+/* 未記録・前回から7日以上たった時だけ、左の線で控えめに知らせる(警告色は使わない) */
+.home-waist-panel.is-due { border-left: 3px solid var(--accent); }
+.home-waist-panel-input { display: block; padding: 12px 14px; }
+.home-waist-panel-input .home-weight-label { margin-bottom: 8px; }
+.home-waist-main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 8px; min-width: 0; }
+.home-waist-label { font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.home-waist-value { font-size: 16px; font-weight: 700; color: var(--text); }
+.home-waist-sub { font-size: 12px; color: var(--text-dim); }
+.home-waist-panel .bodyweight-log-small-btn { flex-shrink: 0; }
+.waist-measure-note { margin: 6px 0 0; font-size: 11px; }
+.day-waist-add-row {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+}
 
 /* ===== ウォームアップセットのON/OFFスイッチ（2026-10-02） ===== */
 .warmup-sets-toggle {

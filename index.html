@@ -32,6 +32,8 @@ try {
     <section id="screen-mode" class="screen active">
       <!-- 今日の体重の入力欄／記録済みなら今日の値と前日比。renderHomeBodyWeight()(js/ui.js)が描画する。 -->
       <div id="home-bodyweight-section"></div>
+      <!-- 腹囲(週1回が目安)。前回の値と何日前か＋記録ボタン。renderHomeWaist()(js/ui.js)が描画する。 -->
+      <div id="home-waist-section"></div>
 
       <h2>今日のメニューを作る</h2>
 
@@ -256,6 +258,10 @@ try {
             <button type="button" class="picker-filter-btn" data-bodyweight-range="0">すべて</button>
           </div>
           <div id="bodyweight-progress-content"></div>
+        </div>
+        <div class="menu-block">
+          <h3>腹囲の推移</h3>
+          <div id="waist-progress-content"></div>
         </div>
         <div class="menu-block">
           <h3>種目ごとの推移</h3>

@@ -119,6 +119,7 @@ function renderSyncStatus() {
       : '';
     container.innerHTML = `
       <p class="hint-text">クラウド同期: 有効${email ? `（${email}）` : ''}</p>
+      <p class="hint-text">クラウドに送るのはトレーニング記録だけです。体重・腹囲はこの端末にだけ保存されます（下の「データを書き出す」には含まれます）。</p>
       ${pending > 0 ? `<p class="hint-text sync-pending-text">送信待ち: ${pending}件（ネットにつながっている時に自動で送ります）</p>` : ''}
       ${failed > 0 ? `
       <div class="sync-failed-row">
@@ -1127,7 +1128,11 @@ function buildRepsProgressionText(sets, holdBased) {
 //   絶対値に比べてごく小さいものは、0始まりだと線がほぼ平らになり変化が読み取れないため)。
 // timeScale: 横軸を記録の回数ではなく実際の日付の間隔で並べる(毎日とは限らない体重記録で、
 //   間が空いた期間を詰めて見せないため)。
-function buildProgressTrendChartHtml(points, { title, valueFormatter, detailFormatter, fitToData = false, timeScale = false }) {
+// overlay(2026-10-06〜、体重の7日平均用): pointsと同じ長さの配列 [{ value, weak, breakBefore }]。
+// 指定すると、pointsは線で結ばず薄い点だけにし、overlayを太線で重ねる。weak(記録が少ない)の点を含む区間は点線、
+// breakBefore(前の点から間が空きすぎ)の区間は線をつながない。タップの当たり判定はpoints側にだけ持たせ、
+// overlayの値はdetailFormatterでツールチップに出す(同じ日に2つの当たり判定を重ねないため)。
+function buildProgressTrendChartHtml(points, { title, valueFormatter, detailFormatter, fitToData = false, timeScale = false, overlay = null, overlayLabel = '', subtitleHtml = '' }) {
   if (points.length < 2) return '';
   const width = 320;
   const height = 160;
@@ -1137,7 +1142,7 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
   const padB = 22;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
-  const values = points.map((p) => p.value);
+  const values = points.map((p) => p.value).concat(overlay ? overlay.map((o) => o.value) : []);
   let axisMin = 0;
   let axisMax = Math.max(...values) || 1;
   if (fitToData) {
@@ -1157,6 +1162,23 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
     p,
   }));
   const path = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const yOf = (v) => padT + innerH - ((v - axisMin) / axisRange) * innerH;
+  let overlayHtml = '';
+  if (overlay) {
+    const segs = [];
+    for (let i = 1; i < coords.length; i += 1) {
+      if (overlay[i].breakBefore) continue;
+      const dashed = overlay[i].weak || overlay[i - 1].weak;
+      segs.push(`<line x1="${coords[i - 1].x.toFixed(1)}" y1="${yOf(overlay[i - 1].value).toFixed(1)}" x2="${coords[i].x.toFixed(1)}" y2="${yOf(overlay[i].value).toFixed(1)}"
+          stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"${dashed ? ' stroke-dasharray="4 4" stroke-opacity="0.7"' : ''} />`);
+    }
+    const last = coords[coords.length - 1];
+    const lastY = yOf(overlay[overlay.length - 1].value);
+    // 線の終わりに直接名前を付ける(凡例を見に行かなくても何の線か分かるように)
+    const label = overlayLabel ? `<text x="${Math.min(last.x, width - padR).toFixed(1)}" y="${(lastY - 8).toFixed(1)}" text-anchor="end" class="chart-overlay-label">${overlayLabel}</text>` : '';
+    const marks = coords.map((c, i) => `<circle cx="${c.x.toFixed(1)}" cy="${yOf(overlay[i].value).toFixed(1)}" r="2.5" fill="var(--accent)"${overlay[i].weak ? ' fill-opacity="0.6"' : ''} style="pointer-events:none;" />`);
+    overlayHtml = segs.join('') + marks.join('') + label;
+  }
 
   const gridLines = [0, 0.5, 1]
     .map((frac) => {
@@ -1182,16 +1204,17 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
         <circle class="chart-point" data-chart-date="${formatShortDate(c.p.date)}" data-chart-value="${valueFormatter(c.p.value)}"
           data-chart-detail="${detailFormatter ? detailFormatter(c.p) : ''}"
           cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="10" fill="transparent" />
-        <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="var(--accent)" style="pointer-events:none;" />`)
+        <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3" fill="${overlay ? 'var(--text-dim)' : 'var(--accent)'}"${overlay ? ' fill-opacity="0.6"' : ''} style="pointer-events:none;" />`)
     .join('');
 
   return `
     <div class="progress-trend-chart-wrap">
       <h3 style="margin-bottom:4px;">${title}</h3>
+      ${subtitleHtml}
       <div class="progress-trend-chart" style="position:relative;">
         <svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="${title}のグラフ">
           ${gridLines}
-          <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          ${overlay ? overlayHtml : `<path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />`}
           ${dots}
           ${xLabels}
         </svg>
@@ -1619,7 +1642,7 @@ function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true } = {}) 
   } else {
     bodyHtml = `<p class="empty-text">この日はトレーニングの記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
   }
-  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + bodyHtml;
+  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + buildDayWaistRowHtml(dateStr, { showEmpty: showNav }) + bodyHtml;
   return `<div class="day-detail-header">
       ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-prev aria-label="前の日">◀</button>' : '<span></span>'}
       <div><span class="day-detail-date">${recordDateLabel(date)}</span><span class="day-detail-weekday">${recordWeekdayLabel(date)}曜日</span></div>
@@ -1807,6 +1830,7 @@ function exercisesWithHistoryOptions() {
 // (2026-08-14、記録一覧×カレンダー統合の設計検討時に決定・後日反映)。
 function renderProgressScreen() {
   renderBodyWeightProgressChart();
+  renderWaistProgressChart();
   const select = document.getElementById('progress-exercise-select');
   const options = exercisesWithHistoryOptions();
   if (options.length === 0) {
@@ -1864,7 +1888,7 @@ function previousBodyWeightEntry(dateKey) {
 }
 
 function signedKgText(diff) {
-  const rounded = Math.round(diff * 10) / 10;
+  const rounded = Math.sign(diff) * Math.round(Math.abs(diff) * 10) / 10; // 負の0.05も0.1に丸める(−0.75が−0.7にならないように)
   if (rounded === 0) return '±0.0kg';
   return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toFixed(1)}kg`;
 }
@@ -1948,15 +1972,266 @@ function buildDayWeightRowHtml(dateStr, { showEmpty = true } = {}) {
 }
 
 // 体重の追加・変更・削除の後、表示中の記録タブ(カレンダー/リスト/グラフ)を描き直す。
+// 日の詳細で体重と腹囲の入力欄を両方開いている時、片方の操作で描き直すと、もう片方の入力途中の値が
+// 保存済みの値で作り直されて消えてしまう(2026-10-06 Codexレビュー指摘)。描き直す前に開いている入力欄の値を
+// 覚えておき、描き直した後も同じ入力欄が開いていれば戻す。
+function captureMeasureDrafts() {
+  const drafts = [];
+  document.querySelectorAll('.day-weight-row-editing input').forEach((input) => {
+    const wrap = input.closest('[data-bodyweight-log-date], [data-waist-log-date]');
+    if (wrap) drafts.push({ cls: input.classList.contains('waist-log-input') ? 'waist-log-input' : 'bodyweight-log-input', wrapKey: wrap.dataset.bodyweightLogDate || wrap.dataset.waistLogDate, value: input.value });
+  });
+  return drafts;
+}
+
+function restoreMeasureDrafts(drafts) {
+  drafts.forEach(({ cls, wrapKey, value }) => {
+    const sel = cls === 'waist-log-input' ? `[data-waist-log-date="${wrapKey}"] .${cls}` : `[data-bodyweight-log-date="${wrapKey}"] .${cls}`;
+    const input = document.querySelector(`.day-weight-row-editing ${sel}`);
+    if (input) input.value = value;
+  });
+}
+
 function refreshRecordViewsAfterBodyWeightChange() {
   const historyMap = groupHistoryByDate(loadHistory());
+  const drafts = captureMeasureDrafts();
   if (recordViewMode === 'list') {
     renderListView(historyMap);
   } else {
     renderCalendar(historyMap);
     renderRecordDayDetail(historyMap);
   }
-  if (activeRecordTab === 'graph') renderBodyWeightProgressChart();
+  restoreMeasureDrafts(drafts);
+  if (activeRecordTab === 'graph') {
+    renderBodyWeightProgressChart();
+    renderWaistProgressChart();
+  }
+}
+
+// ===== 腹囲の記録（2026-10-06〜） =====
+// 週1回程度の記録を想定。入力は体重と同じく数字の直接入力(0.1cm)。ホームに入口を常設し、
+// 未記録または前回から7日以上たった時だけ控えめに強調する(通知や警告色は使わない)。
+// 過去の日の入力・変更・削除は記録タブの日の詳細から。グラフタブに推移(1点から表示、2点目から線)。
+// 小さな変化に良し悪しの判定は付けない(入力の桁と測定の精度は別物のため)。
+const WAIST_DUE_DAYS = 7;
+const WAIST_MEASURE_NOTE = '測る位置（おへその高さ）・時間（朝、トイレの後など）・姿勢（立って、息を吐いたとき）を毎回そろえると、変化を比べやすくなります。';
+let homeWaistEditing = false;
+let editingWaistDateStr = null;
+
+function formatCm(cm) {
+  return `${Number(cm).toFixed(1)}cm`;
+}
+
+function signedCmText(diff) {
+  const rounded = Math.sign(diff) * Math.round(Math.abs(diff) * 10) / 10; // 負の0.05も0.1に丸める(−0.75が−0.7にならないように)
+  if (rounded === 0) return '±0.0cm';
+  return `${rounded > 0 ? '+' : '−'}${Math.abs(rounded).toFixed(1)}cm`;
+}
+
+function daysBetweenKeys(fromKey, toKey) {
+  return Math.round((recordDateFromKey(toKey) - recordDateFromKey(fromKey)) / 86400000);
+}
+
+// 前回の記録との差。週1回の記録なので、いつの記録と比べたかを必ず添える。
+function waistDiffText(dateKey, cm) {
+  const earlier = waistEntriesSorted().filter((e) => e.dateKey < dateKey);
+  if (!earlier.length) return '';
+  const prev = earlier[earlier.length - 1];
+  return `${shortDateFromKey(prev.dateKey)}比 ${signedCmText(cm - prev.cm)}`;
+}
+
+function waistFormHtml(dateKey, currentCm, { showCancel = false } = {}) {
+  const entries = waistEntriesSorted();
+  const placeholder = entries.length ? `前回 ${entries[entries.length - 1].cm.toFixed(1)}` : '例: 80.0';
+  return `
+    <div class="waist-log-form-wrap" data-waist-log-date="${dateKey}">
+      <div class="bodyweight-log-form">
+        <input type="number" inputmode="decimal" step="0.1" min="${WAIST_MIN}" max="${WAIST_MAX}"
+          class="bodyweight-manual-input waist-log-input" value="${currentCm != null ? Number(currentCm).toFixed(1) : ''}"
+          placeholder="${placeholder}" aria-label="腹囲（cm）">
+        <span class="bodyweight-log-unit">cm</span>
+        <button type="button" class="primary-btn" data-waist-log-save>記録する</button>
+      </div>
+      <p class="error-text bodyweight-log-error waist-log-error" hidden></p>
+      <p class="hint-text waist-measure-note">${WAIST_MEASURE_NOTE}</p>
+      ${showCancel || currentCm != null ? `
+      <div class="bodyweight-log-actions">
+        ${showCancel ? '<button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-waist-log-cancel>キャンセル</button>' : '<span></span>'}
+        ${currentCm != null ? '<button type="button" class="danger-link-btn bodyweight-log-delete" data-waist-log-delete>この日の腹囲を削除</button>' : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+function renderHomeWaist() {
+  const container = document.getElementById('home-waist-section');
+  if (!container) return;
+  const today = localDateKey(new Date());
+  const todayCm = loadWaistLog()[today];
+  if (homeWaistEditing) {
+    container.innerHTML = `
+      <div class="home-waist-panel home-waist-panel-input">
+        <div class="home-weight-label">今日の腹囲を記録</div>
+        ${waistFormHtml(today, todayCm, { showCancel: true })}
+      </div>`;
+    return;
+  }
+  const entries = waistEntriesSorted();
+  const last = entries.length ? entries[entries.length - 1] : null;
+  let mainHtml;
+  let due = false;
+  if (!last) {
+    due = true;
+    mainHtml = '<span class="home-waist-sub">まだ記録がありません（週1回が目安）</span>';
+  } else if (todayCm != null) {
+    const diff = waistDiffText(today, Number(todayCm));
+    mainHtml = `<span class="home-waist-value">${formatCm(todayCm)}</span><span class="home-waist-sub">今日${diff ? `・${diff}` : ''}</span>`;
+  } else {
+    const days = daysBetweenKeys(last.dateKey, today);
+    due = days >= WAIST_DUE_DAYS;
+    mainHtml = `<span class="home-waist-value">${formatCm(last.cm)}</span><span class="home-waist-sub">${shortDateFromKey(last.dateKey)}・${days}日前${due ? '・そろそろ測る日です' : ''}</span>`;
+  }
+  container.innerHTML = `
+    <div class="home-waist-panel${due ? ' is-due' : ''}">
+      <div class="home-waist-main"><span class="home-waist-label">腹囲</span>${mainHtml}</div>
+      <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-waist-home-edit>${todayCm != null ? '変更' : '記録する'}</button>
+    </div>`;
+}
+
+// 記録タブの日の詳細に出す腹囲の行。週1回の記録なので、記録の無い日は「未記録」の行を並べず、
+// カレンダー表示(showEmpty)の時だけ小さな「＋ 腹囲を記録」ボタンを出す。
+function buildDayWaistRowHtml(dateStr, { showEmpty = true } = {}) {
+  if (dateStr > localDateKey(new Date())) return '';
+  const cm = loadWaistLog()[dateStr];
+  if (editingWaistDateStr === dateStr) {
+    return `<div class="day-weight-row day-weight-row-editing">
+      <div class="day-weight-label">腹囲</div>
+      ${waistFormHtml(dateStr, cm, { showCancel: true })}
+    </div>`;
+  }
+  if (cm == null) {
+    if (!showEmpty) return '';
+    return `<div class="day-waist-add-row"><button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-waist-detail-edit="${dateStr}">＋ 腹囲を記録</button></div>`;
+  }
+  const diffText = waistDiffText(dateStr, Number(cm));
+  return `<div class="day-weight-row">
+    <span class="day-weight-label">腹囲</span>
+    <span class="day-weight-value">${formatCm(cm)}</span>
+    ${diffText ? `<span class="day-weight-diff">${diffText}</span>` : ''}
+    <button type="button" class="ghost-pill-btn bodyweight-log-small-btn day-weight-edit-btn" data-waist-detail-edit="${dateStr}">変更</button>
+  </div>`;
+}
+
+function renderWaistProgressChart() {
+  const container = document.getElementById('waist-progress-content');
+  if (!container) return;
+  const entries = waistEntriesSorted();
+  if (entries.length === 0) {
+    container.innerHTML = '<p class="empty-text">まだ腹囲の記録がありません。ホーム画面の「腹囲」から記録できます（週1回が目安）。</p>';
+    return;
+  }
+  const last = entries[entries.length - 1];
+  if (entries.length === 1) {
+    container.innerHTML = `
+      <div class="bodyweight-summary">
+        <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">記録（${shortDateFromKey(last.dateKey)}）</span><span class="bodyweight-summary-value">${formatCm(last.cm)}</span></div>
+      </div>
+      <p class="hint-text">2回目を記録すると、推移が線でつながります。</p>`;
+    return;
+  }
+  const prev = entries[entries.length - 2];
+  const first = entries[0];
+  const points = entries.map((e) => ({ date: `${e.dateKey}T00:00:00`, value: e.cm }));
+  const chartHtml = buildProgressTrendChartHtml(points, {
+    title: `腹囲（${entries.length}回分）`,
+    valueFormatter: (v) => formatCm(v),
+    fitToData: true,
+    timeScale: true,
+  });
+  container.innerHTML = `
+    <div class="bodyweight-summary">
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最新（${shortDateFromKey(last.dateKey)}）</span><span class="bodyweight-summary-value">${formatCm(last.cm)}</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">前回（${shortDateFromKey(prev.dateKey)}）比</span><span class="bodyweight-summary-value">${signedCmText(last.cm - prev.cm)}</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">初回（${shortDateFromKey(first.dateKey)}）比</span><span class="bodyweight-summary-value">${signedCmText(last.cm - first.cm)}</span></div>
+    </div>
+    ${chartHtml}`;
+}
+
+// ===== 体重の7日平均（2026-10-06〜、Codexと相談して決めた仕様） =====
+// 毎日の値は水分や食事で上下するので、傾向は7日平均で見る。
+// - ある日の7日平均 = その日を含む直前7暦日のうち「記録がある日だけ」の平均。未記録の日は0として数えない。
+// - 7日のうち記録が5日未満の平均は「参考値」(グラフは点線)。5日は統計的な保証ではなく「週の大半を記録した」という目安。
+// - 比べる基準日は、今日の記録があれば今日、無ければ昨日(朝に測る前でも昨日までの7日で比べられるように)。
+//   最終記録日まで自動で戻すと、長く記録していないのに古い結果を「直近」と見せてしまうので戻さない。
+const BODYWEIGHT_AVG_DAYS = 7;
+const BODYWEIGHT_AVG_MIN_DAYS = 5;
+
+// entries(古い→新しい順)のうち、endKeyを含む直前days暦日の記録の平均と日数。記録が無ければavgはnull。
+function bodyWeightWindowAverage(entries, endKey, days = BODYWEIGHT_AVG_DAYS) {
+  const startKey = shiftDateKey(endKey, -(days - 1));
+  const inWindow = entries.filter((e) => e.dateKey >= startKey && e.dateKey <= endKey);
+  const avg = inWindow.length ? inWindow.reduce((sum, e) => sum + e.kg, 0) / inWindow.length : null;
+  return { avg, count: inWindow.length, startKey, endKey };
+}
+
+// 古い→新しい順の全記録について、各記録日の7日平均を一度に求める({dateKey → {avg, count}})。
+// 期間に入った記録を足し、期間から外れた記録を引くだけの方式(毎回全記録を絞り込み直さない)。
+function bodyWeightRollingAverages(entries) {
+  const result = new Map();
+  let startIdx = 0;
+  let sum = 0;
+  entries.forEach((e, i) => {
+    sum += e.kg;
+    const windowStart = shiftDateKey(e.dateKey, -(BODYWEIGHT_AVG_DAYS - 1));
+    while (entries[startIdx].dateKey < windowStart) {
+      sum -= entries[startIdx].kg;
+      startIdx += 1;
+    }
+    const count = i - startIdx + 1;
+    result.set(e.dateKey, { avg: sum / count, count });
+  });
+  return result;
+}
+
+function shortDateFromKey(dateKey) {
+  const d = recordDateFromKey(dateKey);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+// 直近7日と、その前の7日の平均の比較を出す。差は丸める前の平均で計算し、表示の時だけ丸める。
+function buildBodyWeightAverageCompareHtml(allEntries) {
+  const today = localDateKey(new Date());
+  const hasToday = allEntries.some((e) => e.dateKey === today);
+  const baseKey = hasToday ? today : previousDateKey(today);
+  const recent = bodyWeightWindowAverage(allEntries, baseKey);
+  const prev = bodyWeightWindowAverage(allEntries, shiftDateKey(baseKey, -BODYWEIGHT_AVG_DAYS));
+  if (recent.count === 0 && prev.count === 0) return '';
+  const row = (label, w) => {
+    const weak = w.count > 0 && w.count < BODYWEIGHT_AVG_MIN_DAYS;
+    return `<div class="bw-avg-row">
+      <div class="bw-avg-row-label">${label}<span class="bw-avg-range">${shortDateFromKey(w.startKey)}〜${shortDateFromKey(w.endKey)}</span></div>
+      <div class="bw-avg-row-value">
+        ${w.avg != null ? `<span class="bw-avg-kg">${formatKg(w.avg)}</span>` : '<span class="bw-avg-none">記録なし</span>'}
+        <span class="bw-avg-count${weak ? ' is-weak' : ''}">${w.count}/${BODYWEIGHT_AVG_DAYS}日分${weak ? '・参考値' : ''}</span>
+      </div>
+    </div>`;
+  };
+  let diffHtml;
+  if (recent.count >= BODYWEIGHT_AVG_MIN_DAYS && prev.count >= BODYWEIGHT_AVG_MIN_DAYS) {
+    diffHtml = `<div class="bw-avg-diff">前の7日と比べて <strong>${signedKgText(recent.avg - prev.avg)}</strong></div>`;
+  } else {
+    // 「あと◯日記録すれば」とは書かない(日が進むと古い記録が期間から外れ、前の期間の不足は今後の記録では埋まらないため)
+    const short = [];
+    if (recent.count < BODYWEIGHT_AVG_MIN_DAYS) short.push('直近の7日');
+    if (prev.count < BODYWEIGHT_AVG_MIN_DAYS) short.push('その前の7日');
+    diffHtml = `<p class="hint-text bw-avg-diff-note">${short.join('と')}の記録が${BODYWEIGHT_AVG_MIN_DAYS}日分に足りないため、差は出していません。</p>`;
+  }
+  return `<div class="bw-avg-compare">
+      <div class="bw-avg-title">7日平均の比較</div>
+      ${row('直近の7日', recent)}
+      ${row('その前の7日', prev)}
+      ${diffHtml}
+      ${hasToday ? '' : '<p class="hint-text bw-avg-diff-note">今日はまだ記録がないので、昨日までの7日で比べています。</p>'}
+    </div>`;
 }
 
 function renderBodyWeightProgressChart() {
@@ -1977,25 +2252,38 @@ function renderBodyWeightProgressChart() {
     container.innerHTML = '<p class="empty-text">まだ体重の記録がありません。ホーム画面の「今日の体重を記録」から記録できます。</p>';
     return;
   }
+  const compareHtml = buildBodyWeightAverageCompareHtml(allEntries);
   if (entries.length < 2) {
-    container.innerHTML = '<p class="empty-text">この期間の体重の記録が2日分たまるとグラフが表示されます。期間を広げるか、ホーム画面から毎日記録してみてください。</p>';
+    container.innerHTML = `${compareHtml}<p class="empty-text">この期間の体重の記録が2日分たまるとグラフが表示されます。期間を広げるか、ホーム画面から毎日記録してみてください。</p>`;
     return;
   }
-  const first = entries[0];
   const last = entries[entries.length - 1];
   const values = entries.map((e) => e.kg);
   const rangeLabel = { 30: '1か月', 90: '3か月', 365: '1年', 0: 'すべての期間' }[bodyWeightGraphRangeDays] || '';
-  const points = entries.map((e) => ({ date: `${e.dateKey}T00:00:00`, value: e.kg }));
+  // 平均は記録のある日にだけ点を打つ(記録の無い日に点を足すと、測っていない間に体重が動いたように見えるため)。
+  // 表示期間の最初の日の平均にも、期間より前の6日分の記録を使う。
+  const averageByDate = bodyWeightRollingAverages(allEntries);
+  const averages = entries.map((e) => averageByDate.get(e.dateKey));
+  const overlay = entries.map((e, i) => ({
+    value: averages[i].avg,
+    weak: averages[i].count < BODYWEIGHT_AVG_MIN_DAYS,
+    breakBefore: i > 0 && entries[i - 1].dateKey <= shiftDateKey(e.dateKey, -BODYWEIGHT_AVG_DAYS),
+  }));
+  const points = entries.map((e, i) => ({ date: `${e.dateKey}T00:00:00`, value: e.kg, avg: averages[i] }));
   const chartHtml = buildProgressTrendChartHtml(points, {
     title: `体重（${rangeLabel}・${entries.length}日分）`,
     valueFormatter: (v) => formatKg(v),
+    detailFormatter: (p) => `7日平均 ${formatKg(p.avg.avg)}・${p.avg.count}日分${p.avg.count < BODYWEIGHT_AVG_MIN_DAYS ? '・参考値' : ''}`,
     fitToData: true,
     timeScale: true,
+    overlay,
+    overlayLabel: '7日平均',
+    subtitleHtml: '<p class="hint-text chart-legend-note">点＝毎日の体重、線＝7日平均（点線は記録が5日分未満の参考値）。点をタップすると両方の値が出ます。</p>',
   });
   container.innerHTML = `
+    ${compareHtml}
     <div class="bodyweight-summary">
-      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最新</span><span class="bodyweight-summary-value">${formatKg(last.kg)}</span></div>
-      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">この期間の変化</span><span class="bodyweight-summary-value">${signedKgText(last.kg - first.kg)}</span></div>
+      <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最新（${shortDateFromKey(last.dateKey)}）</span><span class="bodyweight-summary-value">${formatKg(last.kg)}</span></div>
       <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">最小〜最大(kg)</span><span class="bodyweight-summary-value">${Math.min(...values).toFixed(1)}〜${Math.max(...values).toFixed(1)}</span></div>
     </div>
     ${chartHtml}`;

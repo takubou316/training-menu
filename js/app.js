@@ -2252,6 +2252,82 @@ function wireBodyWeightLog() {
   renderHomeBodyWeight();
 }
 
+// ===== 腹囲の記録（ホームと記録タブの日の詳細で入力。描画はjs/ui.jsの「腹囲の記録」節） =====
+
+function saveWaistFromForm(wrap) {
+  // ホームの入力欄は体重と同じく、保存する瞬間の日付を使う(開いたまま日付をまたいだ時に前日分を上書きしないため)。
+  const dateKey = wrap.closest('#home-waist-section') ? localDateKey(new Date()) : wrap.dataset.waistLogDate;
+  const input = wrap.querySelector('.waist-log-input');
+  const errorEl = wrap.querySelector('.waist-log-error');
+  const value = Number(input.value);
+  if (!input.value || Number.isNaN(value) || value < WAIST_MIN || value > WAIST_MAX) {
+    errorEl.textContent = `${WAIST_MIN}〜${WAIST_MAX}の数字を入力してください`;
+    errorEl.hidden = false;
+    return;
+  }
+  saveWaistEntry(dateKey, Math.round(value * 10) / 10);
+  homeWaistEditing = false;
+  editingWaistDateStr = null;
+  rerenderWaistViews();
+}
+
+function rerenderWaistViews() {
+  renderHomeWaist();
+  // 日の詳細・グラフの描き直しは体重と共通(腹囲の行・腹囲のグラフも一緒に描き直される)
+  refreshRecordViewsAfterBodyWeightChange();
+}
+
+function wireWaistLog() {
+  document.addEventListener('click', (e) => {
+    const saveBtn = e.target.closest('[data-waist-log-save]');
+    if (saveBtn) {
+      saveWaistFromForm(saveBtn.closest('.waist-log-form-wrap'));
+      return;
+    }
+    const cancelBtn = e.target.closest('[data-waist-log-cancel]');
+    if (cancelBtn) {
+      if (cancelBtn.closest('#home-waist-section')) homeWaistEditing = false;
+      else editingWaistDateStr = null;
+      rerenderWaistViews();
+      return;
+    }
+    const deleteBtn = e.target.closest('[data-waist-log-delete]');
+    if (deleteBtn) {
+      const dateKey = deleteBtn.closest('.waist-log-form-wrap').dataset.waistLogDate;
+      if (!window.confirm(`${recordDateLabel(recordDateFromKey(dateKey))}の腹囲の記録を削除しますか？`)) return;
+      deleteWaistEntry(dateKey);
+      homeWaistEditing = false;
+      editingWaistDateStr = null;
+      rerenderWaistViews();
+      return;
+    }
+    if (e.target.closest('[data-waist-home-edit]')) {
+      homeWaistEditing = true;
+      renderHomeWaist();
+      const input = document.querySelector('#home-waist-section .waist-log-input');
+      if (input) input.focus();
+      return;
+    }
+    const detailEditBtn = e.target.closest('[data-waist-detail-edit]');
+    if (detailEditBtn) {
+      editingWaistDateStr = detailEditBtn.dataset.waistDetailEdit;
+      refreshRecordViewsAfterBodyWeightChange();
+      const input = document.querySelector('.day-weight-row-editing .waist-log-input');
+      if (input) input.focus();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !e.target.classList || !e.target.classList.contains('waist-log-input')) return;
+    e.preventDefault();
+    saveWaistFromForm(e.target.closest('.waist-log-form-wrap'));
+  });
+  // 日付が変わった後に戻ってきた時、「◯日前」や「今日」の表示を描き直す
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !homeWaistEditing) renderHomeWaist();
+  });
+  renderHomeWaist();
+}
+
 // ===== データのバックアップ（書き出し/読み込み。形式と対象はjs/storage.jsのbuildBackupObject参照） =====
 
 function setBackupStatus(text, isError) {
@@ -2309,9 +2385,15 @@ function importBackupText(text) {
   }
   const exported = summary.exportedAt ? new Date(summary.exportedAt) : null;
   const exportedLabel = exported && !Number.isNaN(exported.getTime()) ? `${formatDate(summary.exportedAt)}に書き出した` : '';
+  // 腹囲(2026-10-06追加)を含まない古いバックアップは、読み込むと今の腹囲の記録が消える(全置き換えのため)。黙って消さずに明示する。
+  const currentWaistCount = waistEntriesSorted().length;
+  const waistWarning = !summary.hasWaistLog && currentWaistCount > 0
+    ? `\n※このバックアップには腹囲の記録が含まれていないため、今の腹囲の記録（${currentWaistCount}件）は消えます。`
+    : '';
   const ok = window.confirm(
-    `${exportedLabel}バックアップ（トレーニング記録${summary.sessionCount}件・体重${summary.bodyWeightCount}日分）を読み込みます。\n`
-    + '今この端末にあるデータは、バックアップの内容にすべて置き換わります。よろしいですか？',
+    `${exportedLabel}バックアップ（トレーニング記録${summary.sessionCount}件・体重${summary.bodyWeightCount}日分・腹囲${summary.waistCount}件）を読み込みます。\n`
+    + '今この端末にあるデータは、バックアップの内容にすべて置き換わります。よろしいですか？'
+    + waistWarning,
   );
   if (!ok) return false;
   try {
@@ -2493,6 +2575,7 @@ function init() {
   wireKnowledgeScreen();
   restoreLastSettings();
   wireBodyWeightLog();
+  wireWaistLog();
   wireWarmupSetsToggle();
   wireHoldTargetEdit();
   wireBackup();
@@ -2700,7 +2783,9 @@ function init() {
       const target = btn.dataset.nav;
       if (target === 'mode') {
         homeBodyWeightEditing = false;
+        homeWaistEditing = false;
         renderHomeBodyWeight();
+        renderHomeWaist();
         renderModeWeeklyPlanSection();
       }
       if (target === 'record') renderRecordScreen();

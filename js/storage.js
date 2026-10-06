@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   activeSession: 'training-menu:active-session',
   theme: 'training-menu:theme',
   bodyWeightLog: 'training-menu:bodyweight-log',
+  waistLog: 'training-menu:waist-log',
   warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
   holdTargets: 'training-menu:hold-targets',
   circuitLast: 'training-menu:circuit-last',
@@ -106,6 +107,49 @@ function bodyWeightEntriesSorted() {
     .sort((a, b) => (a.dateKey < b.dateKey ? -1 : 1));
 }
 
+// 腹囲の入力範囲(cm)。入力欄・保存時の検証・バックアップの検証で共通に使う。
+const WAIST_MIN = 40;
+const WAIST_MAX = 200;
+const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+// 腹囲の値として受け付けるか。null/空文字/真偽値などがNumber()で0に化けて通らないよう、数値型に限る。
+function isValidWaistCm(cm) {
+  return typeof cm === 'number' && Number.isFinite(cm) && cm >= WAIST_MIN && cm <= WAIST_MAX;
+}
+
+// 腹囲の記録(2026-10-06〜)。体重と同じ { 'YYYY-MM-DD': cm } の形で1日1件。週1回程度の記録を想定。
+// 体重と同じく端末内のみ(クラウド同期しない)・バックアップ対象・トレーニング記録の削除の対象外。
+function loadWaistLog() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.waistLog);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveWaistEntry(dateKey, cm) {
+  const log = loadWaistLog();
+  log[dateKey] = cm;
+  localStorage.setItem(STORAGE_KEYS.waistLog, JSON.stringify(log));
+  return log;
+}
+
+function deleteWaistEntry(dateKey) {
+  const log = loadWaistLog();
+  delete log[dateKey];
+  localStorage.setItem(STORAGE_KEYS.waistLog, JSON.stringify(log));
+  return log;
+}
+
+// 腹囲の記録を日付の古い→新しい順の配列で返す([{ dateKey, cm }])。
+function waistEntriesSorted() {
+  return Object.entries(loadWaistLog())
+    .filter(([dateKey, cm]) => DATE_KEY_PATTERN.test(dateKey) && isValidWaistCm(cm))
+    .map(([dateKey, cm]) => ({ dateKey, cm }))
+    .sort((a, b) => (a.dateKey < b.dateKey ? -1 : 1));
+}
+
 // 各種目の最初にウォームアップセットを入れるか。未設定(初回)は従来通り入れる(true)。
 // 一度切り替えたらユーザーが自分で切り替えるまでその値を使い続ける。
 function loadWarmupSetsEnabled() {
@@ -193,6 +237,14 @@ function previousDateKey(dateKey) {
   const date = new Date(`${dateKey}T00:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   date.setDate(date.getDate() - 1);
+  return localDateKey(date);
+}
+
+// 日付キーをn日ずらす(ローカルの暦日で数える。UTCに変換すると前日扱いになることがあるため)。
+function shiftDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + days);
   return localDateKey(date);
 }
 
@@ -489,7 +541,7 @@ const BACKUP_FORMAT = 'compstack-backup';
 const BACKUP_VERSION = 1;
 const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
-  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets',
+  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog',
 ];
 // クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)と、送れなかった記録
 // (js/sync.jsのSYNC_FAILED_KEY)。どちらもバックアップには含めない。
@@ -537,6 +589,7 @@ const BACKUP_VALIDATORS = {
   theme: null, // 生の文字列。loadThemeが想定外の値を既定に戻すので検証不要
   bodyWeightLog: (v) => isPlainObject(v) && Object.values(v).every((kg) => Number.isFinite(Number(kg))),
   warmupSetsEnabled: null, // 'true'/'false'の生文字列
+  waistLog: (v) => isPlainObject(v) && Object.entries(v).every(([dateKey, cm]) => DATE_KEY_PATTERN.test(dateKey) && isValidWaistCm(cm)),
   holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isInteger(sec)
     && sec >= HOLD_TARGET_MIN_SEC && sec <= HOLD_TARGET_MAX_SEC),
 };
@@ -576,7 +629,11 @@ function parseBackupText(text) {
   });
   const history = JSON.parse(data[STORAGE_KEYS.history] || '[]');
   const bodyWeightCount = Object.keys(JSON.parse(data[STORAGE_KEYS.bodyWeightLog] || '{}')).length;
-  return { data, exportedAt: parsed.exportedAt, sessionCount: history.length, bodyWeightCount };
+  // 腹囲(2026-10-06追加)を持たない古いバックアップは、読み込むと今の腹囲の記録が消える(全置き換えのため)。
+  // 確認画面でそれを明示できるよう、含まれているかどうかも返す。
+  const hasWaistLog = STORAGE_KEYS.waistLog in data;
+  const waistCount = Object.keys(JSON.parse(data[STORAGE_KEYS.waistLog] || '{}')).length;
+  return { data, exportedAt: parsed.exportedAt, sessionCount: history.length, bodyWeightCount, hasWaistLog, waistCount };
 }
 
 // バックアップの内容で端末内のデータを置き換える(バックアップに無い項目は空に戻す)。
@@ -632,6 +689,7 @@ if (typeof module !== 'undefined') {
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
     loadTheme, saveTheme,
     loadBodyWeightLog, saveBodyWeightEntry, deleteBodyWeightEntry, bodyWeightEntriesSorted,
+    loadWaistLog, saveWaistEntry, deleteWaistEntry, waistEntriesSorted, shiftDateKey,
     loadWarmupSetsEnabled, saveWarmupSetsEnabled,
   };
 }
