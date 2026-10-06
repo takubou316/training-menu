@@ -13,7 +13,34 @@ const STORAGE_KEYS = {
   bodyWeightLog: 'training-menu:bodyweight-log',
   warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
   holdTargets: 'training-menu:hold-targets',
+  circuitLast: 'training-menu:circuit-last',
 };
+
+// サーキットの「今日の周回数」「1周ごとの休憩」の前回値(次に開始する時の初期選択に使うだけ)。
+// 周回数は日によって変える前提(ユーザー判断、2026-10-06)なので、メニューや組み合わせには保存しない。
+const CIRCUIT_ROUNDS_OPTIONS = [1, 2, 3, 4, 5];
+const CIRCUIT_ROUND_REST_OPTIONS = [0, 30, 60, 90];
+function loadCircuitLast() {
+  const fallback = { rounds: 2, roundRestSec: 60 };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.circuitLast) || 'null');
+    if (!isPlainObject(parsed)) return fallback;
+    return {
+      rounds: CIRCUIT_ROUNDS_OPTIONS.includes(parsed.rounds) ? parsed.rounds : fallback.rounds,
+      roundRestSec: CIRCUIT_ROUND_REST_OPTIONS.includes(parsed.roundRestSec) ? parsed.roundRestSec : fallback.roundRestSec,
+    };
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function saveCircuitLast(value) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.circuitLast, JSON.stringify(value));
+  } catch (e) {
+    // 前回値を覚えるだけなので失敗しても困らない
+  }
+}
 
 // 保持時間系(プランク等、holdBased)の目標秒数。{ exerciseId: 秒 } で種目ごとに1つ持ち、記録画面の
 // 「変更」から本人が書き換える。未設定なら30秒(根拠のある研究値は見当たらないため、一般的によく
@@ -226,10 +253,22 @@ function deleteSessionsByDateKey(dateKey) {
 }
 
 // 指定した種目の直近の記録（最後に行ったセット内容）を返す。無ければnull。
-function findLastPerformance(exerciseId) {
+// 記録した種目が「時間で測った」ものか。2026-10-06から、同じ種目でも「自分で作る」で回数／時間を
+// 切り替えられるようになったため、記録自体にholdBasedを持たせている。それ以前の記録には無いので、
+// 種目データの既定(EXERCISESのholdBased)で補う。
+function recordedExerciseIsTimed(recordEx) {
+  if (recordEx && typeof recordEx.holdBased === 'boolean') return recordEx.holdBased;
+  const meta = typeof EXERCISES !== 'undefined' ? EXERCISES.find((e) => e.id === recordEx.exerciseId) : null;
+  return !!(meta && meta.holdBased);
+}
+
+// timed: 指定すると、その測り方(時間ならtrue、回数ならfalse)で記録したものだけを対象にする
+// (「前回45秒」を回数の提案に混ぜないため)。省略時は測り方を問わない。
+function findLastPerformance(exerciseId, timed) {
   const history = loadHistory();
   for (const session of history) {
-    const found = session.exercises.find((e) => e.exerciseId === exerciseId);
+    const found = session.exercises.find((e) => e.exerciseId === exerciseId
+      && (timed == null || recordedExerciseIsTimed(e) === timed));
     if (found) {
       const workingSets = found.sets.filter((s) => s.done && !s.isWarmup);
       if (workingSets.length > 0) {
@@ -263,6 +302,9 @@ function toggleFavoriteExercise(exerciseId) {
 }
 
 // 「自分で作る」で組んだ種目構成(種目の並び・休憩時間)を名前付きで保存しておき、後から呼び出せる。
+// { id, name, createdAt, exerciseIds, restSec, format?, targets? }。format('sets'|'circuit')と
+// targets({exerciseId: {timed, reps, sec, sets}})は2026-10-06追加で、それより前に保存したものには無い
+// (読み込み時に「種目ごと」・3セット×目標の初期値で補う。js/app.jsのapplyCustomTemplate)。
 function loadCustomTemplates() {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.customTemplates);
@@ -307,6 +349,9 @@ function recentExerciseIds(limit) {
 // モード選択画面の「今日は◯◯の日です」バナー等はこれを参照する。
 // 各プリセットは { id, name, createdAt, days } で、daysは曜日ごとの割り当て(月曜始まりで7要素固定)。
 // days の各要素は { kind: 'rest' } | { kind: 'parts', parts: [...] } | { kind: 'template', templateId }。
+// 2026-10-06〜、曜日ではなく「一日おき」で回すプランも作れる: schedule: 'alternate' と、やる日の内容
+// alternate(daysの要素と同じ形、休みは不可)を持つ。scheduleが無い/'weekly'なら従来通りdaysを使う。
+// 1週間は7日(奇数)なので、一日おきを曜日で表すと週ごとにずれてしまうため別の仕組みにした。
 function defaultWeeklyPlanDays() {
   return Array.from({ length: 7 }, () => ({ kind: 'rest' }));
 }
@@ -347,6 +392,41 @@ function updateWeeklyPlanDays(id, days) {
   plan.days = days;
   saveWeeklyPlans(plans);
   return plans;
+}
+
+// プリセットの一部の項目(schedule/alternate等)だけを書き換える。
+function updateWeeklyPlanFields(id, fields) {
+  const plans = loadWeeklyPlans();
+  const plan = plans.find((p) => p.id === id);
+  if (!plan) return plans;
+  Object.assign(plan, fields);
+  saveWeeklyPlans(plans);
+  return plans;
+}
+
+// 「一日おき」プランの判定用: その内容を最後にやった日(ローカル日付キー)。無ければnull。
+// 保存した組み合わせ: その組み合わせから始めた記録(記録のtemplateId、2026-10-06〜記録に残す)。
+// 部位: 有酸素以外の種目を含む記録すべて(「要望から作る」の記録は部位を記録していないため)。
+// 週間プランの1日分(またはalternate)の形。休みは一日おきでは使わないが、形としては受け付ける。
+function isValidWeeklyEntry(entry) {
+  if (!isPlainObject(entry)) return false;
+  if (entry.kind === 'rest') return true;
+  if (entry.kind === 'template') return typeof entry.templateId === 'string';
+  if (entry.kind === 'parts') return Array.isArray(entry.parts) && entry.parts.every((x) => typeof x === 'string');
+  return false;
+}
+
+function lastDoneDateKeyForEntry(entry) {
+  if (!entry) return null;
+  const history = loadHistory(); // 新しい順
+  const match = history.find((s) => {
+    if (entry.kind === 'template') return s.templateId === entry.templateId;
+    if (entry.kind === 'parts') return (s.exercises || []).some((ex) => ex.type !== 'cardio');
+    return false;
+  });
+  // 終えた日(finishedAt、2026-10-06〜)で数える。開始日(date)だと23:55に始めて0:20に終えた記録が前日扱いになるため。
+  // finishedAtが無い古い記録は開始日で代用する。
+  return match ? localDateKey(match.finishedAt || match.date) : null;
 }
 
 // プリセットを削除する。削除したものが使用中(active)だった場合は、残りの先頭を新しい使用中にする
@@ -448,7 +528,10 @@ const BACKUP_VALIDATORS = {
   history: validateHistoryValue,
   favorites: (v) => Array.isArray(v) && v.every((id) => typeof id === 'string'),
   customTemplates: (v) => Array.isArray(v) && v.every((t) => isPlainObject(t) && typeof t.id === 'string'),
-  weeklyPlans: (v) => Array.isArray(v) && v.every((p) => isPlainObject(p) && typeof p.id === 'string' && Array.isArray(p.days)),
+  weeklyPlans: (v) => Array.isArray(v) && v.every((p) => isPlainObject(p) && typeof p.id === 'string' && Array.isArray(p.days)
+    // 2026-10-06追加の「一日おき」。無い(古いバックアップ)のは可、あれば形まで確かめる(壊れた形だと起動時の描画で落ちるため)
+    && (p.schedule == null || p.schedule === 'weekly' || p.schedule === 'alternate')
+    && (p.alternate == null || isValidWeeklyEntry(p.alternate))),
   activeWeeklyPlanId: null, // 生の文字列(JSONではない)
   streak: (v) => isPlainObject(v),
   theme: null, // 生の文字列。loadThemeが想定外の値を既定に戻すので検証不要
@@ -540,11 +623,12 @@ function applyBackupData(data) {
 if (typeof module !== 'undefined') {
   module.exports = {
     loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, refreshTrainingStreak,
-    clearHistory, deleteSession, deleteSessionsByDateKey, findLastPerformance,
+    clearHistory, deleteSession, deleteSessionsByDateKey, findLastPerformance, recordedExerciseIsTimed,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
-    deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId,
+    deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields, lastDoneDateKeyForEntry,
+    loadCircuitLast, saveCircuitLast,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
     loadTheme, saveTheme,
     loadBodyWeightLog, saveBodyWeightEntry, deleteBodyWeightEntry, bodyWeightEntriesSorted,

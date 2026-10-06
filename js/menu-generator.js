@@ -307,9 +307,55 @@ function buildWarmupAndCooldown(chosen, painAreas = [], minutes = null) {
   return { warmup, cooldown };
 }
 
-// 「自分で作る」モード用。目的/レベルの選択がないため、セット数・レップ範囲は中級者・筋肥大相当の
-// 一般的な値で固定し、休憩時間だけユーザー指定(デフォルト90秒)を使う。
-function buildCustomSetPlan(exercise, restSec) {
+// 「自分で作る」の種目ごとの目標(2026-10-06〜、それ以前はセット数3・8〜12回の固定)。
+// timed: 時間で測るか(回数ならfalse)。種目データのholdBasedが既定だが、編集画面で切り替えられる
+// (ハーフバーピーを「45秒」でも「20回」でも組めるように)。reps/secは切り替えても換算せず、
+// それぞれの値を別々に覚えておく(「20回」が「20秒」に化けないように)。sets: 「種目ごと」のセット数。
+// サーキットでは使わない(各種目1セットずつ×周回数)。
+const CUSTOM_REPS_MIN = 1;
+const CUSTOM_REPS_MAX = 100;
+const CUSTOM_SEC_MIN = 5;
+const CUSTOM_SEC_MAX = 300;
+const CUSTOM_SEC_STEP = 5;
+const CUSTOM_SETS_MIN = 1;
+const CUSTOM_SETS_MAX = 10;
+const CUSTOM_DEFAULT_SETS = 3;
+const CUSTOM_DEFAULT_REPS = 10;
+
+function defaultCustomTarget(exercise) {
+  const holdSec = typeof loadHoldTargetSec === 'function' ? loadHoldTargetSec(exercise.id) : 30;
+  return {
+    timed: !!exercise.holdBased,
+    reps: CUSTOM_DEFAULT_REPS,
+    // 秒は5秒刻みで選ぶので、保存済みの目標秒数(1秒単位)も5秒単位に揃える
+    sec: Math.min(CUSTOM_SEC_MAX, Math.max(CUSTOM_SEC_MIN, Math.round(holdSec / CUSTOM_SEC_STEP) * CUSTOM_SEC_STEP)),
+    sets: CUSTOM_DEFAULT_SETS,
+  };
+}
+
+// 保存データなど外から来た目標を、範囲内のきれいな値に直す(足りない項目は既定で補う)。
+function normalizeCustomTarget(exercise, target) {
+  const base = defaultCustomTarget(exercise);
+  const t = target && typeof target === 'object' ? target : {};
+  const clampInt = (v, min, max, fallback) => {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+  };
+  return {
+    timed: typeof t.timed === 'boolean' ? t.timed : base.timed,
+    reps: clampInt(t.reps, CUSTOM_REPS_MIN, CUSTOM_REPS_MAX, base.reps),
+    sec: Math.round(clampInt(t.sec, CUSTOM_SEC_MIN, CUSTOM_SEC_MAX, base.sec) / CUSTOM_SEC_STEP) * CUSTOM_SEC_STEP,
+    sets: clampInt(t.sets, CUSTOM_SETS_MIN, CUSTOM_SETS_MAX, base.sets),
+  };
+}
+
+// 「自分で作る」モード用。目的/レベルの選択がないため、セット数・回数(または秒数)は本人が種目ごとに
+// 決めた目標(target、normalizeCustomTarget参照)を使い、休憩時間も種目ごとの指定(デフォルト90秒)を使う。
+// format==='circuit'(サーキット)では各種目1セット・種目間の休憩なし・ウォームアップセットなしにし、
+// 周回数は開始時に選ぶ(js/workout-log.jsのcreateSessionFromMenuがセット数＝周回数に展開する)。
+function buildCustomSetPlan(exercise, restSec, target, format) {
+  const t = normalizeCustomTarget(exercise, target);
+  const isCircuit = format === 'circuit';
   return {
     exerciseId: exercise.id,
     name: exercise.name,
@@ -318,15 +364,19 @@ function buildCustomSetPlan(exercise, restSec) {
     pattern: exercise.pattern,
     minLevel: exercise.minLevel || null,
     unilateral: exercise.unilateral,
-    sets: 3,
-    repsMin: 8,
-    repsMax: 12,
-    restSec,
-    warmupSets: exercise.category === 'compound' ? 1 : 0,
+    sets: isCircuit ? 1 : t.sets,
+    // 目標は範囲ではなく1つの値(「20回」)。重量種目の提案(buildSuggestion)が使うrepsMaxも同じ値にしておく
+    repsMin: t.reps,
+    repsMax: t.reps,
+    targetSec: t.timed ? t.sec : null,
+    fixedTarget: true,
+    restSec: isCircuit ? 0 : restSec,
+    // 時間で測る種目(ハーフバーピー45秒等)に「軽い重量で数回」のウォームアップセットは合わないので付けない
+    warmupSets: !isCircuit && !t.timed && exercise.category === 'compound' ? 1 : 0,
     note: exercise.note || '',
     description: exercise.description || '',
     demoMedia: exercise.demoMedia || null,
-    holdBased: exercise.holdBased || false,
+    holdBased: t.timed,
     equipment: exercise.equipment,
     bodyweightLoadFactor: exercise.bodyweightLoadFactor != null ? exercise.bodyweightLoadFactor : 1,
   };
@@ -357,6 +407,8 @@ function buildCustomCardioPlan(exercise) {
 const SET_WORK_SEC = 40;          // 1セットの動作＋準備
 const HOLD_SET_SETUP_SEC = 15;    // 保持時間系は目標秒数＋姿勢を作る時間
 const EXERCISE_TRANSITION_SEC = 60; // 種目の切り替え(器具の準備・移動)
+const REP_SEC = 2.5;              // 「自分で作る」で回数を決めた種目の1回あたり(50回なら約2分。40秒では収まらないため)
+const CIRCUIT_TRANSITION_SEC = 15; // サーキットの種目の切り替え(休憩なしで次の種目へ)
 const CARDIO_PLANNED_SEC = 600;   // 有酸素はメニュー時点で時間が決まっていないので10分と見なす
 const DYNAMIC_WARMUP_SEC = 40;    // 動的ウォームアップ1つ(「スクワット10回」等)
 const WARMUP_STRETCH_SEC = 20;    // ウォームアップの10秒ストレッチ1つ(左右ある分を含む)
@@ -372,15 +424,33 @@ function estimateMenuSeconds(menu) {
     + (cooldown.static || []).length * COOLDOWN_STRETCH_SEC
     + (Number(cooldown.generalSec) || COOLDOWN_GENERAL_SEC);
   const warmupSetsOn = typeof loadWarmupSetsEnabled !== 'function' || loadWarmupSetsEnabled();
+  const holdSecOf = (item) => (item.targetSec != null ? item.targetSec
+    : (typeof loadHoldTargetSec === 'function' ? loadHoldTargetSec(item.exerciseId) : 30));
+  // 1セットの動作時間。回数を1つの値で決めた種目(fixedTarget)は回数から見積もり、それ以外は一律SET_WORK_SEC
+  const repsWorkSec = (item) => (item.fixedTarget ? Math.max(SET_WORK_SEC, Math.round(item.repsMin * REP_SEC)) : SET_WORK_SEC);
+  // サーキット: 各種目1セットずつを周回数だけ繰り返す。種目間は休憩なしで次へ進むだけなので、
+  // 切り替えは器具の準備を見込んだ60秒ではなく短め(CIRCUIT_TRANSITION_SEC)に見積もる。
+  if (menu.params && menu.params.format === 'circuit') {
+    const circuit = menu.circuit || {};
+    const rounds = Math.max(1, Number(circuit.rounds) || 1);
+    const roundRestSec = Number(circuit.roundRestSec) || 0;
+    // 有酸素種目は周回に入れず、全周の後に1回だけ行う(記録画面もそう表示する)ので、周回とは別に1回分だけ足す
+    const items = (menu.main || []).filter((item) => item.type !== 'cardio');
+    const cardioCount = (menu.main || []).length - items.length;
+    const oneRoundSec = items.reduce((sum, item, i) => {
+      const workSec = item.holdBased ? holdSecOf(item) + HOLD_SET_SETUP_SEC : repsWorkSec(item);
+      return sum + (item.unilateral ? workSec * 2 : workSec) + (i > 0 ? CIRCUIT_TRANSITION_SEC : 0);
+    }, 0);
+    const roundsSec = items.length > 0 ? rounds * oneRoundSec + Math.max(0, rounds - 1) * roundRestSec : 0;
+    return sec + roundsSec + cardioCount * (CARDIO_PLANNED_SEC + EXERCISE_TRANSITION_SEC);
+  }
   (menu.main || []).forEach((item, i) => {
     if (i > 0) sec += EXERCISE_TRANSITION_SEC;
     if (item.type === 'cardio') {
       sec += CARDIO_PLANNED_SEC;
       return;
     }
-    const oneSideSec = item.holdBased
-      ? (typeof loadHoldTargetSec === 'function' ? loadHoldTargetSec(item.exerciseId) : 30) + HOLD_SET_SETUP_SEC
-      : SET_WORK_SEC;
+    const oneSideSec = item.holdBased ? holdSecOf(item) + HOLD_SET_SETUP_SEC : repsWorkSec(item);
     const setSec = item.unilateral ? oneSideSec * 2 : oneSideSec; // 「左右それぞれ」の種目は両側分
     const n = (item.sets || 0) + (warmupSetsOn ? (item.warmupSets || 0) : 0);
     sec += n * setSec + Math.max(0, n - 1) * (item.restSec || 0);
@@ -460,7 +530,8 @@ function fitMenuToTime(chosen, { level, goal, minutes, painAreas, parts = [] }) 
 }
 
 function generateMenu({ parts, equipment, minutes, level, goal, painAreas = [] }) {
-  let pool = filterByEquipment(EXERCISES, equipment);
+  // autoExclude: 部位別の選定に向かない種目(ハーフバーピー等の全身コンディショニング)は自動生成の候補にしない
+  let pool = filterByEquipment(EXERCISES.filter((ex) => !ex.autoExclude), equipment);
   pool = filterByPainAreas(pool, painAreas);
   pool = filterByLevel(pool, level);
   const exerciseCount = exerciseCountForTime(minutes);
@@ -514,6 +585,7 @@ function proposeWeeklySplit(trainingDaysPerWeek) {
 if (typeof module !== 'undefined') {
   module.exports = {
     generateMenu, buildWarmupAndCooldown, buildCustomSetPlan, buildCustomCardioPlan, proposeWeeklySplit,
+    defaultCustomTarget, normalizeCustomTarget,
     sortByTrainingOrder, estimateMenuSeconds, fitMenuToTime,
   };
 }

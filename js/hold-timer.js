@@ -46,9 +46,15 @@ function toggleHoldTimer(button) {
   stopHoldTimer();
 
   ensureHoldTimerAudioCtx();
+  // 「自分で作る」で秒数を決めた種目(ハーフバーピー45秒等、fixedTarget)は、目標の秒数に達したら
+  // 音で知らせて自動で止める(「45秒やれたか」を記録する種目なので、それ以上数え続けない。2026-10-06)。
+  // それ以外(プランクの最長記録を伸ばす等)は従来通り「中断」を押すまで数え続ける。
+  const exercise = typeof currentSession !== 'undefined' && currentSession ? currentSession.exercises[exIndex] : null;
+  const targetSec = exercise && exercise.fixedTarget && exercise.holdTargetSec ? Number(exercise.holdTargetSec) : null;
   activeHoldTimer = {
     exIndex,
     setIndex,
+    targetSec,
     phase: 'prep',
     prepEndAt: Date.now() + HOLD_TIMER_PREP_SECONDS * 1000,
     prepLastBeepSec: null,
@@ -104,8 +110,10 @@ function updateHoldTimerPrep() {
 
 function updateHoldTimerMeasuring() {
   if (!activeHoldTimer || activeHoldTimer.phase !== 'measuring') return;
-  const { exIndex, setIndex, startedAt } = activeHoldTimer;
-  const elapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+  const { exIndex, setIndex, startedAt, targetSec } = activeHoldTimer;
+  const rawElapsedSec = Math.floor((Date.now() - startedAt) / 1000);
+  const reachedTarget = targetSec != null && rawElapsedSec >= targetSec;
+  const elapsedSec = reachedTarget ? targetSec : rawElapsedSec;
   const labelEl = document.getElementById('hold-timer-label');
   const valueEl = document.getElementById('hold-timer-value');
   const button = document.querySelector(`[data-hold-timer="${exIndex}:${setIndex}"]`);
@@ -118,7 +126,15 @@ function updateHoldTimerMeasuring() {
     // rangeはstep刻みに丸められるため、表示も実際にスライダーへ反映された値に合わせる
     displaySec = Number(slider.value);
   }
-  if (labelEl) labelEl.textContent = '計測中';
+  if (reachedTarget) {
+    // 目標に到達: 終了の合図(2回鳴らす)をしてから止める。値は目標秒数のまま残る。
+    if (navigator.vibrate) navigator.vibrate([150, 80, 150]);
+    playHoldTimerBeep(1046, 0.18);
+    setTimeout(() => playHoldTimerBeep(1318, 0.3), 220);
+    stopHoldTimer();
+    return;
+  }
+  if (labelEl) labelEl.textContent = targetSec != null ? `計測中（目標${targetSec}秒・残り${targetSec - displaySec}秒）` : '計測中';
   if (valueEl) valueEl.textContent = formatDuration(displaySec);
   if (button) button.textContent = `■ ${formatDuration(displaySec)}`;
 }

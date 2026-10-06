@@ -201,6 +201,15 @@ function bodyWeightHasStoredValue() {
 // 「自分で作る」モードの状態
 let customExercises = []; // EXERCISESの生データを追加順に並べたもの
 let customRestSec = {}; // exerciseId -> 休憩秒数
+// exerciseId -> { timed, reps, sec, sets }（js/menu-generator.jsのnormalizeCustomTarget）。2026-10-06〜
+let customTargets = {};
+// やり方: 'sets'(種目ごと、従来通り) | 'circuit'(全種目を1セットずつ×周回数)
+let customFormat = 'sets';
+// 最後に読み込んだ(または保存した)組み合わせのid。種目構成がその組み合わせのままなら、記録に
+// templateIdとして残す(週間プランの「一日おき」が前回やった日を探すのに使う)。
+let customTemplateId = null;
+// 回数・セット数の編集画面で今編集している種目のid
+let customTargetEditingId = null;
 let customWarmup = { general: '', dynamic: [], staticStretch: [] };
 let customCooldown = { static: [], general: '' };
 
@@ -615,7 +624,46 @@ function numberWheelUpdateActive(track) {
   track.querySelectorAll('.number-wheel-item').forEach((el) => {
     el.classList.toggle('active', el === nearest);
   });
+  if (nearest) {
+    // 読み上げ機能(VoiceOver等)に今の値を伝える(js/ui.jsのnumberWheelTrackHtmlでrole=slider)
+    track.setAttribute('aria-valuenow', nearest.dataset.n);
+    track.setAttribute('aria-valuetext', `${nearest.dataset.n}${track.dataset.unit || ''}`);
+  }
   return nearest;
+}
+
+// ホイールの値を、指で流さずに直接変える(キーボードの←→・読み上げ機能の上下スワイプ・よく使う値のボタン)。
+// 見た目はスクロールで動かしつつ、値は待たずにその場で<input>へ入れる(スクロールが止まった後の確定処理
+// numberWheelCommitも同じ値を見つけるので二重にはならない)。
+// ボタン等で直接入れた値(スクロールで追いかけている途中の目標)。これがある間は、スクロールが止まった後の
+// 確定処理(numberWheelCommit)は途中の位置を読まず、この値に向けて動かし直すだけにする(途中の位置で
+// 上書きしないため。2026-10-06 Codexレビュー指摘)。指で触り直したら消す。
+const numberWheelPendingValues = new WeakMap();
+
+function numberWheelSetValue(track, value) {
+  const input = numberWheelHiddenInput(track);
+  if (!input || input.disabled) return;
+  clearTimeout(numberWheelScrollTimers.get(track));
+  const min = Number(input.min);
+  const max = Number(input.max);
+  const step = Number(input.step) || 1;
+  const clamped = Math.min(max, Math.max(min, Math.round((Number(value) - min) / step) * step + min));
+  const v = String(Math.round(clamped * 10) / 10);
+  numberWheelPendingValues.set(track, v);
+  numberWheelScrollToValue(track, v, true);
+  if (String(input.value) !== v) {
+    input.value = v;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  track.setAttribute('aria-valuenow', v);
+  track.setAttribute('aria-valuetext', `${v}${track.dataset.unit || ''}`);
+}
+
+function numberWheelNudge(track, direction) {
+  const input = numberWheelHiddenInput(track);
+  if (!input) return;
+  numberWheelSetValue(track, Number(input.value) + direction * (Number(input.step) || 1));
 }
 
 // ホイール(横スクロールのトラック)の中だけを横に動かして、その数字を中央に合わせる。
@@ -636,6 +684,13 @@ function numberWheelScrollToValue(track, value, smooth) {
 // CSSのscroll-snapだけでもほぼ中央に来ているはずだが、値を確実に反映するため
 // JS側でも中央合わせし直してから<input>へ反映する。
 function numberWheelCommit(track) {
+  const pending = numberWheelPendingValues.get(track);
+  if (pending != null) {
+    const nearestNow = numberWheelUpdateActive(track);
+    if (nearestNow && nearestNow.dataset.n === pending) numberWheelPendingValues.delete(track);
+    else numberWheelScrollToValue(track, pending, true);
+    return;
+  }
   numberWheelScrollToValue(track, numberWheelNearestItem(track)?.dataset.n, true);
   const nearest = numberWheelUpdateActive(track);
   if (!nearest) return;
@@ -646,6 +701,21 @@ function numberWheelCommit(track) {
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }
+}
+
+// 画面を閉じる・描き直す直前に呼ぶ。スクロールが止まるのを待っている(120ms)途中の選択を、その場で確定させる
+// (流した直後に「完了」を押すと前の値のままになるため。2026-10-06 Codexレビュー指摘)。
+function flushNumberWheels(container) {
+  container.querySelectorAll('.number-wheel-track').forEach((track) => {
+    clearTimeout(numberWheelScrollTimers.get(track));
+    if (numberWheelPendingValues.has(track)) return; // ボタン等で入れた値は既に<input>に入っている
+    const nearest = numberWheelUpdateActive(track);
+    const input = numberWheelHiddenInput(track);
+    if (!nearest || !input || input.disabled || String(input.value) === String(nearest.dataset.n)) return;
+    input.value = nearest.dataset.n;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
 }
 
 // レイアウト(要素の幅)は挿入した時点で同期的に取得できるため、requestAnimationFrameで
@@ -691,9 +761,38 @@ function wireNumberWheels() {
   // 中央以外の見えている数字をタップした時、その数字まで直接スクロールする
   // (ドラッグ操作時はブラウザが自動でclickを抑制するため、タップ判定と競合しない)。
   document.addEventListener('click', (e) => {
+    // よく使う値のボタン(「20回」「45秒」等、js/ui.jsのwheelPresetButtonsHtml)。同じ.slider-field内の
+    // ホイールをその値まで動かすだけの近道で、別の選択状態は持たない。
+    const preset = e.target.closest('[data-wheel-preset]');
+    if (preset) {
+      const track = preset.closest('.slider-field')?.querySelector('.number-wheel-track');
+      if (track) numberWheelSetValue(track, preset.dataset.wheelPreset);
+      return;
+    }
     const item = e.target.closest('.number-wheel-item');
     if (!item) return;
-    numberWheelScrollToValue(item.closest('.number-wheel-track'), item.dataset.n, true);
+    // 値はその場で入れる(スクロールが止まるのを待つと、タップ直後に「完了」を押した時に反映されないため)
+    numberWheelSetValue(item.closest('.number-wheel-track'), item.dataset.n);
+  });
+
+  // 指で触り直したら、ボタン等で入れた値を追いかけるのをやめ、指で選んだ位置を優先する
+  document.addEventListener('touchstart', (e) => {
+    const track = e.target.closest?.('.number-wheel-track');
+    if (track) numberWheelPendingValues.delete(track);
+  }, { passive: true });
+
+  // キーボードの←→↑↓で1目盛りずつ動かす。iPhoneのVoiceOverの上下スワイプ(role=sliderの値の増減)が
+  // ここに届くかは実機で未確認(2026-10-06)。
+  document.addEventListener('keydown', (e) => {
+    const track = e.target.closest?.('.number-wheel-track');
+    if (!track) return;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      numberWheelNudge(track, 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      numberWheelNudge(track, -1);
+    }
   });
 
   // PC向け: マウスのクリック+ドラッグでもスクロールできるようにする。タッチ操作は
@@ -703,6 +802,7 @@ function wireNumberWheels() {
     if (e.pointerType !== 'mouse') return;
     const track = e.target.closest('.number-wheel-track');
     if (!track || numberWheelHiddenInput(track)?.disabled) return;
+    numberWheelPendingValues.delete(track);
     numberWheelDragTrack = track;
     numberWheelDragStartX = e.clientX;
     numberWheelDragStartScrollLeft = track.scrollLeft;
@@ -738,21 +838,62 @@ function recomputeCustomWarmupCooldown() {
   renderCustomWuCd(customWarmup, customCooldown);
 }
 
-function renderCustomScreen() {
-  recomputeCustomWarmupCooldown();
-  renderCustomExerciseList(customExercises, customRestSec);
-  renderCustomTemplateList(loadCustomTemplates());
-  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0;
+const CUSTOM_FORMAT_DESCRIPTIONS = {
+  sets: '1つの種目を決めたセット数やってから、次の種目へ進みます。',
+  circuit: '全種目を上から1セットずつ休まず続け、それを何周かします。周回数は始める前に選びます。',
+};
+
+function renderCustomExerciseListNow() {
+  renderCustomExerciseList(customExercises, customRestSec, customTargets, customFormat);
   if (customReorderController) customReorderController.reapplyAfterRender();
 }
 
-// 保存済みの組み合わせ(種目構成・休憩時間)を「自分で作る」画面に反映する。
-// 種目データが更新されて削除されたIDは無視する。
+function renderCustomFormatToggle() {
+  document.querySelectorAll('#custom-format-toggle [data-custom-format]').forEach((btn) => {
+    btn.setAttribute('aria-checked', String(btn.dataset.customFormat === customFormat));
+  });
+  document.getElementById('custom-format-desc').textContent = CUSTOM_FORMAT_DESCRIPTIONS[customFormat];
+}
+
+function renderCustomScreen() {
+  recomputeCustomWarmupCooldown();
+  renderCustomFormatToggle();
+  renderCustomExerciseListNow();
+  renderCustomTemplateList(loadCustomTemplates());
+  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0;
+}
+
+// 種目ごとの目標(回数・セット数等)。まだ決めていない種目は既定値(3セット×10回、時間で測る種目は保存済みの目標秒数)。
+function customTargetFor(ex) {
+  return normalizeCustomTarget(ex, customTargets[ex.id]);
+}
+
+// 保存済みの組み合わせ(種目構成・休憩時間・やり方・種目ごとの目標)を「自分で作る」画面に反映する。
+// 種目データが更新されて削除されたIDは無視する。format/targetsが無い古い組み合わせは
+// 「種目ごと」・既定の目標で補う(2026-10-06より前に保存したもの)。
 function applyCustomTemplate(template) {
   customExercises = template.exerciseIds.map((id) => findExerciseById(id)).filter(Boolean);
   customRestSec = { ...template.restSec };
+  customTargets = { ...(template.targets || {}) };
+  customFormat = template.format === 'circuit' ? 'circuit' : 'sets';
+  customTemplateId = template.id;
   document.getElementById('custom-error').textContent = '';
   renderCustomScreen();
+}
+
+// 今の種目構成が、最後に読み込んだ組み合わせと同じ種目の集まりならそのidを返す(記録のtemplateId用)。
+// 回数・並び順を少し変えただけなら同じ組み合わせをやったものとみなし、種目を足し引きしたら別物とする。
+function templateIdIfSameExercises(templateId, exerciseIds) {
+  if (!templateId) return null;
+  const template = loadCustomTemplates().find((t) => t.id === templateId);
+  if (!template) return null;
+  const a = [...template.exerciseIds].sort().join(',');
+  const b = [...exerciseIds].sort().join(',');
+  return a === b ? template.id : null;
+}
+
+function currentCustomTemplateIdForRecord() {
+  return templateIdIfSameExercises(customTemplateId, customExercises.map((ex) => ex.id));
 }
 
 function openSaveTemplateModal() {
@@ -773,13 +914,20 @@ function confirmSaveTemplate() {
     document.getElementById('save-template-error').textContent = '名前を入力してください';
     return;
   }
+  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   saveCustomTemplate({
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id,
     name,
     createdAt: new Date().toISOString(),
     exerciseIds: customExercises.map((ex) => ex.id),
     restSec: { ...customRestSec },
+    format: customFormat,
+    targets: Object.fromEntries(customExercises
+      .filter((ex) => ex.type !== 'cardio')
+      .map((ex) => [ex.id, customTargetFor(ex)])),
   });
+  // 保存した直後にそのまま始めた記録も、この組み合わせをやったものとして数える
+  customTemplateId = id;
   closeSaveTemplateModal();
   renderCustomTemplateList(loadCustomTemplates());
 }
@@ -802,8 +950,101 @@ function removeCustomExercise(id) {
 function reorderCustomExercises(keyOrder) {
   const byId = Object.fromEntries(customExercises.map((ex) => [ex.id, ex]));
   customExercises = keyOrder.map((key) => byId[key]).filter(Boolean);
-  renderCustomExerciseList(customExercises, customRestSec);
-  if (customReorderController) customReorderController.reapplyAfterRender();
+  renderCustomExerciseListNow();
+}
+
+// ===== 回数・セット数の編集画面（下から出るシート、2026-10-06〜） =====
+// 描画はjs/ui.jsのrenderCustomTargetSheet。値は操作したその場でcustomTargets/customRestSecに反映し、
+// 「完了」(または背景のタップ)で閉じて一覧を描き直す。
+
+function renderCustomTargetSheetNow() {
+  const ex = customExercises.find((item) => item.id === customTargetEditingId);
+  if (!ex) return;
+  const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
+  renderCustomTargetSheet(ex, customTargetFor(ex), restSec, customFormat);
+  // シートは#mainの外にあり、ホイールの自動初期化(MutationObserver)の対象外なので、ここで位置合わせする
+  document.querySelectorAll('#custom-target-sheet .number-wheel-track').forEach(initNumberWheel);
+}
+
+function openCustomTargetSheet(exerciseId) {
+  customTargetEditingId = exerciseId;
+  // 表示してから描く(非表示のままだと要素の幅が0で、ホイールの初期位置を合わせられない)
+  document.getElementById('custom-target-sheet').classList.add('open');
+  lockBodyScroll();
+  renderCustomTargetSheetNow();
+}
+
+function closeCustomTargetSheet() {
+  const sheet = document.getElementById('custom-target-sheet');
+  if (!sheet.classList.contains('open')) return;
+  flushNumberWheels(sheet);
+  sheet.classList.remove('open');
+  unlockBodyScroll();
+  customTargetEditingId = null;
+  renderCustomExerciseListNow();
+}
+
+function updateCustomTarget(changes) {
+  const ex = customExercises.find((item) => item.id === customTargetEditingId);
+  if (!ex) return null;
+  customTargets[ex.id] = normalizeCustomTarget(ex, { ...customTargetFor(ex), ...changes });
+  return customTargets[ex.id];
+}
+
+// よく使う値のボタンのうち、今の値と同じものに印を付ける
+function refreshWheelPresetMarks(field) {
+  const input = field.querySelector('input[type="range"]');
+  if (!input) return;
+  field.querySelectorAll('[data-wheel-preset]').forEach((btn) => {
+    btn.classList.toggle('is-current', Number(btn.dataset.wheelPreset) === Number(input.value));
+  });
+}
+
+function wireCustomTargetSheet() {
+  const sheet = document.getElementById('custom-target-sheet');
+  sheet.addEventListener('click', (e) => {
+    if (e.target.closest('[data-custom-target-close]')) {
+      closeCustomTargetSheet();
+      return;
+    }
+    const modeBtn = e.target.closest('[data-custom-target-mode]');
+    const setsBtnForFlush = e.target.closest('[data-custom-target-sets]');
+    // 描き直す前に、流している途中のホイールの値を確定させる(描き直すとホイールごと作り直されるため)
+    if (modeBtn || setsBtnForFlush) flushNumberWheels(sheet);
+    if (modeBtn) {
+      updateCustomTarget({ timed: modeBtn.dataset.customTargetMode === 'time' });
+      renderCustomTargetSheetNow();
+      return;
+    }
+    const setsBtn = e.target.closest('[data-custom-target-sets]');
+    if (setsBtn) {
+      const value = setsBtn.dataset.customTargetSets;
+      // 「6〜」はまず6にして、出てきたホイールで7以上を選べるようにする
+      const current = customTargetFor(customExercises.find((item) => item.id === customTargetEditingId)).sets;
+      updateCustomTarget({ sets: value === 'more' ? Math.max(6, current) : Number(value) });
+      renderCustomTargetSheetNow();
+    }
+  });
+  sheet.addEventListener('input', (e) => {
+    const input = e.target.closest('[data-custom-target-field]');
+    if (!input) return;
+    const field = input.dataset.customTargetField;
+    const value = Number(input.value);
+    if (field === 'rest') {
+      if (customTargetEditingId) customRestSec[customTargetEditingId] = value;
+    } else if (field === 'sets') {
+      updateCustomTarget({ sets: value });
+      const moreChip = sheet.querySelector('[data-custom-target-sets="more"]');
+      if (moreChip) moreChip.textContent = String(value);
+    } else {
+      const ex = customExercises.find((item) => item.id === customTargetEditingId);
+      if (ex) updateCustomTarget(customTargetFor(ex).timed ? { sec: value } : { reps: value });
+    }
+    const wrap = input.closest('.slider-field');
+    const numEl = wrap && wrap.querySelector('[data-sheet-value-num]');
+    if (numEl) numEl.textContent = String(value);
+    if (wrap) refreshWheelPresetMarks(wrap);
+  });
 }
 
 function wireCustomScreen() {
@@ -816,12 +1057,21 @@ function wireCustomScreen() {
     onRemove: removeCustomExercise,
   });
 
-  document.getElementById('custom-exercise-list').addEventListener('input', (e) => {
-    const slider = e.target.closest('[data-custom-rest]');
-    if (!slider) return;
-    customRestSec[slider.dataset.customRest] = Number(slider.value);
-    slider.parentElement.querySelector('.slider-value').textContent = `${slider.value} 秒`;
+  // 各種目の「3セット × 20回 変更 ›」をタップすると、回数・セット数の編集画面を開く
+  document.getElementById('custom-exercise-list').addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-custom-target-edit]');
+    if (editBtn) openCustomTargetSheet(editBtn.dataset.customTargetEdit);
   });
+
+  document.getElementById('custom-format-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-custom-format]');
+    if (!btn || btn.dataset.customFormat === customFormat) return;
+    customFormat = btn.dataset.customFormat;
+    renderCustomFormatToggle();
+    renderCustomExerciseListNow();
+  });
+
+  wireCustomTargetSheet();
 
   document.getElementById('custom-wu-cd').addEventListener('click', (e) => {
     // ⓘ(data-info-toggle)は#mainの共通ハンドラで処理されるのでここでは扱わない
@@ -877,13 +1127,15 @@ function wireCustomScreen() {
     errorEl.textContent = '';
     const main = customExercises.map((ex) => (ex.type === 'cardio'
       ? buildCustomCardioPlan(ex)
-      : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90)));
+      : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90, customTargetFor(ex), customFormat)));
     currentMenu = {
       warmup: customWarmup,
       cooldown: customCooldown,
       main,
       generatedAt: new Date().toISOString(),
-      params: { custom: true },
+      params: { custom: true, format: customFormat, templateId: currentCustomTemplateIdForRecord() },
+      // サーキットの周回数・1周ごとの休憩は前回選んだ値から始め、メニュー確認画面で選び直せる
+      circuit: customFormat === 'circuit' ? loadCircuitLast() : null,
       userReordered: false,
     };
     renderMenuScreen();
@@ -1046,7 +1298,7 @@ function toggleMenuExercise(id) {
     const plan = ex.type === 'cardio'
       ? buildCustomCardioPlan(ex)
       : currentMenu.params.custom
-        ? buildCustomSetPlan(ex, 90)
+        ? buildCustomSetPlan(ex, 90, null, currentMenu.params.format)
         : buildSetPlan(ex, currentMenu.params.level, currentMenu.params.goal);
     currentMenu.main.push(plan);
     // 「要望から作る」のメニューは、追加した種目もエクササイズの配列原則(大筋群→小筋群、
@@ -1074,6 +1326,16 @@ function wireMenuScreen() {
       // 押した後は「手動並べ替え済み」状態を解除し、次に種目を追加した時も自動で並ぶようにする。
       currentMenu.main = sortByTrainingOrder(currentMenu.main);
       currentMenu.userReordered = false;
+      renderMenuScreen();
+      return;
+    }
+    // サーキットの「今日の周回数」「1周ごとの休憩」。選んだ値は次回の初期値として覚えておく
+    const roundsBtn = e.target.closest('[data-circuit-rounds]');
+    const restBtn = e.target.closest('[data-circuit-rest]');
+    if ((roundsBtn || restBtn) && currentMenu.circuit) {
+      if (roundsBtn) currentMenu.circuit.rounds = Number(roundsBtn.dataset.circuitRounds);
+      if (restBtn) currentMenu.circuit.roundRestSec = Number(restBtn.dataset.circuitRest);
+      saveCircuitLast(currentMenu.circuit);
       renderMenuScreen();
     }
   });
@@ -1104,7 +1366,32 @@ function renderWeeklyEditorScreen() {
   document.getElementById('weekly-empty-state').hidden = hasPlan;
   document.getElementById('weekly-editor-content').hidden = !hasPlan;
   document.getElementById('weekly-editor-plan-name').textContent = hasPlan ? `「${plan.name}」を編集中` : '';
-  if (hasPlan) renderWeeklyPlan(plan.days, loadCustomTemplates());
+  if (!hasPlan) return;
+  const templates = loadCustomTemplates();
+  const alternate = isAlternatePlan(plan);
+  document.querySelectorAll('#weekly-schedule-toggle [data-weekly-schedule]').forEach((btn) => {
+    btn.setAttribute('aria-checked', String(btn.dataset.weeklySchedule === (alternate ? 'alternate' : 'weekly')));
+  });
+  document.getElementById('weekly-weekly-content').hidden = alternate;
+  document.getElementById('weekly-alternate-content').hidden = !alternate;
+  if (alternate) {
+    document.getElementById('weekly-alternate-content-text').textContent = plan.alternate
+      ? weeklyDayContentText(plan.alternate, templates)
+      : 'まだ決めていません';
+    document.getElementById('weekly-alternate-status').textContent = plan.alternate
+      ? alternateStatusText(alternatePlanStatus(plan))
+      : '「変更」から、一日おきにやる部位か保存した組み合わせを選んでください。';
+  } else {
+    renderWeeklyPlan(plan.days, templates);
+  }
+}
+
+// 曜日で決める／一日おき の切り替え。曜日ごとの割り当て(days)は消さずに残すので、戻せば元通り。
+function setEditingWeeklySchedule(schedule) {
+  const plan = getEditingWeeklyPlan();
+  if (!plan) return;
+  updateWeeklyPlanFields(plan.id, { schedule });
+  renderWeeklyEditorScreen();
 }
 
 // 指定したプリセットを編集対象にして週間プラン画面を表示する。
@@ -1146,10 +1433,15 @@ function openWeeklyDayModal(dayIndex) {
   const plan = getEditingWeeklyPlan();
   if (!plan) return;
   weeklyDayEditIndex = dayIndex;
-  const day = plan.days[dayIndex] || { kind: 'rest' };
+  // dayIndex==='alt'は「一日おき」のやる日の内容(plan.alternate)。休みは選べない(休みの日は自動で決まるため)。
+  const isAlt = dayIndex === 'alt';
+  const day = isAlt
+    ? (plan.alternate || { kind: loadCustomTemplates().length > 0 ? 'template' : 'parts' })
+    : (plan.days[dayIndex] || { kind: 'rest' });
   const kind = day.kind || 'rest';
 
-  document.getElementById('weekly-day-modal-title').textContent = `${WEEKDAY_LABELS[dayIndex]}曜日の内容`;
+  document.getElementById('weekly-day-modal-title').textContent = isAlt ? '一日おきにやる内容' : `${WEEKDAY_LABELS[dayIndex]}曜日の内容`;
+  document.getElementById('weekly-day-kind-rest').hidden = isAlt;
   document.getElementById('weekly-day-error').textContent = '';
 
   document.querySelectorAll('#weekly-day-kind-group input').forEach((el) => {
@@ -1201,12 +1493,20 @@ function confirmWeeklyDaySave() {
     }
     entry = { kind: 'template', templateId: select.value };
   } else {
+    if (weeklyDayEditIndex === 'alt') {
+      errorEl.textContent = '部位か保存した組み合わせを選んでください';
+      return;
+    }
     entry = { kind: 'rest' };
   }
 
   errorEl.textContent = '';
-  plan.days[weeklyDayEditIndex] = entry;
-  updateWeeklyPlanDays(plan.id, plan.days);
+  if (weeklyDayEditIndex === 'alt') {
+    updateWeeklyPlanFields(plan.id, { alternate: entry });
+  } else {
+    plan.days[weeklyDayEditIndex] = entry;
+    updateWeeklyPlanDays(plan.id, plan.days);
+  }
   closeWeeklyDayModal();
   renderWeeklyEditorScreen();
 }
@@ -1228,6 +1528,12 @@ function wireWeeklyScreen() {
     const btn = e.target.closest('[data-weekly-day-edit]');
     if (btn) openWeeklyDayModal(Number(btn.dataset.weeklyDayEdit));
   });
+
+  document.getElementById('weekly-schedule-toggle').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-weekly-schedule]');
+    if (btn) setEditingWeeklySchedule(btn.dataset.weeklySchedule);
+  });
+  document.getElementById('weekly-alternate-edit-btn').addEventListener('click', () => openWeeklyDayModal('alt'));
 
   document.getElementById('weekly-day-kind-group').addEventListener('change', (e) => {
     if (e.target.name === 'weekly-day-kind') updateWeeklyDayModalVisibility(e.target.value);
@@ -1279,7 +1585,7 @@ function renderModeWeeklyPlanSection() {
 function startTodayFromActivePlan() {
   const active = getActiveWeeklyPlan();
   if (!active) return;
-  const entry = active.days[todayWeekdayIndex()];
+  const entry = isAlternatePlan(active) ? active.alternate : active.days[todayWeekdayIndex()];
   if (!entry) return;
 
   if (entry.kind === 'template') {
@@ -1523,7 +1829,10 @@ function discardActiveWorkoutAndStart() {
 function startNewWorkout() {
   const finishError = document.getElementById('finish-workout-error');
   if (finishError) finishError.hidden = true; // 前の記録で保存に失敗した時の表示を持ち越さない
-  currentSession = createSessionFromMenu(currentMenu, getBodyWeightKg());
+  // 確認画面で種目を足し引きした後でも「その組み合わせをやった」と数えないよう、開始する時点の種目構成で
+  // 組み合わせと同じか確かめ直す(週間プランの「一日おき」の判定に使うため。2026-10-06 Codexレビュー指摘)。
+  const menuForSession = { ...currentMenu, params: { ...currentMenu.params, templateId: templateIdIfSameExercises(currentMenu.params.templateId, currentMenu.main.map((item) => item.exerciseId)) } };
+  currentSession = createSessionFromMenu(menuForSession, getBodyWeightKg());
   renderLog(currentSession);
   updateFinishButtonState();
   showScreen('log');
@@ -1648,6 +1957,22 @@ function handleCardioLogInput(e) {
   persistActiveSessionSnapshot();
 }
 
+// サーキットのn周目(＝各種目のn番目のセット)が全部完了したか。有酸素種目は周回に入れていない。
+function circuitRoundComplete(roundIndex) {
+  return currentSession.exercises
+    .filter((ex) => ex.type !== 'cardio')
+    .every((ex) => ex.sets[roundIndex] && ex.sets[roundIndex].done);
+}
+
+function updateCircuitRoundProgress(roundIndex) {
+  const el = document.querySelector(`[data-circuit-round-progress="${roundIndex}"]`);
+  if (!el) return;
+  const strength = currentSession.exercises.filter((ex) => ex.type !== 'cardio');
+  const done = strength.filter((ex) => ex.sets[roundIndex] && ex.sets[roundIndex].done).length;
+  el.textContent = `${done}/${strength.length}`;
+  el.classList.toggle('is-complete', done === strength.length);
+}
+
 function handleLogInput(e) {
   // 記録を終えた後も記録画面のDOM(数字ホイール)は非表示のまま残っており、画面サイズの変化
   // (端末の回転・ビューポート変更)でホイールのscrollが発火して値の確定処理が走ることがある。
@@ -1716,10 +2041,18 @@ function handleLogInput(e) {
         summaryEl.textContent = target.checked && !set.isWarmup ? setRowSummaryText(set, exercise.holdBased, hasWeightField) : '';
       }
     }
+    if (currentSession.circuit) updateCircuitRoundProgress(setIndex);
     if (target.checked) {
       const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
       if (prBadge) prBadge.hidden = !isPersonalRecord(exercise, set);
-      startRestTimer(exercise.restSec);
+      if (currentSession.circuit) {
+        // サーキットは種目の間は休まない。その周の最後の1つを完了した時だけ、次の周の前に休憩を出す
+        // (最後の周の後は休憩不要)。完了の順番が前後しても「その周が全部そろった時」で判定する。
+        const { rounds, roundRestSec } = currentSession.circuit;
+        if (circuitRoundComplete(setIndex) && setIndex < rounds - 1) startRestTimer(roundRestSec);
+      } else {
+        startRestTimer(exercise.restSec);
+      }
     } else {
       const prBadge = document.querySelector(`[data-pr-badge="${exIndex}:${setIndex}"]`);
       if (prBadge) prBadge.hidden = true;
@@ -2175,6 +2508,9 @@ function init() {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') persistActiveSessionSnapshot();
+    // 開いたまま日付が変わった時、週間プランの今日の予定(特に「一日おき」の今日やった/休み)を前日のまま
+    // 出し続けないよう、戻ってきたら描き直す(2026-10-06 Codexレビュー指摘)。
+    if (document.visibilityState === 'visible') renderModeWeeklyPlanSection();
   });
   window.addEventListener('pagehide', () => persistActiveSessionSnapshot());
 

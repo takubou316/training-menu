@@ -167,6 +167,14 @@ const EXERCISES = [
     description: '横向きで肘と足の側面で体を支える。腰が落ちないよう体を一直線に保ってキープする。' },
   { id: 'crunch', name: 'クランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: [],
     description: '仰向けで膝を立て、肩甲骨が浮く程度に上体を丸める。首に力を入れて引っ張らないよう注意する。' },
+  { id: 'reach_up_crunch', name: 'リーチアップクランチ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: [],
+    description: '仰向けで膝を立て、両腕を天井へまっすぐ伸ばす。手で天井に触りにいくように、肩甲骨が浮くところまで上体を丸めて戻す。首ではなくお腹の力で上げる。' },
+  // ハーフバーピーはやり方に流派があるが、ここではジャンプを省いた形(しゃがむ→足を後ろへ→戻して立つ)とした。
+  // 全身を続けて動かすコンディショニング種目で、「要望から作る」の部位別の選定には向かないため
+  // autoExclude:trueで自動生成の候補から外している(「自分で作る」・種目の追加からは選べる)。
+  // 既定は時間で測る(holdBased)。「自分で作る」で回数に切り替えることもできる。
+  { id: 'half_burpee', name: 'ハーフバーピー', primary: ['quads'], secondary: ['chest', 'abs', 'shoulders'], category: 'compound', equipment: ['bodyweight'], pattern: 'squat', unilateral: false, riskAreas: ['手首', '膝'], holdBased: true, autoExclude: true,
+    description: '立った姿勢からしゃがんで両手を床につき、両足を後ろへ伸ばして腕立ての姿勢になる。足を手の近くへ戻して立ち上がる、を繰り返す（ジャンプは省く）。腰が反らないよう体幹を固めたまま行う。' },
   { id: 'leg_raise', name: 'レッグレイズ', primary: ['abs'], secondary: [], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['腰'],
     description: '仰向けで脚を伸ばしたまま上げ下げする。腰が床から浮いて反ってしまう場合は膝を軽く曲げて行う。' },
   { id: 'mountain_climber', name: 'マウンテンクライマー', primary: ['abs'], secondary: ['shoulders'], category: 'isolation', equipment: ['bodyweight'], pattern: 'core', unilateral: false, riskAreas: ['手首', '肩'],

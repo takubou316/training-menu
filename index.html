@@ -144,6 +144,13 @@ try {
 
       <div id="custom-wu-cd"></div>
 
+      <h3>やり方</h3>
+      <div class="segmented" id="custom-format-toggle" role="radiogroup" aria-label="やり方">
+        <button type="button" class="segmented-btn" role="radio" aria-checked="true" data-custom-format="sets">種目ごと</button>
+        <button type="button" class="segmented-btn" role="radio" aria-checked="false" data-custom-format="circuit">サーキット</button>
+      </div>
+      <p class="hint-text custom-format-desc" id="custom-format-desc"></p>
+
       <h3>種目（<span id="custom-exercise-count">0</span>個）</h3>
       <div id="custom-exercise-list" class="reorder-list"></div>
       <button type="button" class="secondary-btn" id="custom-add-exercise-btn">＋ 種目を追加</button>
@@ -269,6 +276,24 @@ try {
       </div>
 
       <div id="weekly-editor-content">
+        <div class="segmented" id="weekly-schedule-toggle" role="radiogroup" aria-label="予定の決め方">
+          <button type="button" class="segmented-btn" role="radio" aria-checked="true" data-weekly-schedule="weekly">曜日で決める</button>
+          <button type="button" class="segmented-btn" role="radio" aria-checked="false" data-weekly-schedule="alternate">一日おき</button>
+        </div>
+
+        <div id="weekly-alternate-content" hidden>
+          <p class="hint-text">やった日の次の日は休み、その次の日にまたやる、の繰り返しです。やり忘れて間が空いた時は、次に開いた日がやる日になります。前回やった日は記録から自動で数えます。</p>
+          <div class="weekly-day-list">
+            <div class="weekly-day-row">
+              <div class="weekly-day-label">やる日</div>
+              <div class="weekly-day-content" id="weekly-alternate-content-text"></div>
+              <button type="button" class="weekly-day-edit-btn" id="weekly-alternate-edit-btn">変更</button>
+            </div>
+          </div>
+          <p class="hint-text" id="weekly-alternate-status"></p>
+        </div>
+
+        <div id="weekly-weekly-content">
         <p class="hint-text weekly-editor-intro">曜日ごとに鍛える部位や組み合わせを決めておけます。ここではまだ予定を組むだけで、記録画面とは連動していません。</p>
 
         <div class="weekly-auto-row">
@@ -289,6 +314,7 @@ try {
         </div>
 
         <div id="weekly-day-list" class="weekly-day-list"></div>
+        </div>
 
         <details class="danger-zone">
           <summary>その他の設定</summary>
@@ -411,6 +437,16 @@ try {
     </div>
   </div>
 
+  <!-- 「自分で作る」の種目ごとの回数・セット数の編集画面(下から出るシート、js/ui.jsのrenderCustomTargetSheet)。 -->
+  <div id="custom-target-sheet" class="demo-modal sheet-modal">
+    <div class="demo-modal-backdrop" data-custom-target-close></div>
+    <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="custom-target-sheet-title">
+      <h3 id="custom-target-sheet-title" class="sheet-title"></h3>
+      <div id="custom-target-sheet-body"></div>
+      <button type="button" class="primary-btn sheet-done-btn" data-custom-target-close>完了</button>
+    </div>
+  </div>
+
   <div id="weekly-plan-name-modal" class="demo-modal">
     <div class="demo-modal-backdrop" data-weekly-plan-name-close></div>
     <div class="demo-modal-content">
@@ -431,7 +467,7 @@ try {
       <h3 id="weekly-day-modal-title" style="margin:0 0 12px;">曜日の内容</h3>
 
       <div class="chip-group weekly-day-kind-group" id="weekly-day-kind-group">
-        <label class="chip"><input type="radio" name="weekly-day-kind" value="rest"> 休み</label>
+        <label class="chip" id="weekly-day-kind-rest"><input type="radio" name="weekly-day-kind" value="rest"> 休み</label>
         <label class="chip"><input type="radio" name="weekly-day-kind" value="parts"> 部位を選ぶ</label>
         <label class="chip"><input type="radio" name="weekly-day-kind" value="template"> 保存した組み合わせ</label>
       </div>

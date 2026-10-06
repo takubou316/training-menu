@@ -28,7 +28,7 @@ function favoriteStarHtml(exerciseId) {
 }
 
 function toggleInfoPanel(button) {
-  const panel = button.closest('.menu-block, .exercise-card, .warmup-item').querySelector('.ex-info-panel');
+  const panel = button.closest('.menu-block, .exercise-card, .circuit-row, .warmup-item').querySelector('.ex-info-panel');
   if (!panel) return;
   const isHidden = panel.hasAttribute('hidden');
   if (isHidden) {
@@ -174,7 +174,7 @@ const PART_LABELS = { fullbody: '全身', chest: '胸', back: '背中', shoulder
 function weeklyDayContentText(day, templates) {
   if (!day || day.kind === 'rest') return '休み';
   if (day.kind === 'parts') {
-    if (!day.parts || day.parts.length === 0) return '休み';
+    if (!Array.isArray(day.parts) || day.parts.length === 0) return '休み';
     return day.parts.map((p) => PART_LABELS[p] || p).join('・');
   }
   if (day.kind === 'template') {
@@ -182,6 +182,42 @@ function weeklyDayContentText(day, templates) {
     return t ? `「${t.name}」` : '（削除された組み合わせ）';
   }
   return '休み';
+}
+
+// ===== 週間プランの「一日おき」（2026-10-06〜） =====
+// 曜日ではなく「前回やった日」から数える。前回やった日の翌日だけ休みで、2日以上空いたら(または
+// まだ一度もやっていなければ)今日がやる日。やり忘れて2日空いても、さらに1日待たせず今日やる日にする。
+function isAlternatePlan(plan) {
+  return !!plan && plan.schedule === 'alternate';
+}
+
+function alternateEntryActionable(entry, templates) {
+  return !!entry && (
+    (entry.kind === 'parts' && Array.isArray(entry.parts) && entry.parts.length > 0)
+    || (entry.kind === 'template' && templates.some((t) => t.id === entry.templateId))
+  );
+}
+
+// state: 'due'(今日やる日) | 'doneToday'(今日もうやった) | 'rest'(昨日やったので今日は休み)
+function alternatePlanStatus(plan) {
+  const today = localDateKey(new Date());
+  const last = lastDoneDateKeyForEntry(plan.alternate);
+  if (last === today) return { state: 'doneToday', last };
+  if (last && last === previousDateKey(today)) return { state: 'rest', last };
+  return { state: 'due', last };
+}
+
+function shortDateKeyLabel(dateKey) {
+  const [, m, d] = dateKey.split('-').map(Number);
+  return `${m}/${d}`;
+}
+
+function alternateStatusText(status) {
+  if (!status.last) return 'まだ一度もやっていません';
+  const lastText = `前回 ${shortDateKeyLabel(status.last)}`;
+  if (status.state === 'doneToday') return '今日やりました・次は明後日';
+  if (status.state === 'rest') return `${lastText}（昨日）・次は明日`;
+  return lastText;
 }
 
 // 今日の曜日を週間プランの並び(0=月〜6=日)に合わせたインデックスで返す。
@@ -262,6 +298,35 @@ function renderTodayFocus(plans, activeId, templates) {
   }
 
   const active = plans.find((p) => p.id === activeId) || plans[0];
+
+  if (isAlternatePlan(active)) {
+    const entry = active.alternate;
+    if (!alternateEntryActionable(entry, templates)) {
+      container.innerHTML = '';
+      setCardsFlat(true);
+      return;
+    }
+    const status = alternatePlanStatus(active);
+    if (status.state === 'due') {
+      container.innerHTML = `
+    <div class="today-focus-panel">
+      <div>
+        <div class="today-focus-title">今日は${escapeHtml(weeklyDayContentText(entry, templates))}の日です</div>
+        <div class="today-focus-sub">一日おき・${escapeHtml(alternateStatusText(status))}</div>
+      </div>
+      <button type="button" class="today-focus-start-btn" data-weekly-plan-start-today>始める</button>
+    </div>`;
+      setCardsFlat(false);
+      detailsEl.open = false;
+    } else {
+      container.innerHTML = status.state === 'doneToday'
+        ? '<p class="today-focus-rest">今日の分は終わりました（次は明後日）</p>'
+        : `<p class="today-focus-rest">今日は休みの日です（${escapeHtml(alternateStatusText(status))}）</p>`;
+      setCardsFlat(true);
+    }
+    return;
+  }
+
   const day = active.days[todayWeekdayIndex()];
   const actionable = day && (
     (day.kind === 'parts' && day.parts && day.parts.length > 0)
@@ -337,7 +402,14 @@ function renderWeeklyPlanSection(plans, activeId, templates) {
 
   const active = plans.find((p) => p.id === activeId) || plans[0];
   const others = plans.filter((p) => p.id !== active.id);
-  const daysHtml = weeklyPlanDaysHtml(active.days, templates);
+  const daysHtml = isAlternatePlan(active)
+    ? (active.alternate
+      ? `<div class="weekly-plan-days"><div class="weekly-plan-day-row">
+      <span class="weekly-plan-day-label">一日おき</span>
+      <span class="weekly-plan-day-content">${escapeHtml(weeklyDayContentText(active.alternate, templates))}</span>
+    </div></div>`
+      : '<p class="weekly-plan-summary-empty">一日おきにやる内容をまだ決めていません</p>')
+    : weeklyPlanDaysHtml(active.days, templates);
 
   const othersHtml = others.length > 0 ? `
     <details class="weekly-plan-others-toggle">
@@ -445,11 +517,42 @@ function buildCooldownHtml(cooldown) {
     </div>`;
 }
 
+// メニュー確認画面の種目1つ分の「何セット×何回」。
+function menuItemMetaText(item, isCircuit) {
+  if (item.type === 'cardio') return `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`;
+  const valueText = item.holdBased
+    ? `${item.targetSec != null ? item.targetSec : loadHoldTargetSec(item.exerciseId)}秒`
+    : item.fixedTarget ? `${item.repsMin}回` : `${item.repsMin}〜${item.repsMax}回`;
+  if (isCircuit) return valueText;
+  const warmupText = item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : '';
+  return `${warmupText}${item.sets}セット × ${valueText}　休憩${item.restSec}秒`;
+}
+
+// サーキットの「今日の周回数」「1周ごとの休憩」。周回数は日によって変える前提なので、組み合わせには
+// 保存せず、ここ(始める直前)で選ぶ(ユーザー判断、2026-10-06)。前回選んだ値が最初から選ばれている。
+function buildCircuitStartHtml(circuit, hasCardio) {
+  const restLabel = (sec) => (sec === 0 ? 'なし' : `${sec}秒`);
+  return `
+    <div class="menu-block circuit-start-block">
+      <h3>サーキット</h3>
+      <p class="ex-meta">上から順に1セットずつ行い、最後の種目までで1周です。種目の間は休まず次へ進みます。${hasCardio ? '有酸素種目は周回に入れず、全部の周が終わった後に1回だけ行います。' : ''}</p>
+      <div class="sheet-field-head"><span class="sheet-field-label">今日の周回数</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="今日の周回数">
+        ${CIRCUIT_ROUNDS_OPTIONS.map((n) => `<button type="button" class="choice-chip" role="radio" aria-checked="${circuit.rounds === n}" data-circuit-rounds="${n}">${n}周</button>`).join('')}
+      </div>
+      <div class="sheet-field-head"><span class="sheet-field-label">1周ごとの休憩</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="1周ごとの休憩">
+        ${CIRCUIT_ROUND_REST_OPTIONS.map((sec) => `<button type="button" class="choice-chip" role="radio" aria-checked="${circuit.roundRestSec === sec}" data-circuit-rest="${sec}">${restLabel(sec)}</button>`).join('')}
+      </div>
+    </div>`;
+}
+
 function renderMenu(menu) {
   const container = document.getElementById('menu-content');
+  const isCircuit = menu.params.format === 'circuit';
 
   const goalBlockHtml = menu.params.custom
-    ? `<div class="menu-block"><h3>種目の組み方</h3><div class="ex-meta">自分で選んだ種目</div></div>`
+    ? (isCircuit ? buildCircuitStartHtml(menu.circuit, menu.main.some((item) => item.type === 'cardio')) : `<div class="menu-block"><h3>種目の組み方</h3><div class="ex-meta">自分で選んだ種目</div></div>`)
     : `<div class="menu-block"><h3>目的</h3><div class="ex-meta">${goalLabel(menu.params.goal)}</div></div>`;
 
   const painNoteHtml = menu.params.painAreas && menu.params.painAreas.length > 0
@@ -480,7 +583,8 @@ function renderMenu(menu) {
     ? `<div class="menu-block"><div class="ex-note">選んだ条件（器具・レベル・部位など）に合う種目が少なく、目安の${menu.requestedCount}種目に対して${menu.availableCount != null ? menu.availableCount : menu.main.length}種目しか選べませんでした。器具を増やす、レベルを上げる、鍛えたい部位を広げるなどすると種目を増やせます。</div></div>`
     : '';
 
-  const warmupHtml = buildWarmupHtml(menu.warmup, menu.main.some((item) => item.type !== 'cardio'));
+  // サーキットにはウォームアップセットが無い(各種目1セットずつ)ので、その切り替えスイッチも出さない
+  const warmupHtml = buildWarmupHtml(menu.warmup, !isCircuit && menu.main.some((item) => item.type !== 'cardio'));
 
   const mainItemsHtml = menu.main
     .map((item, i) => `
@@ -493,9 +597,7 @@ function renderMenu(menu) {
           ${item.demoMedia ? `<button type="button" class="icon-btn" data-demo="${item.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      <div class="ex-meta">${item.type === 'cardio'
-        ? `有酸素種目（${item.hasDistance ? '時間・距離' : '時間'}を記録）`
-        : `${item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : ''}${item.sets}セット × ${item.holdBased ? `${loadHoldTargetSec(item.exerciseId)}秒` : `${item.repsMin}〜${item.repsMax}回`}　休憩${item.restSec}秒`}</div>
+      <div class="ex-meta">${menuItemMetaText(item, isCircuit)}</div>
       ${item.note ? `<div class="ex-note">${item.note}</div>` : ''}
       ${item.description ? `<div class="ex-info-panel" hidden><p>${item.description}</p></div>` : ''}
     </div>`)
@@ -533,7 +635,11 @@ function renderMenu(menu) {
     ${cooldownHtml}
   `;
   const startBtn = document.getElementById('start-workout-btn');
-  if (startBtn) startBtn.disabled = menu.main.length === 0;
+  if (startBtn) {
+    startBtn.disabled = menu.main.length === 0;
+    // サーキットは今回の量(何周か)を開始ボタンでも確かめられるようにする
+    startBtn.textContent = isCircuit ? `${menu.circuit.rounds}周で開始` : 'このメニューで開始';
+  }
 }
 
 // 器具ごとの現実的な重量スライダー範囲。bodyweightは重量を扱わないためスライダー自体を出さない。
@@ -570,7 +676,9 @@ function formatSliderValue(field, value, holdBased) {
 function setRowSummaryText(set, holdBased, hasWeightField) {
   const reps = holdBased ? `${set.reps}秒` : `${set.reps}回`;
   const weightPart = hasWeightField ? `${set.weight}kg・` : '';
-  return `${weightPart}${reps}・RPE${set.rpe}`;
+  // サーキットはRPEを聞かない(空)ので、その時は出さない
+  const rpePart = set.rpe !== '' && set.rpe != null ? `・RPE${set.rpe}` : '';
+  return `${weightPart}${reps}${rpePart}`;
 }
 
 // sliderFieldHtml/numberWheelHtmlで共通の「ラベル＋現在値」行を組み立てる。
@@ -596,18 +704,23 @@ function sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBas
 // 数字ホイールの中身(トラック+目盛り代わりの数字一覧)だけを組み立てる共通部品。
 // 呼び出し側(numberWheelHtml、休憩時間・体重用の各関数)がラベル行や<input>を
 // それぞれの文脈に合わせて足す。
-function numberWheelTrackHtml(min, max, step) {
+// 2026-10-06 操作性の見直し: 数字1マスを36px→44px(Appleが推奨するタップ領域の目安)に広げ、
+// 選択中の数字を大きく太く・中央の枠を塗りつぶしの帯にして「今どれが選ばれているか」を一目で
+// 分かるようにした。トラック自体をrole=slider・tabindex=0にして、キーボードの←→と読み上げ機能
+// (VoiceOverの上下スワイプ=値の増減)でも操作できるようにしている(js/app.jsのwireNumberWheels)。
+// label: 読み上げで「回数」等と伝える名前。unit: 読み上げの値に付ける単位(「20回」)。
+function numberWheelTrackHtml(min, max, step, { label = '', unit = '' } = {}) {
   const stepsCount = Math.round((max - min) / step);
   const itemsHtml = Array.from({ length: stepsCount + 1 }, (_, i) => {
     const n = Math.round((min + i * step) * 10) / 10;
-    return `<div class="number-wheel-item" data-n="${n}">${n}</div>`;
+    return `<div class="number-wheel-item" data-n="${n}" aria-hidden="true">${n}</div>`;
   }).join('');
   return `
           <div class="number-wheel">
             <div class="number-wheel-highlight"></div>
             <div class="number-wheel-fade-left"></div>
             <div class="number-wheel-fade-right"></div>
-            <div class="number-wheel-track">
+            <div class="number-wheel-track" role="slider" tabindex="0" aria-label="${escapeHtml(label)}" aria-valuemin="${min}" aria-valuemax="${max}" data-step="${step}" data-unit="${escapeHtml(unit)}">
               <div class="number-wheel-spacer"></div>
               ${itemsHtml}
               <div class="number-wheel-spacer"></div>
@@ -616,10 +729,11 @@ function numberWheelTrackHtml(min, max, step) {
 }
 
 function numberWheelHtml({ exIndex, setIndex, field, label, min, max, step, value, holdBased, disabled, extraHtml }) {
+  const unit = field === 'reps' ? (holdBased ? '秒' : '回') : '';
   return `
         <div class="slider-field">
           ${sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBased)}
-          ${numberWheelTrackHtml(min, max, step)}
+          ${numberWheelTrackHtml(min, max, step, { label, unit })}
           <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-ex="${exIndex}" data-set="${setIndex}" data-field="${field}"${disabled ? ' disabled' : ''} hidden>
           ${extraHtml || ''}
         </div>`;
@@ -702,7 +816,22 @@ function renderCustomWuCd(warmup, cooldown) {
     </div>`;
 }
 
-function renderCustomExerciseList(customExercises, customRestSec) {
+// 「自分で作る」の種目1つ分の目標を短い文にする(一覧の行・メニュー確認画面で使う)。
+// 例: 種目ごと「3セット × 20回・休憩90秒」、サーキット「20回」「45秒」。
+function customTargetValueText(target) {
+  return target.timed ? `${target.sec}秒` : `${target.reps}回`;
+}
+
+function customTargetSummaryText(target, format, restSec) {
+  if (format === 'circuit') return customTargetValueText(target);
+  return `${target.sets}セット × ${customTargetValueText(target)}・休憩${restSec}秒`;
+}
+
+// 一覧の各行は「何回・何セットか」の要約だけを出し、行の下半分(要約ボタン)をタップすると
+// 下から編集画面(renderCustomTargetSheet)が出る(2026-10-06)。以前は休憩時間のホイールだけが
+// 各行に直接並んでいたが、回数・セット数まで行ごとに並べると数字だらけで縦スクロールの邪魔になるため。
+// 種目名の部分は今まで通り長押しで並べ替えられる(ボタンの上から長押ししても並べ替えは始まらない)。
+function renderCustomExerciseList(customExercises, customRestSec, customTargets = {}, format = 'sets') {
   const container = document.getElementById('custom-exercise-list');
   const countEl = document.getElementById('custom-exercise-count');
   if (countEl) countEl.textContent = customExercises.length;
@@ -715,20 +844,17 @@ function renderCustomExerciseList(customExercises, customRestSec) {
 
   const itemsHtml = customExercises
     .map((ex, i) => {
-      // 有酸素種目はセット間の休憩という概念がないため、休憩時間スライダーの代わりに
-      // 「有酸素種目」のバッジだけを表示する
+      // 有酸素種目は回数・セット・休憩という概念がないため、「有酸素種目」のバッジだけを表示する
       const bodyHtml = ex.type === 'cardio'
         ? '<span class="picker-item-cardio-badge">有酸素種目</span>'
         : (() => {
           const restSec = customRestSec[ex.id] != null ? customRestSec[ex.id] : 90;
-          // 回数/RPEと同じ数字ホイールに統一（2026-08-14）。以前はスライダーだったが、
-          // 見た目・使い勝手の方針を数字ホイールに揃えることになったため合わせた。
+          const target = normalizeCustomTarget(ex, customTargets[ex.id]);
           return `
-      <div class="slider-field">
-        <div class="slider-label"><span>休憩時間</span><span class="slider-value">${restSec} 秒</span></div>
-        ${numberWheelTrackHtml(0, 300, 15)}
-        <input type="range" min="0" max="300" step="15" value="${restSec}" data-custom-rest="${ex.id}" hidden>
-      </div>`;
+      <button type="button" class="custom-target-btn" data-custom-target-edit="${ex.id}" aria-label="${escapeHtml(ex.name)}の回数・セット数を変える">
+        <span class="custom-target-summary">${customTargetSummaryText(target, format, restSec)}</span>
+        <span class="custom-target-chevron" aria-hidden="true">変更 ›</span>
+      </button>`;
         })();
       return `
     <div class="custom-exercise-item reorder-item" data-reorder-key="${ex.id}">
@@ -745,6 +871,77 @@ function renderCustomExerciseList(customExercises, customRestSec) {
       <button type="button" class="reorder-done-btn" data-reorder-done>完了</button>
     </div>
     ${itemsHtml}`;
+}
+
+// ===== 回数・セット数の編集画面（「自分で作る」、2026-10-06〜） =====
+// 数の選び方は、数の種類で使い分ける(Codexと相談して決定):
+// - セット数(1〜5がほとんど): 横に並んだボタンを1回タップ。6以上は「6〜」を押すと6〜10のホイールが出る
+// - 回数(1〜100)・秒数(5〜300、5秒刻み)・休憩(0〜300秒、15秒刻み): 数字ホイール＋よく使う値のボタン。
+//   ボタンは「ホイールをその値まで動かす近道」で、別の選択状態は持たない(20回から50回へ流す手間を省く)
+// 編集した値はその場で反映し(js/app.jsのwireCustomTargetSheet)、「完了」で閉じる。
+const CUSTOM_REPS_PRESETS = [10, 15, 20, 30, 50];
+const CUSTOM_SEC_PRESETS = [20, 30, 45, 60, 90];
+const CUSTOM_REST_PRESETS = [30, 60, 90, 120];
+const CUSTOM_SETS_CHIPS = [1, 2, 3, 4, 5];
+
+function wheelPresetButtonsHtml(presets, value, unit) {
+  return `
+      <div class="wheel-presets" role="group" aria-label="よく使う値">
+        ${presets.map((n) => `<button type="button" class="wheel-preset-btn${Number(value) === n ? ' is-current' : ''}" data-wheel-preset="${n}">${n}${unit}</button>`).join('')}
+      </div>`;
+}
+
+// 編集画面の中の、ホイール1つ分(大きな現在値＋ホイール＋よく使う値)。
+// field: 'value'(回数/秒数) | 'rest'(休憩) | 'sets'(6以上のセット数)。値は非表示の<input>に入る。
+function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, presets }) {
+  return `
+      <div class="slider-field sheet-wheel-field" data-sheet-field="${field}">
+        <div class="sheet-field-head">
+          <span class="sheet-field-label">${label}</span>
+          <span class="sheet-big-value"><span class="slider-value" data-sheet-value-num>${value}</span><span class="sheet-big-unit">${unit}</span></span>
+        </div>
+        ${numberWheelTrackHtml(min, max, step, { label, unit })}
+        <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" data-custom-target-field="${field}" hidden>
+        ${presets ? wheelPresetButtonsHtml(presets, value, unit) : ''}
+      </div>`;
+}
+
+function renderCustomTargetSheet(ex, target, restSec, format) {
+  const body = document.getElementById('custom-target-sheet-body');
+  const title = document.getElementById('custom-target-sheet-title');
+  if (!body) return;
+  if (title) title.textContent = ex.name;
+
+  const modeHtml = `
+      <div class="segmented" role="radiogroup" aria-label="数え方">
+        <button type="button" class="segmented-btn" role="radio" aria-checked="${!target.timed}" data-custom-target-mode="reps">回数で数える</button>
+        <button type="button" class="segmented-btn" role="radio" aria-checked="${target.timed}" data-custom-target-mode="time">時間で測る</button>
+      </div>`;
+
+  const valueHtml = target.timed
+    ? sheetWheelFieldHtml({ field: 'value', label: '時間', unit: '秒', min: CUSTOM_SEC_MIN, max: CUSTOM_SEC_MAX, step: CUSTOM_SEC_STEP, value: target.sec, presets: CUSTOM_SEC_PRESETS })
+    : sheetWheelFieldHtml({ field: 'value', label: '回数', unit: '回', min: CUSTOM_REPS_MIN, max: CUSTOM_REPS_MAX, step: 1, value: target.reps, presets: CUSTOM_REPS_PRESETS });
+
+  // サーキットでは各種目1セットずつ×周回数なので、セット数と種目ごとの休憩は出さない
+  // (周回数・1周ごとの休憩は開始前の画面で選ぶ)。
+  const many = target.sets > CUSTOM_SETS_CHIPS[CUSTOM_SETS_CHIPS.length - 1];
+  const setsHtml = format === 'circuit' ? `
+      <p class="hint-text sheet-circuit-note">サーキットでは各種目を1セットずつ行います。周回数は始める前に選びます。</p>` : `
+      <div class="sheet-field">
+        <div class="sheet-field-head"><span class="sheet-field-label">セット数</span></div>
+        <div class="choice-chips" role="radiogroup" aria-label="セット数">
+          ${CUSTOM_SETS_CHIPS.map((n) => `<button type="button" class="choice-chip" role="radio" aria-checked="${!many && target.sets === n}" data-custom-target-sets="${n}">${n}</button>`).join('')}
+          <button type="button" class="choice-chip" role="radio" aria-checked="${many}" data-custom-target-sets="more">${many ? target.sets : '6〜'}</button>
+        </div>
+        ${many ? sheetWheelFieldHtml({ field: 'sets', label: 'セット数', unit: 'セット', min: 6, max: CUSTOM_SETS_MAX, step: 1, value: target.sets }) : ''}
+      </div>
+      ${sheetWheelFieldHtml({ field: 'rest', label: 'セット間の休憩', unit: '秒', min: 0, max: 300, step: 15, value: restSec, presets: CUSTOM_REST_PRESETS })}`;
+
+  body.innerHTML = `
+      ${modeHtml}
+      ${valueHtml}
+      ${setsHtml}
+      <p class="hint-text sheet-wheel-hint">数字は左右に動かすか、見えている数字をタップして選べます。</p>`;
 }
 
 // 「自分で作る」画面の上部、保存済みの種目組み合わせ一覧(折りたたみ内)。
@@ -764,7 +961,7 @@ function renderCustomTemplateList(templates) {
     <div class="template-item">
       <button type="button" class="template-item-main" data-template-load="${t.id}">
         <div class="template-name">${escapeHtml(t.name)}</div>
-        <div class="template-meta">${t.exerciseIds.length}種目・${dateLabel}保存</div>
+        <div class="template-meta">${t.format === 'circuit' ? 'サーキット・' : ''}${t.exerciseIds.length}種目・${dateLabel}保存</div>
       </button>
       <button type="button" class="template-delete-btn" data-template-delete="${t.id}" aria-label="この組み合わせを削除">✕</button>
     </div>`;
@@ -1003,20 +1200,100 @@ function buildProgressTrendChartHtml(points, { title, valueFormatter, detailForm
     </div>`;
 }
 
+// 記録画面のセットの「回数(または秒)」の数字ホイール。通常の記録画面とサーキットで共通。
+function buildRepsWheelHtml(ex, exIndex, setIndex, s) {
+  // 回数の上限は「自分で作る」で選べる上限(100回)に揃える(2026-10-06、以前は50回)
+  return numberWheelHtml({
+    exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
+    min: 0, max: ex.holdBased ? 300 : 100, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
+    extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
+  });
+}
+
+function buildDoneToggleHtml(exIndex, setIndex, s) {
+  return `
+            <label class="done-toggle">
+              <input type="checkbox" ${s.done ? 'checked' : ''} data-ex="${exIndex}" data-set="${setIndex}" data-field="done">
+              <span class="done-toggle-pill">完了</span>
+            </label>`;
+}
+
+// サーキットの記録画面(2026-10-06〜)。記録の形は通常と同じ「種目×セット」(n周目＝各種目のn番目のセット、
+// js/workout-log.jsのcreateSessionFromMenu参照)だが、種目ごとのカードに並べると1周するたびに
+// 画面を上下に行き来することになるため、「1周目」「2周目」…の周回ごとに、その周でやる種目を順に並べる。
+// RPEは聞かない(休まず次々に進むため)。data-ex/data-setは通常の記録画面と同じなので、入力の処理
+// (js/app.jsのhandleLogInput)・計測タイマー・前回実績・保存はすべて共通。
+function buildCircuitRoundsHtml(session) {
+  const { rounds, roundRestSec } = session.circuit;
+  const strength = session.exercises
+    .map((ex, exIndex) => ({ ex, exIndex }))
+    .filter(({ ex }) => ex.type !== 'cardio');
+  // 有酸素種目だけのサーキットは周回が空(0/0)になるので、周回の表示自体を出さない
+  if (strength.length === 0) return '';
+  const roundsHtml = Array.from({ length: rounds }, (_, r) => {
+    const doneCount = strength.filter(({ ex }) => ex.sets[r] && ex.sets[r].done).length;
+    const rowsHtml = strength.map(({ ex, exIndex }, order) => {
+      const s = ex.sets[r];
+      if (!s) return '';
+      const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
+      const weightField = ex.holdBased || !weightRange
+        ? ''
+        : sliderFieldHtml({ exIndex, setIndex: r, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight, disabled: s.done });
+      const targetText = ex.holdBased ? `${ex.holdTargetSec}秒` : `${ex.repsMin}回`;
+      return `
+        <div class="set-row circuit-row${s.done ? ' is-done' : ''}">
+          <div class="set-row-head">
+            <span class="circuit-row-name">${order + 1}. ${escapeHtml(ex.name)}${ex.unilateral ? '（左右それぞれ）' : ''}<span class="circuit-row-target">目標 ${targetText}</span></span>
+            <span class="set-row-summary" data-set-summary="${exIndex}:${r}">${s.done ? setRowSummaryText(s, ex.holdBased, !!weightField) : ''}</span>
+            ${ex.description ? `<button type="button" class="icon-btn" data-info-toggle aria-label="フォームのポイント">ⓘ</button>` : ''}
+            ${buildDoneToggleHtml(exIndex, r, s)}
+          </div>
+          ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
+          <div class="set-pr-badge" data-pr-badge="${exIndex}:${r}" hidden>🏆 自己ベスト更新！</div>
+          ${weightField}
+          ${buildRepsWheelHtml(ex, exIndex, r, s)}
+        </div>`;
+    }).join('');
+    return `
+      <div class="circuit-round" data-circuit-round="${r}">
+        <div class="circuit-round-head">
+          <h3>${r + 1}周目</h3>
+          <span class="circuit-round-progress${doneCount === strength.length ? ' is-complete' : ''}" data-circuit-round-progress="${r}">${doneCount}/${strength.length}</span>
+        </div>
+        ${rowsHtml}
+      </div>`;
+  }).join('');
+  return `
+      <div class="menu-block circuit-log-intro">
+        <div class="ex-meta">サーキット 全${rounds}周・1周ごとの休憩${roundRestSec > 0 ? `${roundRestSec}秒` : 'なし'}</div>
+        <div class="ex-note">上から順に、できたら「完了」を押して次の種目へ進みます。</div>
+      </div>
+      ${roundsHtml}`;
+}
+
 function renderLog(session) {
   const container = document.getElementById('log-content');
+  const isCircuit = !!session.circuit;
   // ウォームアップは怪我予防に関わるため、記録画面を開いた時点で最初から展開しておく
   // （クールダウンはセット記録が終わった後に見るものなので緊急度が違い、従来通り折りたたみのまま）。
   const warmupHtml = `
     <details class="section-toggle" open>
       <summary><span class="section-toggle-title">ウォームアップ</span><span class="section-toggle-chevron">▾</span></summary>
-      ${buildWarmupHtml(session.warmup, session.exercises.some((ex) => ex.type !== 'cardio'))}
+      ${buildWarmupHtml(session.warmup, !isCircuit && session.exercises.some((ex) => ex.type !== 'cardio'))}
     </details>`;
   const cooldownHtml = `
     <details class="section-toggle">
       <summary><span class="section-toggle-title">クールダウン</span><span class="section-toggle-chevron">▾</span></summary>
       ${buildCooldownHtml(session.cooldown)}
     </details>`;
+  if (isCircuit) {
+    // 有酸素種目は周回に入れず、周回の後に通常のカードで出す
+    const cardioHtml = session.exercises
+      .map((ex, exIndex) => (ex.type === 'cardio' ? buildCardioExerciseCardHtml(ex, exIndex) : ''))
+      .join('');
+    container.innerHTML = warmupHtml + buildCircuitRoundsHtml(session) + cardioHtml + cooldownHtml;
+    return;
+  }
   const exercisesHtml = session.exercises
     .map((ex, exIndex) => (ex.type === 'cardio' ? buildCardioExerciseCardHtml(ex, exIndex) : `
     <div class="exercise-card">
@@ -1027,7 +1304,7 @@ function renderLog(session) {
           ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      ${ex.holdBased ? buildHoldTargetMetaHtml(ex, exIndex) : `<div class="ex-meta">目標 ${ex.repsMin}〜${ex.repsMax}回　休憩${ex.restSec}秒</div>`}
+      ${ex.holdBased ? buildHoldTargetMetaHtml(ex, exIndex) : `<div class="ex-meta">目標 ${ex.fixedTarget ? ex.repsMin : `${ex.repsMin}〜${ex.repsMax}`}回　休憩${ex.restSec}秒</div>`}
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       ${buildPrefatigueNoteHtml(session, exIndex)}
@@ -1053,12 +1330,7 @@ function renderLog(session) {
             // (横に流して選ぶ)を使う。何度か試行錯誤した末の結論で、詳細は
             // numberWheelHtmlのコメント参照。範囲は固定(ホイールは端の伸び縮みが
             // 要らない=広めに取っても選びやすい)。
-            const repsMax = ex.holdBased ? 300 : 50;
-            const repsField = numberWheelHtml({
-              exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
-              min: 0, max: repsMax, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
-              extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
-            });
+            const repsField = buildRepsWheelHtml(ex, exIndex, setIndex, s);
             const rpeField = numberWheelHtml({ exIndex, setIndex, field: 'rpe', label: 'RPE', min: RPE_SCALE.min, max: RPE_SCALE.max, step: RPE_SCALE.step, value: s.rpe, disabled: s.done });
             return `
         <div class="set-row${s.isWarmup ? ' set-row-warmup' : ''}${s.done ? ' is-done' : ''}">
@@ -1088,6 +1360,12 @@ function renderLog(session) {
 // wireHoldTargetEdit。holdTargetSecを持たない古いスナップショットは保存済みの目標で補う。
 function buildHoldTargetMetaHtml(ex, exIndex) {
   const sec = ex.holdTargetSec != null ? ex.holdTargetSec : loadHoldTargetSec(ex.exerciseId);
+  // 「自分で作る」で秒数を決めた種目(fixedTarget)は、目標をそちら(組み合わせ)で管理しているので、
+  // ここで種目共通の目標を書き換える「変更」は出さない(同じ目標を決める場所が2つあると食い違うため)。
+  if (ex.fixedTarget) {
+    return `
+      <div class="ex-meta">目標 ${sec}秒　休憩${ex.restSec}秒</div>`;
+  }
   return `
       <div class="ex-meta hold-target-meta" data-hold-target-meta="${exIndex}">
         <span>目標 ${sec}秒</span>
@@ -1214,8 +1492,9 @@ function buildExerciseDetailHtml(ex) {
       : '未記録';
   }
   const exerciseMeta = findExerciseById(ex.exerciseId);
-  const holdBased = exerciseMeta && exerciseMeta.holdBased;
-  const isBodyweightLoad = exerciseMeta && isBodyweightLoadExercise(exerciseMeta);
+  // 測り方は記録自体が持つ(同じ種目でも回数/時間を切り替えられるため。古い記録は種目データで補う)
+  const holdBased = recordedExerciseIsTimed(ex);
+  const isBodyweightLoad = exerciseMeta && !holdBased && isBodyweightLoadExercise({ ...exerciseMeta, holdBased });
   return ex.sets
     .filter((s) => s.done && !s.isWarmup)
     .map((s) => {

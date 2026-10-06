@@ -12,7 +12,7 @@ function isBodyweightLoadExercise(planItem) {
 function buildSuggestion(planItem, bodyWeightKg) {
   if (isBodyweightLoadExercise(planItem)) {
     const estWeight = Math.round(bodyWeightKg * planItem.bodyweightLoadFactor * 2) / 2;
-    const last = findLastPerformance(planItem.exerciseId);
+    const last = findLastPerformance(planItem.exerciseId, false);
     if (!last) {
       // 体重を一度も記録していない間は仮の値(60kg)での推定なので、その旨とホームでの記録を案内する。
       const hasWeight = typeof bodyWeightHasStoredValue === 'function' && bodyWeightHasStoredValue();
@@ -34,7 +34,7 @@ function buildSuggestion(planItem, bodyWeightKg) {
   // 表示していない)、重量ベースの提案文をそのまま使うと「前回0kg×45秒。同じ重量で...」の
   // ように意味のない「0kg」が出てしまうため、保持秒数だけを見て提案する専用の分岐にする。
   if (planItem.holdBased) {
-    const lastHold = findLastPerformance(planItem.exerciseId);
+    const lastHold = findLastPerformance(planItem.exerciseId, true);
     if (!lastHold) {
       return { text: '初回記録です。フォームを優先し、無理のない時間から始めましょう。', weight: null };
     }
@@ -46,7 +46,7 @@ function buildSuggestion(planItem, bodyWeightKg) {
     };
   }
 
-  const last = findLastPerformance(planItem.exerciseId);
+  const last = findLastPerformance(planItem.exerciseId, false);
   if (!last) {
     return { text: '初回記録です。フォームを優先し、無理のない重量から始めましょう。', weight: null };
   }
@@ -82,10 +82,20 @@ function estimateCardioCalories(met, bodyWeightKg, durationSec) {
   return met * bodyWeightKg * (Number(durationSec) / 3600);
 }
 
+// サーキット(menu.params.format==='circuit')は、各種目1セットずつを周回数(menu.circuit.rounds)だけ
+// 繰り返す。記録の形は通常と同じ「種目×セット」にし、セット数＝周回数にする(n周目＝各種目のn番目のセット)。
+// こうしておけば履歴・グラフ・前回実績・クラウド同期は通常の記録とまったく同じ処理で扱える。
+// 記録画面だけが周回ごとにまとめて表示する(js/ui.jsのrenderCircuitLog)。種目間の休憩は無く、
+// 1周終わるごとにroundRestSecの休憩タイマーを出す(js/app.jsのhandleLogInput)。
 function createSessionFromMenu(menu, bodyWeightKg) {
+  const isCircuit = menu.params.format === 'circuit';
+  const rounds = isCircuit ? Math.max(1, Number(menu.circuit && menu.circuit.rounds) || 1) : null;
   return {
     date: new Date().toISOString(),
     goal: menu.params.goal,
+    // 保存した組み合わせから始めた時だけ入る。週間プランの「一日おき」で前回やった日を探すのに使う
+    templateId: menu.params.templateId || null,
+    circuit: isCircuit ? { rounds, roundRestSec: Number(menu.circuit.roundRestSec) || 0 } : null,
     warmup: menu.warmup,
     cooldown: menu.cooldown,
     exercises: menu.main.map((item) => {
@@ -110,19 +120,24 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       // 回数の初期値は目標範囲の下限。以前は回数スライダーが10刻みだった名残で10の倍数に丸めており、
       // 筋力アップ(目標4〜6回)でも10回が入っていた(2026-10-04修正。今は1刻みの数字ホイール)。
       // 保持時間系は本人が設定した目標秒数(未設定なら30秒、storage.jsのloadHoldTargetSec)を初期値にする。
-      const holdTargetSec = item.holdBased ? loadHoldTargetSec(item.exerciseId) : null;
+      // 「自分で作る」で秒数を決めた種目(targetSec)はその秒数を使う。
+      const holdTargetSec = item.holdBased
+        ? (item.targetSec != null ? item.targetSec : loadHoldTargetSec(item.exerciseId))
+        : null;
       const defaultReps = item.holdBased ? holdTargetSec : item.repsMin;
       // ウォームアップセット(軽い重量)の回数は本セットより多めの従来値のまま(筋力アップで4回まで減らさない)。
       const warmupReps = item.holdBased ? holdTargetSec : Math.max(10, Math.round(item.repsMin / 10) * 10);
-      const defaultRpe = RPE_SCALE.default;
+      // サーキットは休まず次々に進むため、セットごとのRPEは聞かない(空のまま記録する。
+      // 表示側は空のRPEを出さず、同期側はnullにする)。
+      const defaultRpe = isCircuit ? '' : RPE_SCALE.default;
       const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
       // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
       // 切り替えた時に入れ直せるよう、本来入る数と重量・回数の初期値は設定に関わらず保持しておく
       // (applyWarmupSetsSetting参照)。
       const warmupSetTemplate = { weight: String(warmupWeight), reps: String(warmupReps), rpe: String(defaultRpe) };
-      const plannedWarmupSets = item.warmupSets || 0;
+      const plannedWarmupSets = isCircuit ? 0 : (item.warmupSets || 0);
       const warmupSetEntries = loadWarmupSetsEnabled() ? buildWarmupSetEntries(plannedWarmupSets, warmupSetTemplate) : [];
-      const workingSetEntries = Array.from({ length: item.sets }, () => ({
+      const workingSetEntries = Array.from({ length: isCircuit ? rounds : item.sets }, () => ({
         weight: String(defaultWeight),
         reps: String(defaultReps),
         rpe: String(defaultRpe),
@@ -134,9 +149,10 @@ function createSessionFromMenu(menu, bodyWeightKg) {
         category: item.category,
         primary: item.primary,
         unilateral: item.unilateral,
-        restSec: item.restSec,
+        restSec: isCircuit ? 0 : item.restSec,
         repsMin: item.repsMin,
         repsMax: item.repsMax,
+        fixedTarget: !!item.fixedTarget, // 目標が範囲(8〜12回)ではなく1つの値(20回)か
         description: item.description,
         demoMedia: item.demoMedia,
         holdBased: item.holdBased,
@@ -233,6 +249,9 @@ function finalizeSession(session) {
     date: session.date,
     goal: session.goal,
     durationSec: session.durationSec || 0,
+    templateId: session.templateId || null,
+    finishedAt: new Date().toISOString(), // 週間プランの「一日おき」は終えた日で数える
+    circuitRounds: session.circuit ? session.circuit.rounds : null,
     exercises: session.exercises.filter(exerciseHasRecord).map((e) => (e.type === 'cardio'
       ? {
         exerciseId: e.exerciseId,
@@ -247,6 +266,8 @@ function finalizeSession(session) {
       : {
         exerciseId: e.exerciseId,
         name: e.name,
+        // 同じ種目でも回数で測った日と時間で測った日があり得るため、記録に残す(2026-10-06〜)
+        holdBased: !!e.holdBased,
         sets: e.sets.filter((s) => s.done),
       })),
   };
@@ -279,7 +300,9 @@ function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
   const isBodyweight = isBodyweightLoadExercise(exerciseMeta);
   const points = [];
   for (const session of history) {
-    const ex = session.exercises.find((e) => e.exerciseId === exerciseId);
+    // 回数で測った記録と時間で測った記録は同じ線に混ぜない(20回と45秒は比べられないため)
+    const ex = session.exercises.find((e) => e.exerciseId === exerciseId
+      && (exerciseMeta.type === 'cardio' || recordedExerciseIsTimed(e) === !!holdBased));
     if (!ex) continue;
     if (exerciseMeta.type === 'cardio') {
       if (!isCardioRecorded(ex) || !ex.duration) continue;

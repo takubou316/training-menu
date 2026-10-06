@@ -969,59 +969,72 @@ body.modal-open {
    この枠線が画面下端(固定表示のボトムナビ付近)まで伸びてしまう不具合が報告された
    （PCのプレビューでは再現せず）。原因を確実に断定できていないが、伸縮に頼らない
    固定高さ+縦中央寄せの指定に変更して回避した（2026-08-14）。 */
+/* 2026-10-06 操作性の見直し: 中央の枠を縦線2本から塗りつぶしの帯に変え、数字の後ろに敷く
+   (z-index: 帯0 < 数字1 < 端のぼかし2)。数字1マスは36px→44px(Appleのタップ領域の目安)、
+   選択中の数字は16px→22pxの太字にして「今どれが選ばれているか」を一目で分かるようにした。
+   端のぼかしの色は置き場所の背景に合わせて--wheel-bgで変えられる(編集シートは--surface)。 */
 .number-wheel-highlight {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 40px;
-  height: 36px;
+  width: 48px;
+  height: 44px;
   transform: translate(-50%, -50%);
-  border-left: 1.5px solid var(--accent);
-  border-right: 1.5px solid var(--accent);
-  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1.5px solid var(--accent);
+  border-radius: 10px;
   pointer-events: none;
-  z-index: 2;
+  z-index: 0;
 }
 .number-wheel-fade-left,
 .number-wheel-fade-right {
   position: absolute;
   top: 0;
-  height: 36px;
-  width: 28px;
-  z-index: 1;
+  height: 44px;
+  width: 36px;
+  z-index: 2;
   pointer-events: none;
 }
-.number-wheel-fade-left { left: 0; background: linear-gradient(to right, var(--surface-2), transparent); }
-.number-wheel-fade-right { right: 0; background: linear-gradient(to left, var(--surface-2), transparent); }
+.number-wheel-fade-left { left: 0; background: linear-gradient(to right, var(--wheel-bg, var(--surface-2)), transparent); }
+.number-wheel-fade-right { right: 0; background: linear-gradient(to left, var(--wheel-bg, var(--surface-2)), transparent); }
+/* touch-actionは以前pan-x(横だけ)にしていたが、それだとホイールの上から縦にスワイプしても
+   ページがスクロールせず、ホイールが縦に何段も並ぶ記録画面で画面を動かしにくかった(2026-10-06)。
+   縦横どちらも許可し、どちらに動かすかは指を動かし始めた向きでブラウザに決めさせる。 */
 .number-wheel-track {
+  position: relative;
+  z-index: 1;
   display: flex;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
-  height: 36px;
+  height: 44px;
   align-items: center;
   scrollbar-width: none;
   -ms-overflow-style: none;
   cursor: grab;
   user-select: none;
-  touch-action: pan-x;
+  -webkit-user-select: none;
+  touch-action: pan-x pan-y;
+  border-radius: 10px;
 }
+.number-wheel-track:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .number-wheel-track::-webkit-scrollbar { display: none; }
-.number-wheel-spacer { flex: 0 0 calc(50% - 18px); }
+.number-wheel-spacer { flex: 0 0 calc(50% - 22px); }
 .number-wheel-item {
-  flex: 0 0 36px;
-  height: 36px;
+  flex: 0 0 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-dim);
   scroll-snap-align: center;
   cursor: pointer;
 }
-.number-wheel-item.active { color: var(--text); font-weight: 700; font-size: 16px; }
+.number-wheel-item.active { color: var(--text); font-weight: 800; font-size: 22px; }
 .slider-field:has(input:disabled) .number-wheel { opacity: 0.5; pointer-events: none; }
 
 /* 体重の初回手入力フォーム（2026-08-14）。一度も保存されていない間だけ表示する
@@ -2513,3 +2526,156 @@ body.modal-open {
   color: var(--danger);
 }
 .sync-failed-notice[hidden] { display: none; }
+/* ===== 「自分で作る」の回数・セット数の編集（2026-10-06〜） ===== */
+
+/* 2択の切り替え(種目ごと／サーキット、回数／時間、曜日で決める／一日おき)。 */
+.segmented {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin: 4px 0 8px;
+}
+.segmented-btn {
+  flex: 1;
+  min-height: 40px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.segmented-btn[aria-checked="true"] {
+  background: var(--accent-dim);
+  color: #fff;
+}
+.custom-format-desc { margin: 0 0 12px; }
+
+/* 少ない選択肢を1タップで選ぶボタン列(セット数・周回数・1周ごとの休憩)。 */
+.choice-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.choice-chip {
+  min-width: 48px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.choice-chip[aria-checked="true"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 一覧の各種目の「3セット × 20回・休憩90秒　変更 ›」 */
+.custom-target-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.custom-target-summary { font-weight: 600; font-variant-numeric: tabular-nums; }
+.custom-target-chevron { flex-shrink: 0; color: var(--accent); font-size: 13px; font-weight: 600; }
+
+/* 下から出る編集シート。中央に出す.demo-modal-contentとは別の置き方にしている。 */
+.sheet-modal .sheet-content {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 520px;
+  margin: 0 auto;
+  max-height: 88vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom));
+  --wheel-bg: var(--surface);
+}
+.sheet-title { margin: 0 0 10px; font-size: 17px; }
+.sheet-field { margin-top: 14px; }
+.sheet-wheel-field { margin-top: 14px; }
+.sheet-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 14px 0 8px;
+}
+.sheet-field .sheet-field-head,
+.sheet-wheel-field .sheet-field-head { margin-top: 0; }
+.sheet-field-label { font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.sheet-big-value { font-size: 28px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.sheet-big-unit { font-size: 14px; font-weight: 600; color: var(--text-dim); margin-left: 3px; }
+.sheet-circuit-note { margin-top: 14px; }
+.sheet-wheel-hint { margin: 14px 0 0; }
+.sheet-done-btn { width: 100%; margin-top: 16px; }
+
+/* よく使う値のボタン(ホイールをその値まで動かす近道) */
+.wheel-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.wheel-preset-btn {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.wheel-preset-btn.is-current { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
+/* ===== サーキット（メニュー確認画面・記録画面、2026-10-06〜） ===== */
+.circuit-start-block .ex-meta { margin: 0 0 4px; line-height: 1.6; }
+.circuit-round { margin: 16px 0; }
+.circuit-round-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.circuit-round-head h3 { margin: 0; }
+.circuit-round-progress { font-size: 13px; font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.circuit-round-progress.is-complete { color: var(--accent); }
+.circuit-round-progress.is-complete::before { content: '✓ '; }
+.circuit-row .set-row-head { gap: 8px; }
+/* 通常のセット行はサマリー欄が残り幅を取る(flex:1)が、サーキットは種目名が長いので名前に幅を譲る */
+.circuit-row .set-row-summary { flex: 0 0 auto; margin-right: 0; }
+.circuit-row .set-row-summary:empty { display: none; }
+.circuit-row-name { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; }
+.circuit-row-target { display: block; font-size: 12px; font-weight: 400; color: var(--text-dim); margin-top: 2px; }
+.circuit-row .icon-btn { width: 32px; height: 32px; flex-shrink: 0; }
+
+/* 週間プラン「一日おき」の前回やった日など、今日の予定の下の小さい補足 */
+.today-focus-sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }

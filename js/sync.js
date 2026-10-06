@@ -481,9 +481,11 @@ async function syncSessionToSupabase(record, userId) {
 
     if (isCardio || !Array.isArray(ex.sets) || ex.sets.length === 0) continue;
     // holdBased種目(プランク等)は「reps」欄に実際は保持秒数が入っている(js/ui.js等の既存表示ロジックと
-    // 同じ解釈)。exercises-data.jsのEXERCISESから元の種目定義を引いて振り分ける。
-    const exerciseMeta = typeof EXERCISES !== 'undefined' ? EXERCISES.find((item) => item.id === ex.exerciseId) : null;
-    const isHoldBased = Boolean(exerciseMeta && exerciseMeta.holdBased);
+    // 同じ解釈)。2026-10-06〜は記録自体が測り方(holdBased)を持つ(同じ種目でも回数/時間を切り替えられる
+    // ため)。持たない古い記録はexercises-data.jsのEXERCISESから元の種目定義を引いて振り分ける。
+    const isHoldBased = typeof recordedExerciseIsTimed === 'function'
+      ? recordedExerciseIsTimed(ex)
+      : Boolean((typeof EXERCISES !== 'undefined' ? EXERCISES.find((item) => item.id === ex.exerciseId) : null)?.holdBased);
     const setPayload = ex.sets.map((s, si) => ({
       user_id: userId,
       session_exercise_id: exRow.id,
