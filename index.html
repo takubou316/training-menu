@@ -259,6 +259,12 @@ try {
             <input type="file" id="backup-import-file" hidden>
             <p class="backup-status" id="backup-status" aria-live="polite"></p>
           </div>
+          <!-- 今動いているバージョン(js/app.jsのrenderAppVersion)。引っぱって更新で本当に新しくなったかを確かめる用 -->
+          <div class="app-version-section">
+            <div class="theme-picker-label">バージョン</div>
+            <p class="app-version-text" id="app-version-text"></p>
+            <p class="hint-text">画面の一番上で下に引っぱって離すと、最新に更新します。公開してから10分ほどは古いものが届くことがあるので、番号が変わらない時は少し待ってからもう一度引っぱってください。</p>
+          </div>
           <button type="button" id="reset-day-btn" class="danger-link-btn" hidden>選択中の日のデータを削除する</button>
           <button type="button" id="reset-history-btn" class="danger-link-btn">記録データをすべて削除する</button>
         </details>

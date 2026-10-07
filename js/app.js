@@ -31,6 +31,29 @@ function wireThemePicker() {
   applyTheme(loadTheme());
 }
 
+// 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
+// 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
+// (2026-10-07 ユーザー要望「本当に更新できてる？」)。
+const APP_VERSION = 59;
+const APP_LOADED_AT = new Date();
+
+async function renderAppVersion() {
+  const el = document.getElementById('app-version-text');
+  if (!el) return;
+  const time = `${APP_LOADED_AT.getMonth() + 1}/${APP_LOADED_AT.getDate()} ${APP_LOADED_AT.getHours()}:${String(APP_LOADED_AT.getMinutes()).padStart(2, '0')}:${String(APP_LOADED_AT.getSeconds()).padStart(2, '0')}`;
+  let cacheText = '';
+  try {
+    if ('caches' in window) {
+      const nums = (await caches.keys()).map((k) => (k.match(/^training-menu-v(\d+)$/) || [])[1]).filter(Boolean).map(Number);
+      if (nums.length > 0) {
+        const latest = Math.max(...nums);
+        cacheText = latest === APP_VERSION ? '（オフライン用も同じ）' : `（オフライン用は v${latest}。次に開いた時にそろいます）`;
+      }
+    }
+  } catch (e) { /* キャッシュが読めなくても番号は出す */ }
+  el.textContent = `v${APP_VERSION}${cacheText}・${time}に読み込み`;
+}
+
 // 最新の状態に更新する(引っぱって更新から呼ぶ)。standaloneでホーム画面に追加したPWAにはブラウザのURLバー・
 // 更新ボタンが無く、最新コードを取ってきたい手段が「一度ホーム画面から削除して開き直す」
 // くらいしか無かった(2026-09-16、ユーザー指摘。当初はヘッダー右上の⟳ボタン、2026-10-07に引っぱって更新へ)。
@@ -41,6 +64,13 @@ async function hardReload() {
   try {
     if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot({ passive: true });
   } catch (e) { /* 保存できなくても更新は続ける */ }
+  try {
+    // Service Worker自体の新しい版も取りに行く(新しい版はskipWaitingで入れ替わる)。長く待たないよう3秒で打ち切る
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await Promise.race([reg.update(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+    }
+  } catch (e) { /* 更新確認に失敗しても再読み込みは続ける */ }
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -2857,6 +2887,9 @@ function wireSyncChoiceModal() {
 
 function init() {
   wirePullToRefresh();
+  renderAppVersion();
+  // 新しいService Workerのキャッシュは読み込み後に作られるので、少し後にもう一度見る
+  setTimeout(renderAppVersion, 3000);
   wireThemePicker();
   wirePartExclusivity();
   wirePainExclusivity();

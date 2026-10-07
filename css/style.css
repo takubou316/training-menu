@@ -108,6 +108,8 @@ html, body {
   transition: opacity 0.15s;
 }
 .pull-refresh.is-visible { opacity: 1; }
+.app-version-section { margin-top: 16px; }
+.app-version-text { margin: 4px 0; font-size: 14px; font-weight: 600; }
 .pull-refresh.is-ready { color: var(--accent); border-color: var(--accent); }
 .pull-refresh-icon { display: inline-block; transition: transform 0.15s; }
 .pull-refresh.is-ready .pull-refresh-icon { transform: rotate(180deg); }
