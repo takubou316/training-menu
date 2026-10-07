@@ -37,9 +37,8 @@ try {
 
       <h2>今日のメニューを作る</h2>
 
-      <!-- 週間プランの「今日」の予定。renderTodayFocus()(js/ui.js)が中身を出し分ける:
-           プラン未作成なら空、休みの日なら軽い一言、実行可能な予定があれば「始める」付きで
-           強調表示する。詳細はtraining-menu/CLAUDE.mdの原点回帰UX見直し節を参照。 -->
+      <!-- トレーニング予定の「今日の予定」。renderTodayFocus()(js/ui.js)が中身を出し分ける:
+           予定が無ければ空、今日やる予定があれば「始める」を並べる(済んだものは小さく残す)。 -->
       <div id="today-focus-section"></div>
 
       <details id="mode-cards-details" class="mode-cards-toggle">
@@ -55,8 +54,6 @@ try {
           </button>
         </div>
       </details>
-
-      <div id="weekly-plan-section"></div>
 
       <!-- 記録中のトレーニングがある時だけ「トレーニングに戻る」を出す(ボトムナビで別画面へ移ると
            記録画面へ戻る手段が無かったため、2026-10-04)。renderHomeResumeWorkout()(js/ui.js)が描画する。 -->
@@ -278,60 +275,11 @@ try {
 
     <!-- ===== 週間プラン画面 ===== -->
     <section id="screen-weekly" class="screen">
-      <h2>週間プラン</h2>
-      <p class="weekly-editor-plan-name" id="weekly-editor-plan-name"></p>
-
-      <div id="weekly-empty-state" class="weekly-empty-state" hidden>
-        <p class="hint-text">週間プランはまだ1つも作られていません。曜日ごとに鍛える部位や組み合わせを決めておける機能です。</p>
-        <button type="button" class="primary-btn" id="weekly-empty-create-btn">＋ 新しいプランを作る</button>
-      </div>
-
-      <div id="weekly-editor-content">
-        <div class="segmented" id="weekly-schedule-toggle" role="radiogroup" aria-label="予定の決め方">
-          <button type="button" class="segmented-btn" role="radio" aria-checked="true" data-weekly-schedule="weekly">曜日で決める</button>
-          <button type="button" class="segmented-btn" role="radio" aria-checked="false" data-weekly-schedule="alternate">一日おき</button>
-        </div>
-
-        <div id="weekly-alternate-content" hidden>
-          <p class="hint-text">やった日の次の日は休み、その次の日にまたやる、の繰り返しです。やり忘れて間が空いた時は、次に開いた日がやる日になります。前回やった日は記録から自動で数えます。</p>
-          <div class="weekly-day-list">
-            <div class="weekly-day-row">
-              <div class="weekly-day-label weekly-day-label-wide">やる日</div>
-              <div class="weekly-day-content" id="weekly-alternate-content-text"></div>
-              <button type="button" class="weekly-day-edit-btn" id="weekly-alternate-edit-btn">変更</button>
-            </div>
-          </div>
-          <p class="hint-text" id="weekly-alternate-status"></p>
-        </div>
-
-        <div id="weekly-weekly-content">
-        <p class="hint-text weekly-editor-intro">曜日ごとに鍛える部位や組み合わせを決めておけます。ここではまだ予定を組むだけで、記録画面とは連動していません。</p>
-
-        <div class="weekly-auto-row">
-          <label for="weekly-auto-days" class="weekly-auto-label">週に何日トレーニングしますか</label>
-          <div class="weekly-auto-controls">
-            <select id="weekly-auto-days">
-              <option value="1">1日</option>
-              <option value="2">2日</option>
-              <option value="3" selected>3日</option>
-              <option value="4">4日</option>
-              <option value="5">5日</option>
-              <option value="6">6日</option>
-              <option value="7">7日</option>
-            </select>
-            <button type="button" class="secondary-btn weekly-auto-btn" id="weekly-auto-btn">自動で提案する</button>
-          </div>
-          <p class="hint-text">月曜から順に自動で部位を割り当てます（すでに決めた内容は上書きされます）。曜日ごとに「変更」から自由に調整できます。</p>
-        </div>
-
-        <div id="weekly-day-list" class="weekly-day-list"></div>
-        </div>
-
-        <details class="danger-zone">
-          <summary>その他の設定</summary>
-          <button type="button" id="weekly-editor-delete-btn" class="danger-link-btn">このプランを削除する</button>
-        </details>
-      </div>
+      <h2>トレーニング予定</h2>
+      <p class="hint-text">やることと、いつやるかを決めておくと、ホームに今日の予定が出ます。やったかどうかは記録から自動で数えます。</p>
+      <div id="routine-list" class="routine-list"></div>
+      <button type="button" class="primary-btn routine-add-btn" id="routine-add-btn">＋ 予定を追加</button>
+      <div id="routine-footer" class="routine-footer"></div>
     </section>
 
     <!-- ===== 豆知識画面 ===== -->
@@ -352,7 +300,7 @@ try {
 
   <nav class="bottom-nav">
     <button class="nav-btn active" data-nav="mode">ホーム</button>
-    <button class="nav-btn" data-nav="weekly">週間プラン</button>
+    <button class="nav-btn" data-nav="weekly">予定</button>
     <button class="nav-btn" data-nav="record">記録</button>
     <button class="nav-btn" data-nav="knowledge">豆知識</button>
   </nav>
@@ -469,50 +417,15 @@ try {
     </div>
   </div>
 
-  <div id="weekly-plan-name-modal" class="demo-modal">
-    <div class="demo-modal-backdrop" data-weekly-plan-name-close></div>
-    <div class="demo-modal-content">
-      <h3 style="margin:0 0 8px;">週間プランを作成</h3>
-      <input type="text" id="weekly-plan-name-input" class="template-name-input" placeholder="名前（例: 通常週）" maxlength="30">
-      <p class="error-text" id="weekly-plan-name-error"></p>
-      <div class="reset-history-actions">
-        <button type="button" class="secondary-btn" data-weekly-plan-name-close>キャンセル</button>
-        <button type="button" id="weekly-plan-name-confirm" class="primary-btn">作成する</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="weekly-day-modal" class="demo-modal">
-    <div class="demo-modal-backdrop" data-weekly-day-close></div>
-    <div class="demo-modal-content">
-      <button class="demo-close" data-weekly-day-close aria-label="閉じる">×</button>
-      <h3 id="weekly-day-modal-title" style="margin:0 0 12px;">曜日の内容</h3>
-
-      <div class="chip-group weekly-day-kind-group" id="weekly-day-kind-group">
-        <label class="chip" id="weekly-day-kind-rest"><input type="radio" name="weekly-day-kind" value="rest"> 休み</label>
-        <label class="chip"><input type="radio" name="weekly-day-kind" value="parts"> 部位を選ぶ</label>
-        <label class="chip"><input type="radio" name="weekly-day-kind" value="template"> 保存した組み合わせ</label>
-      </div>
-
-      <div class="chip-group weekly-day-part-group" id="weekly-day-part-group" hidden>
-        <label class="chip"><input type="checkbox" value="fullbody" data-part="fullbody"> 全身</label>
-        <label class="chip"><input type="checkbox" value="chest" data-part="chest"> 胸</label>
-        <label class="chip"><input type="checkbox" value="back" data-part="back"> 背中</label>
-        <label class="chip"><input type="checkbox" value="shoulders" data-part="shoulders"> 肩</label>
-        <label class="chip"><input type="checkbox" value="arms" data-part="arms"> 腕</label>
-        <label class="chip"><input type="checkbox" value="legs" data-part="legs"> 脚</label>
-        <label class="chip"><input type="checkbox" value="core" data-part="core"> 体幹・腹筋</label>
-      </div>
-
-      <div id="weekly-day-template-row" hidden>
-        <select id="weekly-day-template-select"></select>
-        <p class="hint-text" id="weekly-day-template-empty" hidden>保存した組み合わせがまだありません。「自分で作る」画面で種目を選んだあと保存できます。</p>
-      </div>
-
-      <p class="error-text" id="weekly-day-error"></p>
-      <div class="reset-history-actions">
-        <button type="button" class="secondary-btn" data-weekly-day-close>キャンセル</button>
-        <button type="button" id="weekly-day-save" class="primary-btn">保存する</button>
+  <!-- トレーニング予定の追加・変更(下から出るシート、js/ui.jsのrenderRoutineSheet・js/app.jsのwireRoutineScreen)。 -->
+  <div id="routine-sheet" class="demo-modal sheet-modal">
+    <div class="demo-modal-backdrop" data-routine-cancel></div>
+    <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="routine-sheet-title">
+      <h3 id="routine-sheet-title" class="sheet-title"></h3>
+      <div id="routine-sheet-body"></div>
+      <div class="modal-actions routine-sheet-actions">
+        <button type="button" class="secondary-btn" data-routine-cancel>キャンセル</button>
+        <button type="button" class="primary-btn" id="routine-save-btn">保存</button>
       </div>
     </div>
   </div>

@@ -254,11 +254,10 @@ let historyDeleteDateKey = null;
 // 豆知識画面のカテゴリ絞り込み('all'またはKNOWLEDGE_CATEGORIESのいずれか)
 let knowledgeCategoryFilter = 'all';
 
-// 週間プラン画面(screen-weekly)が今どのプリセット(id)を編集中か。nullなら未作成/未選択
-// （その場合は画面側が「まだ作られていません」の空の状態を出す）。
-let weeklyPlanEditingId = null;
-// 週間プランの曜日編集モーダルが今どの曜日(0=月〜6=日)を対象にしているか
-let weeklyDayEditIndex = null;
+// トレーニング予定から始めた時、その予定のid。記録のroutineIdに入れて「やったか」の判定に使う(2026-10-07〜)。
+// 「自分で作る」経由(保存した組み合わせの予定)はcustomRoutineId、「要望から作る」経由(部位の予定)はsetupRoutineId。
+let customRoutineId = null;
+let setupRoutineId = null;
 
 // ===== 種目カードの長押し→ドラッグ並べ替え（スマホのホーム画面アイコンと同じ操作感） =====
 // 長押しで「入れ替えモード」に入り、カードがゆれる。ゆれている間はどのカードもそのまま
@@ -892,6 +891,7 @@ function customTargetFor(ex) {
 // 種目データが更新されて削除されたIDは無視する。format/targetsが無い古い組み合わせは
 // 「種目ごと」・既定の目標で補う(2026-10-06より前に保存したもの)。
 function applyCustomTemplate(template) {
+  customRoutineId = null;
   customExercises = template.exerciseIds.map((id) => findExerciseById(id)).filter(Boolean);
   customRestSec = { ...template.restSec };
   customTargets = { ...(template.targets || {}) };
@@ -1246,7 +1246,7 @@ function wireCustomScreen() {
       cooldown: customCooldown,
       main,
       generatedAt: new Date().toISOString(),
-      params: { custom: true, format: customFormat, templateId: currentCustomTemplateIdForRecord() },
+      params: { custom: true, format: customFormat, templateId: currentCustomTemplateIdForRecord(), routineId: customRoutineId },
       // サーキットの周回数・1周ごとの休憩は前回選んだ値から始め、メニュー確認画面で選び直せる
       circuit: customFormat === 'circuit' ? loadCircuitLast() : null,
       userReordered: false,
@@ -1455,351 +1455,218 @@ function wireMenuScreen() {
   });
 }
 
-// ===== 週間プラン画面 =====
-// 週間プランは「自分で作る」の保存済み組み合わせと同じ考え方で、名前付きの複数プリセットとして
-// 持てる。screen-weekly（この節）は常に「今どれを編集中か(weeklyPlanEditingId)」を1つだけ持ち、
-// 使用中(active)のプリセットはモード選択画面の表示に使う別概念（wireModeWeeklyPlanSection以下）。
+// ===== トレーニング予定（2026-10-07〜、旧「週間プラン」の作り直し） =====
+// 描画はjs/ui.js(renderTodayFocus・renderRoutineScreen・renderRoutineSheet)、データと「やったか」の判定は
+// js/storage.js(loadRoutineState・routineDoneDays)。予定から始めた記録にはroutineIdを付ける
+// (「自分で作る」経由はcustomRoutineId、「要望から作る」経由はsetupRoutineIdで運ぶ)。
 
-// 今、使用中(active)のプリセット本体を返す。無ければnull。
-function getActiveWeeklyPlan() {
-  const id = getActiveWeeklyPlanId();
-  if (!id) return null;
-  return loadWeeklyPlans().find((p) => p.id === id) || null;
+// 編集中の予定(追加・変更シート)。idがnullなら新規。draftは保存を押すまで予定に反映しない。
+let routineEditing = null;
+
+function renderModeWeeklyPlanSection() {
+  renderTodayFocus();
 }
 
-// 今、週間プラン画面(screen-weekly)で編集中のプリセット本体を返す。無ければnull
-// （1つも作られていない、または編集中に削除された場合）。
-function getEditingWeeklyPlan() {
-  if (!weeklyPlanEditingId) return null;
-  return loadWeeklyPlans().find((p) => p.id === weeklyPlanEditingId) || null;
-}
-
-function renderWeeklyEditorScreen() {
-  const plan = getEditingWeeklyPlan();
-  const hasPlan = !!plan;
-  document.getElementById('weekly-empty-state').hidden = hasPlan;
-  document.getElementById('weekly-editor-content').hidden = !hasPlan;
-  document.getElementById('weekly-editor-plan-name').textContent = hasPlan ? `「${plan.name}」を編集中` : '';
-  if (!hasPlan) return;
-  const templates = loadCustomTemplates();
-  const alternate = isAlternatePlan(plan);
-  document.querySelectorAll('#weekly-schedule-toggle [data-weekly-schedule]').forEach((btn) => {
-    btn.setAttribute('aria-checked', String(btn.dataset.weeklySchedule === (alternate ? 'alternate' : 'weekly')));
-  });
-  document.getElementById('weekly-weekly-content').hidden = alternate;
-  document.getElementById('weekly-alternate-content').hidden = !alternate;
-  if (alternate) {
-    document.getElementById('weekly-alternate-content-text').textContent = plan.alternate
-      ? weeklyDayContentText(plan.alternate, templates)
-      : 'まだ決めていません';
-    document.getElementById('weekly-alternate-status').textContent = plan.alternate
-      ? alternateStatusText(alternatePlanStatus(plan))
-      : '「変更」から、一日おきにやる部位か保存した組み合わせを選んでください。';
-  } else {
-    renderWeeklyPlan(plan.days, templates);
-  }
-}
-
-// 曜日で決める／一日おき の切り替え。曜日ごとの割り当て(days)は消さずに残すので、戻せば元通り。
-function setEditingWeeklySchedule(schedule) {
-  const plan = getEditingWeeklyPlan();
-  if (!plan) return;
-  updateWeeklyPlanFields(plan.id, { schedule });
-  renderWeeklyEditorScreen();
-}
-
-// 指定したプリセットを編集対象にして週間プラン画面を表示する。
-function openWeeklyPlanEditor(planId) {
-  weeklyPlanEditingId = planId;
-  renderWeeklyEditorScreen();
-  showScreen('weekly');
-}
-
-// ボトムナビ「週間プラン」からの入場。使用中(active)のプリセットがあればそれを、
-// 無くても何かプリセットがあれば先頭のものを編集対象にする(使用中も追従させる)。
-// 1つも無ければ編集対象なしのまま→画面側が空の状態を出す。
 function enterWeeklyScreenFromNav() {
-  const plans = loadWeeklyPlans();
-  let plan = plans.find((p) => p.id === getActiveWeeklyPlanId());
-  if (!plan && plans.length > 0) {
-    [plan] = plans;
-    setActiveWeeklyPlanId(plan.id);
-  }
-  weeklyPlanEditingId = plan ? plan.id : null;
-  renderWeeklyEditorScreen();
+  renderRoutineScreen();
 }
 
-function applyAutoWeeklySplit() {
-  const plan = getEditingWeeklyPlan();
-  if (!plan) return;
-  const days = Number(document.getElementById('weekly-auto-days').value);
-  plan.days = proposeWeeklySplit(days);
-  updateWeeklyPlanDays(plan.id, plan.days);
-  renderWeeklyEditorScreen();
+// 保存できたかを返す(取り込みは保存できてから旧プランを消すため。Codexレビュー指摘)
+function updateRoutineState(mutator) {
+  const state = loadRoutineState();
+  mutator(state);
+  const ok = saveRoutineState(state);
+  renderRoutineScreen();
+  renderTodayFocus();
+  return ok;
 }
 
-function updateWeeklyDayModalVisibility(kind) {
-  document.getElementById('weekly-day-part-group').hidden = kind !== 'parts';
-  document.getElementById('weekly-day-template-row').hidden = kind !== 'template';
-}
-
-function openWeeklyDayModal(dayIndex) {
-  const plan = getEditingWeeklyPlan();
-  if (!plan) return;
-  weeklyDayEditIndex = dayIndex;
-  // dayIndex==='alt'は「一日おき」のやる日の内容(plan.alternate)。休みは選べない(休みの日は自動で決まるため)。
-  const isAlt = dayIndex === 'alt';
-  const day = isAlt
-    ? (plan.alternate || { kind: loadCustomTemplates().length > 0 ? 'template' : 'parts' })
-    : (plan.days[dayIndex] || { kind: 'rest' });
-  const kind = day.kind || 'rest';
-
-  document.getElementById('weekly-day-modal-title').textContent = isAlt ? '一日おきにやる内容' : `${WEEKDAY_LABELS[dayIndex]}曜日の内容`;
-  document.getElementById('weekly-day-kind-rest').hidden = isAlt;
-  document.getElementById('weekly-day-error').textContent = '';
-
-  document.querySelectorAll('#weekly-day-kind-group input').forEach((el) => {
-    el.checked = el.value === kind;
-  });
-  document.querySelectorAll('#weekly-day-part-group input').forEach((el) => {
-    el.checked = kind === 'parts' && (day.parts || []).includes(el.dataset.part);
-  });
-
+function openRoutineSheet(routineId) {
+  const state = loadRoutineState();
+  const existing = routineId ? state.items.find((r) => r.id === routineId) : null;
   const templates = loadCustomTemplates();
-  const select = document.getElementById('weekly-day-template-select');
-  select.innerHTML = templates.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
-  document.getElementById('weekly-day-template-empty').hidden = templates.length > 0;
-  select.hidden = templates.length === 0;
-  if (kind === 'template' && day.templateId) select.value = day.templateId;
-
-  updateWeeklyDayModalVisibility(kind);
-  document.getElementById('weekly-day-modal').classList.add('open');
+  const draft = existing
+    ? JSON.parse(JSON.stringify(existing))
+    : {
+      kind: templates.length > 0 ? 'template' : 'exercise',
+      templateId: '',
+      exerciseId: '',
+      targetMin: null,
+      freq: 'daily',
+      weekdays: [],
+      paused: false,
+    };
+  if (!Array.isArray(draft.weekdays)) draft.weekdays = [];
+  routineEditing = { id: existing ? existing.id : null, draft };
+  renderRoutineSheet(draft, !existing);
+  document.getElementById('routine-sheet').classList.add('open');
   lockBodyScroll();
 }
 
-function closeWeeklyDayModal() {
-  document.getElementById('weekly-day-modal').classList.remove('open');
-  weeklyDayEditIndex = null;
+function closeRoutineSheet() {
+  const sheet = document.getElementById('routine-sheet');
+  if (!sheet.classList.contains('open')) return;
+  sheet.classList.remove('open');
   unlockBodyScroll();
+  routineEditing = null;
 }
 
-function confirmWeeklyDaySave() {
-  if (weeklyDayEditIndex == null) return;
-  const plan = getEditingWeeklyPlan();
-  if (!plan) return;
-  const errorEl = document.getElementById('weekly-day-error');
-  const checkedKind = document.querySelector('#weekly-day-kind-group input:checked');
-  const kind = checkedKind ? checkedKind.value : 'rest';
+function rerenderRoutineSheet() {
+  if (routineEditing) renderRoutineSheet(routineEditing.draft, !routineEditing.id);
+}
 
-  let entry;
-  if (kind === 'parts') {
-    const parts = Array.from(document.querySelectorAll('#weekly-day-part-group input:checked')).map((el) => el.dataset.part);
-    if (parts.length === 0) {
-      errorEl.textContent = '部位を1つ以上選んでください';
-      return;
-    }
-    entry = { kind: 'parts', parts };
-  } else if (kind === 'template') {
-    const select = document.getElementById('weekly-day-template-select');
-    if (!select.value) {
-      errorEl.textContent = '保存した組み合わせを選んでください';
-      return;
-    }
-    entry = { kind: 'template', templateId: select.value };
-  } else {
-    if (weeklyDayEditIndex === 'alt') {
-      errorEl.textContent = '部位か保存した組み合わせを選んでください';
-      return;
-    }
-    entry = { kind: 'rest' };
+function saveRoutineFromSheet() {
+  if (!routineEditing) return;
+  const { draft } = routineEditing;
+  const errorEl = document.getElementById('routine-sheet-error');
+  const fail = (text) => { if (errorEl) errorEl.textContent = text; };
+  if (draft.kind === 'template' && !draft.templateId) return fail('保存した組み合わせを選んでください');
+  if (draft.kind === 'exercise' && !draft.exerciseId) return fail('種目を選んでください');
+  if (draft.freq === 'weekdays' && draft.weekdays.length === 0) return fail('曜日を1つ以上選んでください');
+
+  const routine = {
+    id: routineEditing.id || newRoutineId(),
+    kind: draft.kind,
+    freq: draft.freq,
+    paused: !!draft.paused,
+    createdAt: draft.createdAt || new Date().toISOString(),
+  };
+  if (draft.kind === 'template') routine.templateId = draft.templateId;
+  if (draft.kind === 'exercise') {
+    routine.exerciseId = draft.exerciseId;
+    routine.targetMin = draft.targetMin || null;
   }
+  if (draft.kind === 'parts') routine.parts = draft.parts;
+  if (draft.freq === 'weekdays') routine.weekdays = [...draft.weekdays].sort((a, b) => a - b);
 
-  errorEl.textContent = '';
-  if (weeklyDayEditIndex === 'alt') {
-    updateWeeklyPlanFields(plan.id, { alternate: entry });
-  } else {
-    plan.days[weeklyDayEditIndex] = entry;
-    updateWeeklyPlanDays(plan.id, plan.days);
-  }
-  closeWeeklyDayModal();
-  renderWeeklyEditorScreen();
+  updateRoutineState((state) => {
+    const i = state.items.findIndex((r) => r.id === routine.id);
+    if (i >= 0) state.items[i] = routine;
+    else state.items.push(routine);
+  });
+  closeRoutineSheet();
 }
 
-function deleteEditingWeeklyPlan() {
-  if (!weeklyPlanEditingId) return;
-  deleteWeeklyPlan(weeklyPlanEditingId);
-  weeklyPlanEditingId = null;
-  renderModeWeeklyPlanSection();
-  showScreen('mode');
-}
-
-function wireWeeklyScreen() {
-  document.getElementById('weekly-empty-create-btn').addEventListener('click', openWeeklyPlanNameModal);
-  document.getElementById('weekly-editor-delete-btn').addEventListener('click', deleteEditingWeeklyPlan);
-  document.getElementById('weekly-auto-btn').addEventListener('click', applyAutoWeeklySplit);
-
-  document.getElementById('weekly-day-list').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-weekly-day-edit]');
-    if (btn) openWeeklyDayModal(Number(btn.dataset.weeklyDayEdit));
+function wireRoutineScreen() {
+  document.getElementById('routine-add-btn').addEventListener('click', () => openRoutineSheet(null));
+  document.getElementById('routine-list').addEventListener('click', (e) => {
+    const card = e.target.closest('[data-routine-edit]');
+    if (card) openRoutineSheet(card.dataset.routineEdit);
   });
-
-  document.getElementById('weekly-schedule-toggle').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-weekly-schedule]');
-    if (btn) setEditingWeeklySchedule(btn.dataset.weeklySchedule);
-  });
-  document.getElementById('weekly-alternate-edit-btn').addEventListener('click', () => openWeeklyDayModal('alt'));
-
-  document.getElementById('weekly-day-kind-group').addEventListener('change', (e) => {
-    if (e.target.name === 'weekly-day-kind') updateWeeklyDayModalVisibility(e.target.value);
-  });
-
-  // 全身を選んだら他の部位は解除する（「要望から作る」画面の#part-groupと同じ排他ルール）
-  document.querySelectorAll('#weekly-day-part-group input').forEach((input) => {
-    input.addEventListener('change', () => {
-      if (input.dataset.part === 'fullbody' && input.checked) {
-        document.querySelectorAll('#weekly-day-part-group input').forEach((other) => {
-          if (other !== input) other.checked = false;
-        });
-      } else if (input.checked) {
-        const fullbodyInput = document.querySelector('#weekly-day-part-group input[data-part="fullbody"]');
-        if (fullbodyInput) fullbodyInput.checked = false;
+  document.getElementById('routine-footer').addEventListener('click', (e) => {
+    if (e.target.closest('[data-routine-pause-all]')) {
+      updateRoutineState((state) => { state.allPaused = !state.allPaused; });
+      return;
+    }
+    const importBtn = e.target.closest('[data-routine-import]');
+    if (importBtn) {
+      const plan = loadWeeklyPlans().find((p) => p.id === importBtn.dataset.routineImport);
+      if (!plan) return;
+      // 取り込んだものは休止中で足す(今の予定と重ならないよう、使うものだけ本人が再開する)
+      const imported = routinesFromWeeklyPlan(plan).map((r) => ({ ...r, paused: true }));
+      // 予定を保存できた時だけ、取り込んだプランを一覧から消す(保存に失敗したら元のプランを残す)
+      if (updateRoutineState((state) => { state.items.push(...imported); })) {
+        deleteWeeklyPlan(plan.id);
+        renderRoutineScreen();
       }
-    });
+    }
   });
 
-  document.getElementById('weekly-day-modal').addEventListener('click', (e) => {
-    if (e.target.closest('[data-weekly-day-close]')) closeWeeklyDayModal();
+  const sheet = document.getElementById('routine-sheet');
+  sheet.addEventListener('click', (e) => {
+    if (!routineEditing) return;
+    const { draft } = routineEditing;
+    if (e.target.closest('[data-routine-cancel]')) { closeRoutineSheet(); return; }
+    const kindBtn = e.target.closest('[data-routine-kind]');
+    if (kindBtn) { draft.kind = kindBtn.dataset.routineKind; rerenderRoutineSheet(); return; }
+    const targetBtn = e.target.closest('[data-routine-target]');
+    if (targetBtn) { draft.targetMin = targetBtn.dataset.routineTarget ? Number(targetBtn.dataset.routineTarget) : null; rerenderRoutineSheet(); return; }
+    const freqBtn = e.target.closest('[data-routine-freq]');
+    if (freqBtn) {
+      draft.freq = freqBtn.dataset.routineFreq;
+      // 曜日を選ぶに切り替えた時、まだ何も選んでいなければ今日の曜日を入れておく
+      if (draft.freq === 'weekdays' && draft.weekdays.length === 0) draft.weekdays = [todayWeekdayIndex()];
+      rerenderRoutineSheet();
+      return;
+    }
+    const dayBtn = e.target.closest('[data-routine-weekday]');
+    if (dayBtn) {
+      const d = Number(dayBtn.dataset.routineWeekday);
+      draft.weekdays = draft.weekdays.includes(d) ? draft.weekdays.filter((x) => x !== d) : [...draft.weekdays, d];
+      rerenderRoutineSheet();
+      return;
+    }
+    if (e.target.closest('[data-routine-toggle-pause]')) {
+      draft.paused = !draft.paused;
+      saveRoutineFromSheet();
+      return;
+    }
+    if (e.target.closest('[data-routine-delete]')) {
+      if (!routineEditing.id || !confirm('この予定を削除しますか？（これまでの記録は消えません）')) return;
+      const id = routineEditing.id;
+      updateRoutineState((state) => { state.items = state.items.filter((r) => r.id !== id); });
+      closeRoutineSheet();
+    }
   });
-  document.getElementById('weekly-day-save').addEventListener('click', confirmWeeklyDaySave);
+  sheet.addEventListener('change', (e) => {
+    if (!routineEditing) return;
+    const field = e.target.dataset && e.target.dataset.routineField;
+    if (field) routineEditing.draft[field] = e.target.value;
+  });
+  document.getElementById('routine-save-btn').addEventListener('click', saveRoutineFromSheet);
 }
 
-// ===== モード選択画面：「週間プラン」セクション =====
-// 使用中(active)のプリセットを参照する。今日にあたる曜日の行はセクション内で
-// ハイライト＋「始める」表示される(js/ui.jsのweeklyPlanDaysHtml)。screen-modeを
-// 表示するたびに再計算する(週間プランをその場で編集・切り替えた直後に戻ってきても
-// 最新の内容を反映するため)。専用バナーを別途置いていたが「うるさい」との指摘で撤廃し、
-// このセクションに統合した。
-
-function renderModeWeeklyPlanSection() {
-  const plans = loadWeeklyPlans();
-  const activeId = getActiveWeeklyPlanId();
-  const templates = loadCustomTemplates();
-  renderWeeklyPlanSection(plans, activeId, templates);
-  renderTodayFocus(plans, activeId, templates);
-}
-
-// 週間プランセクションの今日の行にある「始める」。
-// 以前は①鍛えたい部位のチェックを合わせて設定画面を必ず経由していたが、器具・時間・レベル・
-// 目的は`restoreLastSettings()`で既に前回値が復元済みのため、「今日も同じ内容でいいですか？」を
-// 実質無言で毎回聞き直しているだけだった（値の再入力は不要なのに画面遷移・タップ数だけが
-// 増えていた）。知識があって毎回作るのが面倒な人ほど、この一手間が離脱の原因になりうるため、
-// 設定画面を経由せず生成済みのメニュー確認画面まで直接進めるようにした。
-// 「今日は器具が無い」等いつもと状況が違う時の調整は、メニュー確認画面の「条件を変える」から
-// 引き続きできる（安全弁として残す。生成自体を無条件に信用させきらない）。
-function startTodayFromActivePlan() {
-  const active = getActiveWeeklyPlan();
-  if (!active) return;
-  const entry = isAlternatePlan(active) ? active.alternate : active.days[todayWeekdayIndex()];
-  if (!entry) return;
-
-  if (entry.kind === 'template') {
-    const template = loadCustomTemplates().find((t) => t.id === entry.templateId);
+// ホームの「今日の予定」の「始める」。保存した組み合わせは「自分で作る」画面に読み込み(回数等を調整してから進める)、
+// 部位は前回の条件のまま「要望から作る」でメニューを作り、種目1つは記録をすぐ始める。
+function startRoutine(routineId) {
+  const routine = loadRoutineState().items.find((r) => r.id === routineId);
+  if (!routine) return;
+  if (routine.kind === 'template') {
+    const template = loadCustomTemplates().find((t) => t.id === routine.templateId);
     if (!template) return;
     applyCustomTemplate(template);
+    customRoutineId = routine.id;
     showScreen('custom');
-  } else if (entry.kind === 'parts') {
-    document.querySelectorAll('#part-group input').forEach((el) => {
-      el.checked = entry.parts.includes(el.dataset.part);
-    });
-    // 設定画面のDOM値(器具・時間・レベル・目的等)は起動時のrestoreLastSettings()で
-    // 既に前回値が入っている状態なので、そのままhandleGenerate()を呼べば設定画面を
-    // 表示しなくても正しい内容で生成できる。器具0件などバリデーションに引っかかった
-    // 場合だけ、エラー文言を見せられる設定画面へフォールバックする。
-    if (!handleGenerate()) {
-      showScreen('setup');
-    }
-  }
-}
-
-function openWeeklyPlanNameModal() {
-  document.getElementById('weekly-plan-name-input').value = '';
-  document.getElementById('weekly-plan-name-error').textContent = '';
-  document.getElementById('weekly-plan-name-modal').classList.add('open');
-  document.getElementById('weekly-plan-name-input').focus();
-}
-
-function closeWeeklyPlanNameModal() {
-  document.getElementById('weekly-plan-name-modal').classList.remove('open');
-}
-
-// 新しいプリセットを名前付きで作成し、使用中にした上で編集画面を開く。
-function confirmWeeklyPlanName() {
-  const input = document.getElementById('weekly-plan-name-input');
-  const name = input.value.trim();
-  if (!name) {
-    document.getElementById('weekly-plan-name-error').textContent = '名前を入力してください';
     return;
   }
-  const plan = createWeeklyPlan(name);
-  setActiveWeeklyPlanId(plan.id);
-  closeWeeklyPlanNameModal();
-  openWeeklyPlanEditor(plan.id);
+  if (routine.kind === 'parts') {
+    document.querySelectorAll('#part-group input').forEach((el) => {
+      el.checked = routine.parts.includes(el.dataset.part);
+    });
+    setupRoutineId = routine.id;
+    // 設定画面の器具・時間・レベル・目的は起動時のrestoreLastSettings()で前回値が入っているので、
+    // そのまま作れる。器具0件などで作れない時だけ設定画面を見せる。
+    if (!handleGenerate()) showScreen('setup');
+    return;
+  }
+  if (routine.kind === 'exercise') {
+    const exercise = findExerciseById(routine.exerciseId);
+    if (!exercise) return;
+    // クイックスタート(maybeHandleEntryParams)と同じ組み立て方にする
+    const painAreas = (loadSettings() || {}).painAreas || [];
+    const { warmup, cooldown } = buildWarmupAndCooldown([exercise], painAreas);
+    currentMenu = {
+      warmup,
+      cooldown,
+      main: [exercise.type === 'cardio' ? buildCustomCardioPlan(exercise, routine.targetMin || null) : buildCustomSetPlan(exercise, 90, null, 'sets')],
+      generatedAt: new Date().toISOString(),
+      params: { custom: true, routineId: routine.id },
+      userReordered: false,
+    };
+    handleStartWorkout();
+  }
 }
 
 function wireModeWeeklyPlanSection() {
-  // 画面最上部の「今日の予定」案内(#today-focus-section)は#weekly-plan-sectionとは
-  // 別のDOM要素なので、「始める」ボタンのクリックは専用のリスナーで拾う。
   document.getElementById('today-focus-section').addEventListener('click', (e) => {
-    if (e.target.closest('[data-weekly-plan-start-today]')) {
-      startTodayFromActivePlan();
-    }
-  });
-
-  document.getElementById('weekly-plan-section').addEventListener('click', (e) => {
-    if (e.target.closest('#weekly-plan-create-btn')) {
-      // 0件の状態からは名前モーダルをいきなり開かず、まず週間プラン画面の空状態
-      // （「まだ1つも作られていません。曜日ごとに...決めておける機能です」の説明）を経由させる。
-      // 複数プリセットを保存できる仕組みだと知らない初見ユーザーに、前置きなく
-      // 「名前を付けてください」だけ聞くと唐突なため。
-      weeklyPlanEditingId = null;
-      renderWeeklyEditorScreen();
+    const btn = e.target.closest('[data-routine-start]');
+    if (btn) startRoutine(btn.dataset.routineStart);
+    const fix = e.target.closest('[data-routine-fix]');
+    if (fix) {
+      renderRoutineScreen();
       showScreen('weekly');
-      return;
+      openRoutineSheet(fix.dataset.routineFix);
     }
-    if (e.target.closest('#weekly-plan-new-btn')) {
-      // 既に1つ以上プランがある状態からの追加作成は、仕組みを知っている前提なので
-      // 従来通り直接名前モーダルを開く。
-      openWeeklyPlanNameModal();
-      return;
-    }
-    if (e.target.closest('[data-weekly-plan-start-today]')) {
-      startTodayFromActivePlan();
-      return;
-    }
-    const editBtn = e.target.closest('[data-weekly-plan-edit]');
-    if (editBtn) {
-      openWeeklyPlanEditor(editBtn.dataset.weeklyPlanEdit);
-      return;
-    }
-    const useBtn = e.target.closest('[data-weekly-plan-use]');
-    if (useBtn) {
-      setActiveWeeklyPlanId(useBtn.dataset.weeklyPlanUse);
-      renderModeWeeklyPlanSection();
-      return;
-    }
-    const delBtn = e.target.closest('[data-weekly-plan-delete]');
-    if (delBtn) {
-      deleteWeeklyPlan(delBtn.dataset.weeklyPlanDelete);
-      renderModeWeeklyPlanSection();
-    }
-  });
-
-  document.getElementById('weekly-plan-name-modal').addEventListener('click', (e) => {
-    if (e.target.closest('[data-weekly-plan-name-close]')) closeWeeklyPlanNameModal();
-  });
-  document.getElementById('weekly-plan-name-confirm').addEventListener('click', confirmWeeklyPlanName);
-  document.getElementById('weekly-plan-name-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') confirmWeeklyPlanName();
   });
 }
 
@@ -1860,7 +1727,7 @@ function wirePainExclusivity() {
 }
 
 // 戻り値は生成に成功してscreen-menuまで進めたか(true)、バリデーションで止まったか(false)。
-// startTodayFromActivePlan()が、設定画面を経由しない生成を試みて失敗した時に
+// startRoutine()(部位の予定)が、設定画面を経由しない生成を試みて失敗した時に
 // 設定画面へフォールバックするための判定に使う（画面遷移せず何も起きないまま
 // ユーザーが取り残されるのを防ぐ）。
 function handleGenerate() {
@@ -1892,6 +1759,9 @@ function handleGenerate() {
     errorEl.textContent = '選んだ条件に合う種目が見つかりませんでした。器具や部位を見直してください。';
     return false;
   }
+  // 作れた時だけ予定とのつながりを使い切る(作れずに設定画面で条件を直して作り直した時も、予定の記録にする)
+  currentMenu.params.routineId = setupRoutineId;
+  setupRoutineId = null;
   renderMenuScreen();
   showScreen('menu');
   return true;
@@ -2720,7 +2590,7 @@ function init() {
   wireCustomScreen();
   wireExercisePicker();
   wireMenuScreen();
-  wireWeeklyScreen();
+  wireRoutineScreen();
   wireModeWeeklyPlanSection();
   wireKnowledgeScreen();
   restoreLastSettings();
@@ -2745,15 +2615,20 @@ function init() {
     // 出し続けないよう、戻ってきたら描き直す(2026-10-06 Codexレビュー指摘)。
     if (document.visibilityState === 'visible') {
       renderModeWeeklyPlanSection();
+      renderRoutineScreen();
       moveStaleWorkoutToHomeIfNeeded();
     }
   });
   window.addEventListener('pagehide', () => persistActiveSessionSnapshot({ passive: true }));
 
-  document.getElementById('mode-request-btn').addEventListener('click', () => showScreen('setup'));
+  document.getElementById('mode-request-btn').addEventListener('click', () => {
+    setupRoutineId = null;
+    showScreen('setup');
+  });
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
     customExercises = [];
     customRestSec = {};
+    customRoutineId = null;
     // 前に読み込んだ組み合わせの目標を持ち越さない(有酸素は最後に決めた目標が初期値になる。Codexレビュー指摘)
     customTargets = {};
     document.getElementById('custom-error').textContent = '';

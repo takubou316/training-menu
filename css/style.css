@@ -2838,3 +2838,73 @@ body.modal-open {
   line-height: 1.5;
 }
 .warmup-note { margin: 6px 0 0; font-size: 11px; }
+
+/* ===== トレーニング予定（2026-10-07〜、js/ui.jsのrenderTodayFocus・renderRoutineScreen・renderRoutineSheet） ===== */
+.routine-today-panel { display: block; }
+.routine-today-heading { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 6px; }
+.routine-today-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+}
+.routine-today-row + .routine-today-row { border-top: 1px solid var(--border); }
+.routine-today-text { min-width: 0; }
+.routine-today-done { font-size: 13px; color: var(--text-dim); padding: 6px 0; }
+.routine-done-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.routine-today-later { margin: 8px 0 0; font-size: 12px; color: var(--text-dim); }
+.routine-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.routine-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.routine-card.is-paused { border-style: dashed; opacity: 0.7; }
+.routine-card-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.routine-card-name { font-weight: 600; font-size: 15px; }
+.routine-card-sub { font-size: 12px; color: var(--text-dim); }
+.routine-card-status { font-size: 12px; color: var(--text-dim); }
+.routine-card-status.is-done { color: var(--accent); font-weight: 600; }
+.routine-add-btn { width: 100%; }
+.routine-footer { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+.routine-pause-all-btn { align-self: flex-start; }
+.routine-legacy .template-item { margin-top: 8px; }
+.routine-select {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 16px;
+}
+.routine-weekday-chips { margin-top: 8px; }
+.routine-weekday-chips .choice-chip[aria-pressed="true"] {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #fff;
+}
+.routine-sheet-manage { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.routine-sheet-actions { margin-top: 16px; }

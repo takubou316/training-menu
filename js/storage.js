@@ -15,6 +15,7 @@ const STORAGE_KEYS = {
   warmupSetsEnabled: 'training-menu:warmup-sets-enabled',
   holdTargets: 'training-menu:hold-targets',
   cardioTargets: 'training-menu:cardio-targets',
+  routines: 'training-menu:routines',
   circuitLast: 'training-menu:circuit-last',
 };
 
@@ -491,9 +492,6 @@ function updateWeeklyPlanFields(id, fields) {
   return plans;
 }
 
-// 「一日おき」プランの判定用: その内容を最後にやった日(ローカル日付キー)。無ければnull。
-// 保存した組み合わせ: その組み合わせから始めた記録(記録のtemplateId、2026-10-06〜記録に残す)。
-// 部位: 有酸素以外の種目を含む記録すべて(「要望から作る」の記録は部位を記録していないため)。
 // 週間プランの1日分(またはalternate)の形。休みは一日おきでは使わないが、形としては受け付ける。
 function isValidWeeklyEntry(entry) {
   if (!isPlainObject(entry)) return false;
@@ -501,19 +499,6 @@ function isValidWeeklyEntry(entry) {
   if (entry.kind === 'template') return typeof entry.templateId === 'string';
   if (entry.kind === 'parts') return Array.isArray(entry.parts) && entry.parts.every((x) => typeof x === 'string');
   return false;
-}
-
-function lastDoneDateKeyForEntry(entry) {
-  if (!entry) return null;
-  const history = loadHistory(); // 新しい順
-  const match = history.find((s) => {
-    if (entry.kind === 'template') return s.templateId === entry.templateId;
-    if (entry.kind === 'parts') return (s.exercises || []).some((ex) => ex.type !== 'cardio');
-    return false;
-  });
-  // 終えた日(finishedAt、2026-10-06〜)で数える。開始日(date)だと23:55に始めて0:20に終えた記録が前日扱いになるため。
-  // finishedAtが無い古い記録は開始日で代用する。
-  return match ? localDateKey(match.finishedAt || match.date) : null;
 }
 
 // プリセットを削除する。削除したものが使用中(active)だった場合は、残りの先頭を新しい使用中にする
@@ -566,6 +551,125 @@ function setActiveWeeklyPlanId(id) {
   else localStorage.removeItem(STORAGE_KEYS.activeWeeklyPlanId);
 }
 
+// ===== トレーニング予定（2026-10-07〜、旧「週間プラン」の作り直し） =====
+// 「何をやる」と「いつやる」の組を並べたリスト。旧週間プラン(1つだけ使える・曜日か一日おきのどちらか・
+// 1日1つ)では「毎日ウォーキング＋一日おきサーキット」が組めなかったため作り直した(設計はCodexと相談)。
+// { version: 1, items: [routine], allPaused: false, migratedPlanId }
+// routine = { id, kind: 'template'|'exercise'|'parts', templateId?, exerciseId?, targetMin?, parts?,
+//             freq: 'daily'|'alternate'|'weekdays', weekdays?: [0..6](0=月), paused, createdAt }
+// 'parts'(部位で自動作成)は旧週間プランから引き継いだものだけ。新しく作れるのは組み合わせ・種目1つ。
+// 旧週間プラン(weeklyPlans)のデータは消さずに残し、初回だけ使用中のプランを変換する(互換、ユーザー要望)。
+const ROUTINE_FREQS = ['daily', 'alternate', 'weekdays'];
+
+function newRoutineId() {
+  return `r${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isValidRoutine(r) {
+  if (!isPlainObject(r) || typeof r.id !== 'string' || !ROUTINE_FREQS.includes(r.freq)) return false;
+  if (r.freq === 'weekdays' && !(Array.isArray(r.weekdays) && r.weekdays.length > 0
+    && r.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6))) return false;
+  if (r.kind === 'template') return typeof r.templateId === 'string';
+  if (r.kind === 'exercise') return typeof r.exerciseId === 'string' && (r.targetMin == null || isValidCardioTargetMin(r.targetMin));
+  if (r.kind === 'parts') return Array.isArray(r.parts) && r.parts.length > 0 && r.parts.every((x) => typeof x === 'string');
+  return false;
+}
+
+function isValidRoutineState(v) {
+  return isPlainObject(v) && Array.isArray(v.items) && v.items.every(isValidRoutine);
+}
+
+// 旧週間プラン1つ分を予定のリストにする。同じ内容の曜日は1つの「曜日を選ぶ」にまとめ、休みは項目にしない。
+// 使っていなかった側(曜日／一日おきのうち選ばれていなかった方)は消さずに休止中で入れる。
+function routinesFromWeeklyPlan(plan) {
+  if (!plan) return [];
+  const usingAlternate = plan.schedule === 'alternate';
+  const toContent = (entry) => {
+    if (!isValidWeeklyEntry(entry) || entry.kind === 'rest') return null;
+    if (entry.kind === 'template') return { kind: 'template', templateId: entry.templateId };
+    if (entry.kind === 'parts' && entry.parts.length > 0) return { kind: 'parts', parts: [...entry.parts] };
+    return null;
+  };
+  const items = [];
+  const byContent = new Map();
+  (Array.isArray(plan.days) ? plan.days : []).forEach((day, i) => {
+    const content = toContent(day);
+    if (!content) return;
+    const key = JSON.stringify(content);
+    if (!byContent.has(key)) byContent.set(key, { ...content, weekdays: [] });
+    byContent.get(key).weekdays.push(i);
+  });
+  byContent.forEach((c) => {
+    items.push({ id: newRoutineId(), ...c, freq: 'weekdays', paused: usingAlternate, createdAt: new Date().toISOString() });
+  });
+  const alt = toContent(plan.alternate);
+  if (alt) items.push({ id: newRoutineId(), ...alt, freq: 'alternate', paused: !usingAlternate, createdAt: new Date().toISOString() });
+  return items;
+}
+
+function loadRoutineState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.routines);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (isValidRoutineState(parsed)) return parsed;
+    }
+  } catch (e) { /* 壊れていたら下で作り直す(旧週間プランは残っているので変換し直せる) */ }
+  // 初回(またはバックアップに予定が無かった時): 使用中の旧週間プランを変換する
+  const plans = loadWeeklyPlans();
+  const active = plans.find((p) => p.id === getActiveWeeklyPlanId()) || plans[0] || null;
+  const state = { version: 1, items: routinesFromWeeklyPlan(active), allPaused: false, migratedPlanId: active ? active.id : null };
+  saveRoutineState(state);
+  return state;
+}
+
+function saveRoutineState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.routines, JSON.stringify(state));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ===== 予定を「やったか」の判定 =====
+// 予定から始めた記録はrecord.routineIdを持ち、その予定にだけ数える(同じ組み合わせを別の予定でも使っている時に
+// 両方を済みにしないため)。routineIdを持たない記録(ゲーム日課のショートカット・自分で組んだメニュー等)は、
+// 組み合わせのid・種目のidがはっきり一致する時だけ補って数える。部位の予定は推測で数えない
+// (「筋トレの記録なら済み」だと脚の日の記録で胸の日まで済みになるため。Codexレビュー指摘)。
+// 日付は終えた日(finishedAt)、無い古い記録は開始日。
+function sessionRoutineDateKey(s) {
+  return localDateKey(s.finishedAt || s.date);
+}
+
+function sessionCountsForRoutine(s, routine) {
+  // 予定から始めた記録はその予定だけのもの(その予定を後で削除しても、同じ組み合わせの別の予定には回さない)
+  if (s.routineId) return s.routineId === routine.id;
+  if (routine.kind === 'template') return !!s.templateId && s.templateId === routine.templateId;
+  if (routine.kind === 'exercise') {
+    return (s.exercises || []).some((ex) => ex.exerciseId === routine.exerciseId
+      && (ex.type === 'cardio' ? isCardioRecorded(ex) : true));
+  }
+  return false;
+}
+
+// その予定をやった日(日付キー)の集合と、日ごとの有酸素の合計時間(秒、種目1つの予定の目標表示用)
+function routineDoneDays(routine, history) {
+  const days = new Map(); // dateKey -> cardioSec
+  history.forEach((s) => {
+    if (!sessionCountsForRoutine(s, routine)) return;
+    const key = sessionRoutineDateKey(s);
+    let sec = days.get(key) || 0;
+    if (routine.kind === 'exercise') {
+      (s.exercises || []).forEach((ex) => {
+        if (ex.exerciseId === routine.exerciseId && ex.type === 'cardio') sec += Number(ex.duration) || 0;
+      });
+    }
+    days.set(key, sec);
+  });
+  return days;
+}
+
 // ===== データのバックアップ（書き出し/読み込み、2026-10-03〜） =====
 // iPhoneのホーム画面に追加したWebアプリはアイコンごとに保存領域が分かれており、アイコンを削除すると
 // データも消える。追加し直し・機種変更の前に端末内のデータを1つのJSONにまとめて書き出し、新しい方で
@@ -576,7 +680,7 @@ const BACKUP_FORMAT = 'compstack-backup';
 const BACKUP_VERSION = 1;
 const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
-  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog', 'cardioTargets',
+  'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog', 'cardioTargets', 'routines',
 ];
 // クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)と、送れなかった記録
 // (js/sync.jsのSYNC_FAILED_KEY)。どちらもバックアップには含めない。
@@ -628,6 +732,8 @@ const BACKUP_VALIDATORS = {
   holdTargets: (v) => isPlainObject(v) && Object.values(v).every((sec) => Number.isInteger(sec)
     && sec >= HOLD_TARGET_MIN_SEC && sec <= HOLD_TARGET_MAX_SEC),
   cardioTargets: (v) => isPlainObject(v) && Object.values(v).every(isValidCardioTargetMin),
+  // トレーニング予定(2026-10-07〜)。無い古いバックアップを読み込むと、読み込んだ旧週間プランから変換し直す
+  routines: isValidRoutineState,
 };
 
 // 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。
@@ -720,7 +826,8 @@ if (typeof module !== 'undefined') {
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
     loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
-    deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields, lastDoneDateKeyForEntry,
+    deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields,
+    loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId,
     loadCircuitLast, saveCircuitLast,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
     loadTheme, saveTheme,

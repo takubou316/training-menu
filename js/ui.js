@@ -170,44 +170,16 @@ function renderSyncStatus() {
 
 const PAIN_AREA_LABELS = { 肩: '肩', 腰: '腰', 膝: '膝', 手首: '手首' };
 
-// 週間プラン画面での部位表示名(#part-group/#weekly-day-part-groupのdata-part値に対応)。
+// 部位の表示名(#part-groupのdata-part値に対応。トレーニング予定の「部位」の予定でも使う)。
 const PART_LABELS = { fullbody: '全身', chest: '胸', back: '背中', shoulders: '肩', arms: '腕', legs: '脚', core: '体幹・腹筋' };
 
-// 週間プランの1曜日分の内容を、一覧行に出す短いテキストにする。
-function weeklyDayContentText(day, templates) {
-  if (!day || day.kind === 'rest') return '休み';
-  if (day.kind === 'parts') {
-    if (!Array.isArray(day.parts) || day.parts.length === 0) return '休み';
-    return day.parts.map((p) => PART_LABELS[p] || p).join('・');
-  }
-  if (day.kind === 'template') {
-    const t = templates.find((tpl) => tpl.id === day.templateId);
-    return t ? `「${t.name}」` : '（削除された組み合わせ）';
-  }
-  return '休み';
-}
+// ===== トレーニング予定（2026-10-07〜、旧「週間プラン」の作り直し。データと判定はjs/storage.js） =====
+const ROUTINE_FREQ_LABELS = { daily: '毎日', alternate: '一日おき', weekdays: '曜日を選ぶ' };
+const ROUTINE_TARGET_CHOICES = [10, 15, 20, 30, 45, 60];
 
-// ===== 週間プランの「一日おき」（2026-10-06〜） =====
-// 曜日ではなく「前回やった日」から数える。前回やった日の翌日だけ休みで、2日以上空いたら(または
-// まだ一度もやっていなければ)今日がやる日。やり忘れて2日空いても、さらに1日待たせず今日やる日にする。
-function isAlternatePlan(plan) {
-  return !!plan && plan.schedule === 'alternate';
-}
-
-function alternateEntryActionable(entry, templates) {
-  return !!entry && (
-    (entry.kind === 'parts' && Array.isArray(entry.parts) && entry.parts.length > 0)
-    || (entry.kind === 'template' && templates.some((t) => t.id === entry.templateId))
-  );
-}
-
-// state: 'due'(今日やる日) | 'doneToday'(今日もうやった) | 'rest'(昨日やったので今日は休み)
-function alternatePlanStatus(plan) {
-  const today = localDateKey(new Date());
-  const last = lastDoneDateKeyForEntry(plan.alternate);
-  if (last === today) return { state: 'doneToday', last };
-  if (last && last === previousDateKey(today)) return { state: 'rest', last };
-  return { state: 'due', last };
+// 今日の曜日を予定の並び(0=月〜6=日)に合わせたインデックスで返す(Date.getDay()は0=日曜始まり)。
+function todayWeekdayIndex(date = new Date()) {
+  return (date.getDay() + 6) % 7;
 }
 
 function shortDateKeyLabel(dateKey) {
@@ -215,139 +187,260 @@ function shortDateKeyLabel(dateKey) {
   return `${m}/${d}`;
 }
 
-function alternateStatusText(status) {
-  if (!status.last) return 'まだ一度もやっていません';
-  const lastText = `前回 ${shortDateKeyLabel(status.last)}`;
-  if (status.state === 'doneToday') return '今日やりました・次は明後日';
-  if (status.state === 'rest') return `${lastText}（昨日）・次は明日`;
-  return lastText;
-}
-
-// 今日の曜日を週間プランの並び(0=月〜6=日)に合わせたインデックスで返す。
-// Date.getDay()は0=日曜始まりなので、月曜始まりに変換する。
-function todayWeekdayIndex() {
-  return (new Date().getDay() + 6) % 7;
-}
-
-function renderWeeklyPlan(plan, templates) {
-  const container = document.getElementById('weekly-day-list');
-  if (!container) return;
-  container.innerHTML = plan.map((day, i) => {
-    const isRest = !day || day.kind === 'rest';
-    return `
-    <div class="weekly-day-row${isRest ? ' is-rest' : ''}">
-      <div class="weekly-day-label">${WEEKDAY_LABELS[i]}</div>
-      <div class="weekly-day-content">${escapeHtml(weeklyDayContentText(day, templates))}</div>
-      <button type="button" class="weekly-day-edit-btn" data-weekly-day-edit="${i}">変更</button>
-    </div>`;
-  }).join('');
-}
-
-// プリセットの保存日を「8/5」のような短い表記にする(自分で作るの保存済み組み合わせと同じ書式)。
-function shortSavedDateLabel(isoString) {
-  const d = new Date(isoString);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
-
-// 週間プランの中身を、休み・今日の曜日を省いた「曜日：内容」の行リストにする
-// （モード選択画面の週間プランパネル用）。主役は中身なので、1行に詰め込まず曜日ごとに
-// 見やすく並べる。今日の予定は2026-08-14に画面最上部の#today-focus-section（renderTodayFocus）
-// へ昇格したため、ここでは重複表示を避けるため除外している。
-function weeklyPlanDaysHtml(days, templates) {
-  const todayIdx = todayWeekdayIndex();
-  const anyAssigned = days.some((day) => day && day.kind !== 'rest');
-  if (!anyAssigned) {
-    return '<p class="weekly-plan-summary-empty">まだ何も割り当てていません</p>';
+// 予定の「何をやる」を短い文にする
+function routineContentText(r, templates) {
+  if (r.kind === 'template') {
+    const t = templates.find((tpl) => tpl.id === r.templateId);
+    return t ? t.name : '（削除された組み合わせ）';
   }
-  const rows = days
-    .map((day, i) => ({ day, i }))
-    .filter(({ day, i }) => day && day.kind !== 'rest' && i !== todayIdx);
-  if (rows.length === 0) {
-    // 割り当てが今日だけの場合。今日の内容は上の今日の案内に出ているのでここでは触れない。
-    return '<p class="weekly-plan-summary-empty">今日以外はまだ割り当てていません</p>';
+  if (r.kind === 'exercise') {
+    const ex = findExerciseById(r.exerciseId);
+    return ex ? ex.name : '（見つからない種目）';
   }
-  return `<div class="weekly-plan-days">${rows.map(({ day, i }) => `
-    <div class="weekly-plan-day-row">
-      <span class="weekly-plan-day-label">${WEEKDAY_LABELS[i]}</span>
-      <span class="weekly-plan-day-content">${escapeHtml(weeklyDayContentText(day, templates))}</span>
-    </div>`).join('')}</div>`;
+  if (r.kind === 'parts') return (r.parts || []).map((p) => PART_LABELS[p] || p).join('・');
+  return '';
 }
 
-// モード選択画面の最上部に置く「今日の予定」案内（2026-08-14、原点回帰UX見直しの一環）。
-// 週間プランを1つも作っていなければ何も表示しない（そもそも「他に」何も無い状態で
-// 折りたたみを見せても意味が無いため、#mode-cards-detailsのsummary自体も隠して従来通り
-// カード2枚がそのまま並ぶ見た目に戻す＝.mode-cards-flat）。プランがあれば、今日が
-// 実行可能な内容(部位、または削除されていないテンプレート)なら「今日は○○の日です」＋
-// 「始める」を強調表示し、その代わり「要望から作る」「自分で作る」の2枚は
-// #mode-cards-detailsに折りたたむ（知識があって毎回作るのが面倒な人ほど、今日の
-// 提案だけ見えれば用が済む）。休みの日は変更を最小限にしたく、軽い一言だけ添えて
-// カードは従来通り開いたままにする。以前、専用の目立つバナーを別途置いて「うるさい」と
-// 指摘された経緯があるため、配色は.weekly-plan-day-row-todayと同じ抑えたaccent-dimに揃えている。
-function renderTodayFocus(plans, activeId, templates) {
+// 始められる内容か(削除された組み合わせ・見つからない種目は始められない)
+function routineActionable(r, templates) {
+  if (r.kind === 'template') return templates.some((t) => t.id === r.templateId);
+  if (r.kind === 'exercise') return !!findExerciseById(r.exerciseId);
+  return r.kind === 'parts' && (r.parts || []).length > 0;
+}
+
+function routineFreqText(r) {
+  if (r.freq === 'weekdays') return [...r.weekdays].sort((a, b) => a - b).map((d) => WEEKDAY_LABELS[d]).join('・');
+  return ROUTINE_FREQ_LABELS[r.freq] || '';
+}
+
+// 今日の状態。due=今日やる日か、done=今日やったか、doneSec=今日の有酸素の合計秒(種目1つの予定)、
+// next=今日やる日でない時の次の日の言い方、last=前回やった日。
+function routineTodayStatus(r, doneDays, now = new Date()) {
+  const today = localDateKey(now);
+  const done = doneDays.has(today);
+  const doneSec = doneDays.get(today) || 0;
+  if (r.freq === 'daily') return { due: true, done, doneSec };
+  if (r.freq === 'weekdays') {
+    const todayIdx = todayWeekdayIndex(now);
+    if (r.weekdays.includes(todayIdx)) return { due: true, done, doneSec };
+    const ahead = [1, 2, 3, 4, 5, 6].find((n) => r.weekdays.includes((todayIdx + n) % 7));
+    const nextIdx = (todayIdx + ahead) % 7;
+    return { due: false, done, doneSec, next: ahead === 1 ? '明日' : `${WEEKDAY_LABELS[nextIdx]}曜` };
+  }
+  // 一日おき: やった日の次の日は休み、その次の日からまた出る(やるまで出し続ける)
+  const last = [...doneDays.keys()].filter((k) => k <= today).sort().pop() || null;
+  if (last === today) return { due: true, done: true, doneSec, last };
+  if (last && last === previousDateKey(today)) return { due: false, done: false, doneSec: 0, next: '明日', last };
+  return { due: true, done: false, doneSec: 0, last };
+}
+
+// 種目1つ(有酸素)の予定の「済み・10/30分」
+function routineDoneText(r, status) {
+  if (!status.done) return '';
+  if (r.kind === 'exercise' && r.targetMin) {
+    const min = Math.floor(status.doneSec / 60);
+    return min >= r.targetMin ? '済み・目標達成' : `済み・${min}/${r.targetMin}分`;
+  }
+  return '済み';
+}
+
+function routineSubText(r, status) {
+  const parts = [routineFreqText(r)];
+  if (r.kind === 'exercise' && r.targetMin) parts.push(`目標${r.targetMin}分`);
+  if (r.freq === 'alternate' && status.last) parts.push(`前回 ${shortDateKeyLabel(status.last)}`);
+  return parts.join('・');
+}
+
+function routineStatusPack() {
+  const state = loadRoutineState();
+  const templates = loadCustomTemplates();
+  const history = loadHistory();
+  const rows = state.items.map((r) => {
+    const doneDays = routineDoneDays(r, history);
+    return { r, status: routineTodayStatus(r, doneDays), actionable: routineActionable(r, templates) };
+  });
+  return { state, templates, rows };
+}
+
+// ホーム最上部の「今日の予定」。予定が無ければ何も出さない(「他のメニューを作る」の2枚を開いたまま)。
+// 今日やる日でまだやっていないものがあれば「始める」を並べ、2枚のカードは折りたたむ。
+// 済んだものは小さく残し、今日が休みの予定は「ほかの予定」として一行で添える。
+function renderTodayFocus() {
   const container = document.getElementById('today-focus-section');
   const detailsEl = document.getElementById('mode-cards-details');
   if (!container) return;
-
   const setCardsFlat = (flat) => {
     if (!detailsEl) return;
     detailsEl.classList.toggle('mode-cards-flat', flat);
     if (flat) detailsEl.open = true;
   };
 
-  if (plans.length === 0) {
-    container.innerHTML = '';
+  const { state, templates, rows } = routineStatusPack();
+  const active = state.allPaused ? [] : rows.filter((x) => !x.r.paused);
+  if (active.length === 0) {
+    container.innerHTML = state.items.length > 0 && state.allPaused
+      ? '<p class="today-focus-rest">予定は全部休止中です</p>'
+      : '';
     setCardsFlat(true);
     return;
   }
 
-  const active = plans.find((p) => p.id === activeId) || plans[0];
+  const todo = active.filter((x) => x.status.due && !x.status.done && x.actionable);
+  // 組み合わせが削除された等で始められない予定も黙って消さず、選び直す案内を出す(Codexレビュー指摘)
+  const broken = active.filter((x) => x.status.due && !x.status.done && !x.actionable);
+  const done = active.filter((x) => x.status.done);
+  const later = active.filter((x) => !x.status.due && !x.status.done);
 
-  if (isAlternatePlan(active)) {
-    const entry = active.alternate;
-    if (!alternateEntryActionable(entry, templates)) {
-      container.innerHTML = '';
-      setCardsFlat(true);
-      return;
-    }
-    const status = alternatePlanStatus(active);
-    if (status.state === 'due') {
-      container.innerHTML = `
-    <div class="today-focus-panel">
-      <div>
-        <div class="today-focus-title">今日は${escapeHtml(weeklyDayContentText(entry, templates))}の日です</div>
-        <div class="today-focus-sub">一日おき・${escapeHtml(alternateStatusText(status))}</div>
-      </div>
-      <button type="button" class="today-focus-start-btn" data-weekly-plan-start-today>始める</button>
+  const todoHtml = todo.map(({ r, status }) => `
+      <div class="routine-today-row">
+        <div class="routine-today-text">
+          <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
+          <div class="today-focus-sub">${escapeHtml(routineSubText(r, status))}</div>
+        </div>
+        <button type="button" class="today-focus-start-btn" data-routine-start="${r.id}">始める</button>
+      </div>`).join('');
+  const brokenHtml = broken.map(({ r }) => `
+      <div class="routine-today-row">
+        <div class="routine-today-text">
+          <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
+          <div class="today-focus-sub">内容が見つかりません。選び直してください</div>
+        </div>
+        <button type="button" class="ghost-pill-btn" data-routine-fix="${r.id}">選び直す</button>
+      </div>`).join('');
+  const doneHtml = done.map(({ r, status }) => `
+      <div class="routine-today-row routine-today-done">
+        <span>${escapeHtml(routineContentText(r, templates))}</span>
+        <span class="routine-done-badge">${escapeHtml(routineDoneText(r, status))}</span>
+      </div>`).join('');
+  const laterHtml = later.length > 0
+    ? `<p class="routine-today-later">ほかの予定：${later.map(({ r, status }) => `${escapeHtml(routineContentText(r, templates))}（${escapeHtml(status.next || '')}）`).join('、')}</p>`
+    : '';
+  const headline = todo.length === 0 && broken.length === 0
+    ? `<p class="today-focus-rest">${done.length > 0 ? '今日の予定は終わりました' : '今日やる予定はありません'}</p>`
+    : '';
+
+  container.innerHTML = `
+    <div class="today-focus-panel routine-today-panel">
+      <div class="routine-today-heading">今日の予定</div>
+      ${headline}${todoHtml}${brokenHtml}${doneHtml}${laterHtml}
     </div>`;
-      setCardsFlat(false);
-      detailsEl.open = false;
-    } else {
-      container.innerHTML = status.state === 'doneToday'
-        ? '<p class="today-focus-rest">今日の分は終わりました（次は明後日）</p>'
-        : `<p class="today-focus-rest">今日は休みの日です（${escapeHtml(alternateStatusText(status))}）</p>`;
-      setCardsFlat(true);
-    }
-    return;
-  }
+  setCardsFlat(todo.length === 0);
+  if (todo.length > 0 && detailsEl) detailsEl.open = false;
+}
 
-  const day = active.days[todayWeekdayIndex()];
-  const actionable = day && (
-    (day.kind === 'parts' && day.parts && day.parts.length > 0)
-    || (day.kind === 'template' && templates.some((t) => t.id === day.templateId))
-  );
+// 予定の画面(ボトムナビ「予定」)の一覧
+function renderRoutineScreen() {
+  const list = document.getElementById('routine-list');
+  const footer = document.getElementById('routine-footer');
+  if (!list) return;
+  const { state, templates, rows } = routineStatusPack();
 
-  if (actionable) {
-    container.innerHTML = `
-    <div class="today-focus-panel">
-      <div class="today-focus-title">今日は${escapeHtml(weeklyDayContentText(day, templates))}の日です</div>
-      <button type="button" class="today-focus-start-btn" data-weekly-plan-start-today>始める</button>
-    </div>`;
-    setCardsFlat(false);
-    detailsEl.open = false;
+  if (rows.length === 0) {
+    list.innerHTML = '<p class="hint-text routine-empty">まだ予定がありません。「＋ 予定を追加」から、やることと、いつやるかを決めてください。</p>';
   } else {
-    container.innerHTML = '<p class="today-focus-rest">今日は休みの日です</p>';
-    setCardsFlat(true);
+    list.innerHTML = rows.map(({ r, status, actionable }) => {
+      const paused = r.paused || state.allPaused;
+      let statusText;
+      if (paused) statusText = '休止中';
+      else if (!actionable) statusText = r.kind === 'template' ? '組み合わせが削除されています。内容を選び直してください' : '内容を選び直してください';
+      else if (status.done) statusText = `今日 ${routineDoneText(r, status)}`;
+      else if (status.due) statusText = '今日やる日';
+      else statusText = `次は${status.next}`;
+      return `
+      <button type="button" class="routine-card${paused ? ' is-paused' : ''}" data-routine-edit="${r.id}">
+        <span class="routine-card-main">
+          <span class="routine-card-name">${escapeHtml(routineContentText(r, templates))}</span>
+          <span class="routine-card-sub">${escapeHtml(routineSubText(r, status))}</span>
+          <span class="routine-card-status${status.done && !paused ? ' is-done' : ''}">${escapeHtml(statusText)}</span>
+        </span>
+        <span class="custom-target-chevron" aria-hidden="true">変更 ›</span>
+      </button>`;
+    }).join('');
   }
+
+  if (!footer) return;
+  const pauseHtml = rows.length > 0
+    ? `<button type="button" class="ghost-pill-btn routine-pause-all-btn" data-routine-pause-all>${state.allPaused ? '全部を再開する' : '全部を休止する'}</button>`
+    : '';
+  // 旧週間プランのうち、まだ取り込んでいないもの(変換元にしたプランは除く)
+  const legacy = loadWeeklyPlans().filter((p) => p.id !== state.migratedPlanId && routinesFromWeeklyPlan(p).length > 0);
+  const legacyHtml = legacy.length > 0 ? `
+      <details class="routine-legacy">
+        <summary class="ghost-pill-btn">以前の週間プランから取り込む（${legacy.length}件）</summary>
+        <p class="hint-text">取り込んだ予定は休止中の状態で追加されます。使うものだけ再開してください。</p>
+        ${legacy.map((p) => `
+        <div class="template-item">
+          <div class="template-item-main"><div class="template-name">${escapeHtml(p.name)}</div></div>
+          <button type="button" class="ghost-pill-btn" data-routine-import="${p.id}">取り込む</button>
+        </div>`).join('')}
+      </details>` : '';
+  footer.innerHTML = `${pauseHtml}${legacyHtml}`;
+}
+
+// 予定の追加・変更シート。draftは編集中の内容(保存を押すまで予定には反映しない)。
+function renderRoutineSheet(draft, isNew) {
+  const body = document.getElementById('routine-sheet-body');
+  const title = document.getElementById('routine-sheet-title');
+  if (!body) return;
+  if (title) title.textContent = isNew ? '予定を追加' : '予定を変更';
+  const templates = loadCustomTemplates();
+  const cardio = EXERCISES.filter((e) => e.type === 'cardio');
+
+  const kindOptions = [['template', '保存した組み合わせ'], ['exercise', '種目1つ']];
+  if (draft.kind === 'parts') kindOptions.push(['parts', '部位（以前の予定）']);
+  const kindHtml = `
+      <div class="sheet-field-head"><span class="sheet-field-label">何をやる</span></div>
+      <div class="segmented" role="radiogroup" aria-label="何をやる">
+        ${kindOptions.map(([k, label]) => `<button type="button" class="segmented-btn" role="radio" aria-checked="${draft.kind === k}" data-routine-kind="${k}">${label}</button>`).join('')}
+      </div>`;
+
+  let contentHtml = '';
+  if (draft.kind === 'template') {
+    contentHtml = templates.length > 0 ? `
+      <select class="routine-select" data-routine-field="templateId" aria-label="保存した組み合わせ">
+        <option value="">選んでください</option>
+        ${templates.map((t) => `<option value="${t.id}" ${t.id === draft.templateId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+      </select>`
+      : '<p class="hint-text">保存した組み合わせがまだありません。ホームの「自分で作る」で種目を選んで「この組み合わせを保存」してから選べます。</p>';
+  } else if (draft.kind === 'exercise') {
+    const targetChoices = [null, ...ROUTINE_TARGET_CHOICES];
+    if (draft.targetMin && !ROUTINE_TARGET_CHOICES.includes(draft.targetMin)) targetChoices.push(draft.targetMin);
+    contentHtml = `
+      <select class="routine-select" data-routine-field="exerciseId" aria-label="種目">
+        <option value="">選んでください</option>
+        ${cardio.map((e) => `<option value="${e.id}" ${e.id === draft.exerciseId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
+      </select>
+      <div class="sheet-field-head"><span class="sheet-field-label">目標時間</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="目標時間">
+        ${targetChoices.map((m) => `<button type="button" class="choice-chip" role="radio" aria-checked="${(draft.targetMin || null) === m}" data-routine-target="${m || ''}">${m ? `${m}分` : 'なし'}</button>`).join('')}
+      </div>`;
+  } else if (draft.kind === 'parts') {
+    contentHtml = `<p class="hint-text">${escapeHtml((draft.parts || []).map((p) => PART_LABELS[p] || p).join('・'))}（以前の週間プランから引き継いだ予定です。「始める」で前回の条件のままメニューを作ります）</p>`;
+  }
+
+  const freqHtml = `
+      <div class="sheet-field-head"><span class="sheet-field-label">いつやる</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="いつやる">
+        ${Object.entries(ROUTINE_FREQ_LABELS).map(([f, label]) => `<button type="button" class="choice-chip" role="radio" aria-checked="${draft.freq === f}" data-routine-freq="${f}">${label}</button>`).join('')}
+      </div>
+      ${draft.freq === 'weekdays' ? `
+      <div class="choice-chips routine-weekday-chips" role="group" aria-label="曜日">
+        ${WEEKDAY_LABELS.map((label, i) => `<button type="button" class="choice-chip" aria-pressed="${draft.weekdays.includes(i)}" data-routine-weekday="${i}">${label}</button>`).join('')}
+      </div>` : ''}
+      <p class="hint-text">${{
+        daily: '毎日ホームに出ます。',
+        alternate: 'やった日の次の日は休みで、その次の日にまた出ます。やり忘れて間が空いた時は、やるまで出し続けます。',
+        weekdays: '選んだ曜日にホームに出ます。やらなかった日の分は持ち越しません。',
+      }[draft.freq]}</p>`;
+
+  const manageHtml = isNew ? '' : `
+      <div class="routine-sheet-manage">
+        <button type="button" class="ghost-pill-btn" data-routine-toggle-pause>${draft.paused ? '再開する' : '休止する'}</button>
+        <button type="button" class="danger-link-btn" data-routine-delete>この予定を削除する</button>
+      </div>`;
+
+  body.innerHTML = `${kindHtml}${contentHtml}${freqHtml}
+      <p class="error-text" id="routine-sheet-error"></p>${manageHtml}`;
 }
 
 // 記録中のトレーニングの概要(「10:32開始」「2/5種目を記録」)。ホームの「トレーニングに戻る」と、
@@ -389,63 +482,6 @@ function renderHomeResumeWorkout() {
         <button type="button" class="ghost-pill-btn home-resume-discard-btn" data-discard-workout>やめる（記録しない）</button>
       </div>
     </div>`;
-}
-
-// モード選択画面の「週間プラン」セクション。プリセットが1つも無ければ他の2つのモードカードと
-// 揃えた見た目の「作成カード」を、既にあれば使用中(active)のものを大きく＋他は折りたたみ一覧で出す。
-function renderWeeklyPlanSection(plans, activeId, templates) {
-  const container = document.getElementById('weekly-plan-section');
-  if (!container) return;
-
-  if (plans.length === 0) {
-    container.innerHTML = `
-    <button type="button" class="mode-card" id="weekly-plan-create-btn">
-      <div class="mode-card-title">週間プラン</div>
-      <div class="mode-card-desc">曜日ごとに鍛える部位や組み合わせを決めておけます</div>
-    </button>`;
-    return;
-  }
-
-  const active = plans.find((p) => p.id === activeId) || plans[0];
-  const others = plans.filter((p) => p.id !== active.id);
-  const daysHtml = isAlternatePlan(active)
-    ? (active.alternate
-      ? `<div class="weekly-plan-days"><div class="weekly-plan-day-row">
-      <span class="weekly-plan-day-label">一日おき</span>
-      <span class="weekly-plan-day-content">${escapeHtml(weeklyDayContentText(active.alternate, templates))}</span>
-    </div></div>`
-      : '<p class="weekly-plan-summary-empty">一日おきにやる内容をまだ決めていません</p>')
-    : weeklyPlanDaysHtml(active.days, templates);
-
-  const othersHtml = others.length > 0 ? `
-    <details class="weekly-plan-others-toggle">
-      <summary class="ghost-pill-btn">ほかのプランを見る（${others.length}件）</summary>
-      <div class="menu-block">
-        ${others.map((p) => `
-        <div class="template-item">
-          <button type="button" class="template-item-main" data-weekly-plan-use="${p.id}">
-            <div class="template-name">${escapeHtml(p.name)}</div>
-            <div class="template-meta">${shortSavedDateLabel(p.createdAt)}保存</div>
-          </button>
-          <button type="button" class="template-delete-btn" data-weekly-plan-delete="${p.id}" aria-label="このプランを削除">✕</button>
-        </div>`).join('')}
-      </div>
-    </details>` : '';
-
-  // 編集する／＋新しいプランを作るは、以前は控えめなテキストリンクだったが、
-  // 「他のメニューを作る」を輪郭pillボタンにしたのに合わせて2等分のボタンに変更した
-  // （Imagineで複数案を提示しユーザーが選んだI案、2026-08-14）。
-  container.innerHTML = `
-  <div class="menu-block weekly-plan-panel">
-    <h3>週間プラン</h3>
-    <div class="weekly-plan-active-name">📌 ${escapeHtml(active.name)}</div>
-    ${daysHtml}
-    <div class="weekly-plan-links">
-      <button type="button" class="ghost-pill-btn" data-weekly-plan-edit="${active.id}">編集する</button>
-      <button type="button" class="ghost-pill-btn" id="weekly-plan-new-btn">＋ 新しいプラン</button>
-    </div>
-    ${othersHtml}
-  </div>`;
 }
 
 // hasStrengthExercise: 本編に有酸素以外(重量・ウォームアップセットの概念がある種目)が1つでもあるか。

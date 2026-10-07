@@ -95,6 +95,8 @@ function createSessionFromMenu(menu, bodyWeightKg) {
     goal: menu.params.goal,
     // 保存した組み合わせから始めた時だけ入る。週間プランの「一日おき」で前回やった日を探すのに使う
     templateId: menu.params.templateId || null,
+    // トレーニング予定から始めた時だけ入る。その予定を「やった」と数えるのに使う(js/storage.jsのroutineDoneDays)
+    routineId: menu.params.routineId || null,
     circuit: isCircuit ? { rounds, roundRestSec: Number(menu.circuit.roundRestSec) || 0 } : null,
     warmup: menu.warmup,
     cooldown: menu.cooldown,
@@ -253,6 +255,7 @@ function finalizeSession(session) {
     goal: session.goal,
     durationSec: session.durationSec || 0,
     templateId: session.templateId || null,
+    routineId: session.routineId || null,
     finishedAt: new Date().toISOString(), // 週間プランの「一日おき」は終えた日で数える
     circuitRounds: session.circuit ? session.circuit.rounds : null,
     exercises: session.exercises.filter(exerciseHasRecord).map((e) => (e.type === 'cardio'
