@@ -452,11 +452,13 @@ function renderWeeklyPlanSection(plans, activeId, templates) {
 // 無ければ「軽い重量・回数で慣らしましょう」の案内は文脈に合わないため省く
 // （有酸素だけのメニューには重量もウォームアップセットも存在しないため）。
 function buildWarmupHtml(warmup, hasStrengthExercise) {
-  const dynamicWarmupHtml = warmup.dynamic
+  // 「何をするか」(howTo)は常に見える場所に出し、「なぜやるか」と対象の種目はⓘの中(2026-10-07〜)。
+  // 古いメニュー・記録中のデータの体操はhowToを持たないので、従来どおり名前とⓘだけ。
+  const dynamicWarmupHtml = (warmup.dynamic || [])
     .map((d) => `
     <div class="warmup-item">
       <div class="ex-header">
-        <div class="ex-meta">${d.label}</div>
+        <div class="ex-meta">${d.label}${d.howTo ? `<span class="warmup-howto">${d.howTo}</span>` : ''}</div>
         <div class="ex-icons">
           <button type="button" class="icon-btn" data-info-toggle aria-label="この動きの説明">ⓘ</button>
         </div>
@@ -467,15 +469,8 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
     </div>`)
     .join('');
 
-  // 体操の後に行う、主要部位の短い静的ストレッチ(10秒)。クールダウンの本格的なストレッチ(20〜30秒)と
-  // 内容は同じで、ウォームアップとしては短時間版として案内する(staticStretchが無い/古い形式のデータの
-  // 場合は表示しない。warmup.staticStretchは後から追加したフィールドのため、undefined時は空扱い)。
-  const staticStretchHtml = (warmup.staticStretch || [])
-    .map((s) => `
-    <div class="warmup-item">
-      <div class="ex-meta">${s.label}</div>
-    </div>`)
-    .join('');
+  // 準備の10秒ストレッチ(warmup.staticStretch)は2026-10-07に廃止(静的ストレッチはクールダウンだけ、ユーザー判断)。
+  // 古いメニュー・記録中のデータに残っていても表示しない。
 
   // 各種目の最初にウォームアップセットを入れるかのON/OFF。設定はlocalStorageに保存され、
   // 自分で切り替えるまで維持される(js/storage.jsのloadWarmupSetsEnabled、切り替え処理はjs/app.jsの
@@ -486,7 +481,7 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
         <span class="warmup-sets-toggle-text">
           <span class="warmup-sets-toggle-title">各種目の最初にウォームアップセットを入れる</span>
           <span class="warmup-sets-toggle-desc">${warmupSetsEnabled
-    ? 'オン：本セットの前に、軽い重量・回数で慣らすセットが入ります'
+    ? 'オン：重りを使う種目の本セットの前に、軽い重さで5回ほど慣らすセットが入ります'
     : 'オフ：ウォームアップセットなしで本セットから始めます'}</span>
         </span>
         <input type="checkbox" class="switch-input" data-warmup-sets-toggle ${warmupSetsEnabled ? 'checked' : ''}>
@@ -497,9 +492,9 @@ function buildWarmupHtml(warmup, hasStrengthExercise) {
   return `
     <div class="menu-block">
       <h3>ウォームアップ</h3>
-      <div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>
+      ${warmup.general ? `<div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>` : ''}
       ${dynamicWarmupHtml}
-      ${staticStretchHtml}
+      ${warmup.note ? `<p class="hint-text warmup-note">${warmup.note}</p>` : ''}
       ${warmupSetNoteHtml}
     </div>`;
 }
@@ -514,9 +509,10 @@ function buildCooldownHtml(cooldown) {
         </div>
       </div>
       <ul>
+        ${cooldown.general ? `<li>${cooldown.general}</li>` : ''}
         ${cooldown.static.map((s) => `<li>${s.label}</li>`).join('')}
-        <li>${cooldown.general}</li>
       </ul>
+      ${cooldown.static.length ? '<p class="hint-text warmup-note">ストレッチは時間がある時に。反動をつけず、痛みのない範囲で。</p>' : ''}
       <div class="ex-info-panel" hidden>
         ${cooldown.static.map((s) => `<p><strong>${s.label.split('（')[0]}</strong><br>${s.description}</p>`).join('')}
       </div>
@@ -766,8 +762,7 @@ function renderCustomWuCd(warmup, cooldown) {
   const container = document.getElementById('custom-wu-cd');
   if (!container) return;
 
-  const staticStretch = warmup.staticStretch || [];
-  if (warmup.dynamic.length === 0 && staticStretch.length === 0 && cooldown.static.length === 0) {
+  if (!warmup.general && warmup.dynamic.length === 0 && cooldown.static.length === 0) {
     container.innerHTML = '<p class="hint-text">種目を追加すると、内容に応じたウォームアップ・クールダウンが自動で表示されます。</p>';
     return;
   }
@@ -776,7 +771,7 @@ function renderCustomWuCd(warmup, cooldown) {
     .map((d, i) => `
     <div class="warmup-item">
       <div class="ex-header">
-        <div class="ex-meta">${d.label}</div>
+        <div class="ex-meta">${d.label}${d.howTo ? `<span class="warmup-howto">${d.howTo}</span>` : ''}</div>
         <div class="ex-icons">
           <button type="button" class="icon-btn" data-info-toggle aria-label="この動きの説明">ⓘ</button>
           <button type="button" class="custom-remove-btn" data-custom-remove-warmup="${i}" aria-label="この項目を外す">✕</button>
@@ -784,18 +779,6 @@ function renderCustomWuCd(warmup, cooldown) {
       </div>
       <div class="ex-info-panel" hidden>
         <p>${d.description}${d.forExercises.length ? `<br>→ このあとの「${d.forExercises.join('・')}」の準備。` : ''}</p>
-      </div>
-    </div>`)
-    .join('');
-
-  const staticStretchItemsHtml = staticStretch
-    .map((s, i) => `
-    <div class="warmup-item">
-      <div class="ex-header">
-        <div class="ex-meta">${s.label}</div>
-        <div class="ex-icons">
-          <button type="button" class="custom-remove-btn" data-custom-remove-static-stretch="${i}" aria-label="この項目を外す">✕</button>
-        </div>
       </div>
     </div>`)
     .join('');
@@ -815,12 +798,13 @@ function renderCustomWuCd(warmup, cooldown) {
   container.innerHTML = `
     <div class="menu-block">
       <h3>ウォームアップ（自動）</h3>
-      ${warmupItemsHtml || '<p class="hint-text">自動提案なし</p>'}
-      ${staticStretchItemsHtml}
+      ${warmup.general ? `<div class="warmup-item"><div class="ex-meta">${warmup.general}</div></div>` : ''}
+      ${warmupItemsHtml}
     </div>
     <div class="menu-block">
       <h3>クールダウン（自動）</h3>
-      ${cooldownItemsHtml || '<p class="hint-text">自動提案なし</p>'}
+      ${cooldown.general ? `<div class="warmup-item cd-item"><div class="ex-meta">${cooldown.general}</div></div>` : ''}
+      ${cooldownItemsHtml}
     </div>`;
 }
 
@@ -1387,7 +1371,7 @@ function renderLog(session) {
         let workingN = 0;
         return ex.sets
           .map((s, setIndex) => {
-            const label = s.isWarmup ? 'ウォームアップ：軽い動作で数回' : `${(workingN += 1)}`;
+            const label = s.isWarmup ? 'ウォームアップ：軽い重さで慣らす' : `${(workingN += 1)}`;
             const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
             const weightField = ex.holdBased || !weightRange
               ? ''

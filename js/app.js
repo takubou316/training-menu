@@ -230,7 +230,7 @@ let customFormat = 'sets';
 let customTemplateId = null;
 // 回数・セット数の編集画面で今編集している種目のid
 let customTargetEditingId = null;
-let customWarmup = { general: '', dynamic: [], staticStretch: [] };
+let customWarmup = { general: '', dynamic: [] };
 let customCooldown = { static: [], general: '' };
 
 // 種目ピッカーが今どちらの画面から開かれているか('custom' | 'menu')
@@ -849,10 +849,10 @@ function wireNumberWheels() {
 
 function recomputeCustomWarmupCooldown() {
   // 「自分で作る」画面には気になる部位の選択UIが無いが、設定画面(要望から作る)で選んだ内容は
-  // 一時的な条件ではなく本人の恒常的な特性に近いため、保存済みの設定から引き継いでクールダウンの
-  // ストレッチ優先順位付けに使う。
+  // 一時的な条件ではなく本人の恒常的な特性に近いため、保存済みの設定から引き継ぎ、その部位に負担のかかる
+  // 準備の動きを出さないのに使う(2026-10-07までは、クールダウンのストレッチの優先順位付けに使っていた)。
   const painAreas = (loadSettings() || {}).painAreas || [];
-  const { warmup, cooldown } = buildWarmupAndCooldown(customExercises, painAreas);
+  const { warmup, cooldown } = buildWarmupAndCooldown(customExercises, painAreas, null, { circuit: customFormat === 'circuit' });
   customWarmup = warmup;
   customCooldown = cooldown;
   renderCustomWuCd(customWarmup, customCooldown);
@@ -1183,6 +1183,8 @@ function wireCustomScreen() {
     const btn = e.target.closest('[data-custom-format]');
     if (!btn || btn.dataset.customFormat === customFormat) return;
     customFormat = btn.dataset.customFormat;
+    // サーキットかどうかでクールダウンの長さが変わるので作り直す
+    recomputeCustomWarmupCooldown();
     renderCustomFormatToggle();
     renderCustomExerciseListNow();
   });
@@ -1195,12 +1197,6 @@ function wireCustomScreen() {
     const removeWarmup = e.target.closest('[data-custom-remove-warmup]');
     if (removeWarmup) {
       customWarmup.dynamic.splice(Number(removeWarmup.dataset.customRemoveWarmup), 1);
-      renderCustomWuCd(customWarmup, customCooldown);
-      return;
-    }
-    const removeStaticStretch = e.target.closest('[data-custom-remove-static-stretch]');
-    if (removeStaticStretch) {
-      customWarmup.staticStretch.splice(Number(removeStaticStretch.dataset.customRemoveStaticStretch), 1);
       renderCustomWuCd(customWarmup, customCooldown);
       return;
     }
@@ -1374,7 +1370,8 @@ function wireExercisePicker() {
 function recomputeMenuWarmupCooldown() {
   const rawExercises = currentMenu.main.map((item) => findExerciseById(item.exerciseId)).filter(Boolean);
   // 「要望から作る」で選んだ時間(params.minutes)に合わせたウォームアップ・クールダウンの長さを保つ
-  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises, currentMenu.params.painAreas || [], currentMenu.params.minutes);
+  const { warmup, cooldown } = buildWarmupAndCooldown(rawExercises, currentMenu.params.painAreas || [], currentMenu.params.minutes,
+    { circuit: currentMenu.params.format === 'circuit' });
   currentMenu.warmup = warmup;
   currentMenu.cooldown = cooldown;
 }

@@ -2819,3 +2819,14 @@ body.modal-open {
 .weekly-muscle-table thead th:first-child { text-align: left; font-weight: 600; }
 .weekly-muscle-table thead th { font-size: 11px; font-weight: 400; color: var(--text-dim); }
 .weekly-summary-note { margin: 8px 0 0; font-size: 11px; }
+
+/* ウォームアップの「何をするか」を名前の下に常に出す（2026-10-07） */
+.warmup-howto {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.warmup-note { margin: 6px 0 0; font-size: 11px; }

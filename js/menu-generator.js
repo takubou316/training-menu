@@ -1,30 +1,133 @@
 // 入力（部位・器具・時間・レベル・目的）からその日のメニューを組み立てる純粋関数群。
 // AIには文章生成させず、あらかじめ用意した種目DB(exercises-data.js)とルール(rules.js)の組み合わせだけで決定的に組み立てる。
 
-// 動作パターンごとの動的ウォームアップ（本番動作の可動域確認・体温上昇が目的）。
-// descriptionは「なぜこれをやるのか」、forExercisesは実際のメニュー生成時に紐づく種目名を後から埋める。
-const DYNAMIC_WARMUP_BY_PATTERN = {
-  squat: { label: 'ボディウェイトスクワット 10回', description: 'しゃがむ動作に使う股関節・膝・足首を温め、可動域を確認する。' },
-  hinge: { label: 'ヒップヒンジ（お尻を後ろに引く動作）10回', description: '膝を軽く曲げたままお尻を後ろに引く練習。股関節から曲げる感覚を本セット前に掴んでおく。' },
-  push_horizontal: { label: '肩甲骨まわし＋腕立て伏せの姿勢キープ10秒×2', description: '肩甲骨を動かして肩まわりをほぐし、体を一直線に保つ感覚を確認する。' },
-  push_vertical: { label: '肩まわし＋アームサークル前後各10回', description: '腕を大きく前後に回して肩関節の可動域を広げ、頭上に押し上げる動きに備える。' },
-  pull_horizontal: { label: 'バンドプルアパートまたは肩甲骨寄せ10回', description: '肩甲骨を寄せる動きを繰り返し、引く動作で背中を使う感覚を温める。' },
-  pull_vertical: { label: 'ラットストレッチ（腕を上げて体側伸ばし）10回', description: '腕を上げて体側を伸ばし、広背筋・肩まわりをほぐしておく。' },
-  core: { label: 'デッドバグ（仰向け対角伸ばし）左右5回ずつ', description: '腹に軽く力を入れたまま手足を動かし、体幹を安定させる感覚を確認する。' },
-  isolation: { label: '対象部位の関節を大きく動かすリラックス運動10回', description: 'これから使う関節を無理のない範囲で大きく動かし、血流を上げておく。' },
-  cardio: { label: 'ごく軽いペースで3〜5分', description: '本来のペースの半分以下の軽さから入り、心拍と関節を徐々に慣らしてから本セットのペースに上げる。' },
+// ===== ウォームアップ・クールダウン（2026-10-07に全面見直し、仕様はCodexと相談してユーザーが決定） =====
+// 以前は動作パターンごとに固定の体操を1つ出していたため、自重スクワットの前に「ボディウェイトスクワット10回」が
+// 出るなど、本番と同じ動きを準備として課していた。見直し後の考え方:
+// - 準備は「全身を温める（足踏み）＋必要な動きを少しだけ確かめる」の2段階。静的ストレッチは準備から外し、
+//   クールダウンだけに残す（ユーザー判断）
+// - 本番と同じ動きでも「軽く・少ない回数の動作確認」（例: スクワットの動作確認 5回）なら出してよい（ユーザー判断）。
+//   本番と同じ量・同じ書き方では出さない
+// - 「何をするか」(howTo)は画面に常に出し、「なぜやるか」(why)と対象の種目はⓘの中
+// - 器具は使わない（持っていないゴムバンド等は出さない）
+// 回数・時間はこのアプリの初期ルールで、医学的に確立した最適値ではない。
+const WARMUP_DRILLS = {
+  squat_check: {
+    label: 'スクワットの動作確認 5回',
+    howTo: '最初は浅くしゃがみ、痛みなく動ける範囲で少しずつ本番の深さに近づける。反動をつけずに立ち上がる。',
+    why: 'しゃがむ深さや足幅、膝や腰に違和感がないかを軽い負荷で確かめる。本番の回数はここではやらない。',
+    estSec: 30, avoidFor: ['膝'],
+  },
+  hinge_check: {
+    label: 'お尻を後ろへ引く練習 5回',
+    howTo: '膝を軽くゆるめ、お尻を後ろへ引いて上体を前に傾けてから戻る。腰を丸めたり反らしたりして深さを稼がない。',
+    why: '股関節から体を曲げる感覚をつかんでおく。',
+    estSec: 30, avoidFor: ['腰'],
+  },
+  wall_pushup: {
+    label: '壁プッシュアップ 5回',
+    howTo: '壁に両手をつき、体を一直線に保ったまま肘を曲げ伸ばしする。楽にできる足の位置で行う。',
+    why: '腕で体を支えて押す動きと、体をまっすぐ保つ感覚を軽い負荷で確かめる。',
+    estSec: 30, avoidFor: ['手首'],
+  },
+  arm_raise: {
+    label: '腕の上げ下げ 5回',
+    howTo: '親指を上に向け、両腕を体のやや前から頭の上まで上げ下げする。腰を反らさず、肩が痛くない高さまで。',
+    why: '腕を頭の上に上げる動きに備えて、肩を動かしておく。',
+    estSec: 25, avoidFor: ['肩'],
+  },
+  shoulder_circles: {
+    label: '肩回し 前後各5回',
+    howTo: '肩を軽くすくめるように持ち上げ、後ろから下へゆっくり回す。逆回しも同じ回数。首に力を入れない。',
+    why: '肩まわりをほぐし、腕を使う種目に備える。',
+    estSec: 25, avoidFor: [],
+  },
+  scap_reach: {
+    label: '腕の前伸ばし・引き戻し 6回',
+    howTo: '両腕を胸の高さで前に伸ばして肩甲骨を広げ、肘を後ろへ引いて肩甲骨を寄せる。腰は反らさない。',
+    why: '肩甲骨を寄せる・広げる動きを確かめ、引く種目で背中を使う準備をする。',
+    estSec: 30, avoidFor: [],
+  },
+  wrist_mobility: {
+    label: '手首の曲げ伸ばし 5往復',
+    howTo: '肘を軽く曲げ、手を開いたまま手首をゆっくり上下に曲げ伸ばしする。反対の手で強く押し込まない。',
+    why: '床に手をつく種目の前に、手首を動かしておく。',
+    estSec: 20, avoidFor: [],
+  },
+  elbow_forearm: {
+    label: '肘の曲げ伸ばし・手首返し 各5回',
+    howTo: '腕を体の横に下ろしたまま肘を曲げ伸ばしし、続けて手のひらを上・下に返す。力は入れない。',
+    why: '腕の種目の前に、肘と前腕を動かしておく。',
+    estSec: 25, avoidFor: [],
+  },
+  core_slide: {
+    label: '仰向けで片足ずつ滑らせる 左右3回',
+    howTo: '仰向けで膝を立て、息を吐きながら片足を床に沿って前へ滑らせて戻す。腰が大きく反らない範囲で。',
+    why: 'お腹に軽く力を入れたまま脚を動かし、体幹を安定させる感覚を確かめる。',
+    estSec: 30, avoidFor: [],
+  },
+  burpee_steps: {
+    label: '跳ばないバーピーの足運び 2回',
+    howTo: 'しゃがんで手を床につき、片足ずつ後ろへ出して板の姿勢になり、片足ずつ戻して立つ。',
+    why: '手をつく・足を出して戻す流れを、跳ばずにゆっくり確かめる。',
+    estSec: 30, avoidFor: ['手首', '膝'],
+  },
+  ankle_knee: {
+    label: '膝送り（足首の準備） 左右5回',
+    howTo: '壁に手を添えて片足を少し前に出し、前足のかかとを浮かせずに膝をつま先の方向へ軽く出して戻す。',
+    why: 'しゃがむ動きやふくらはぎの種目の前に、足首を動かしておく。',
+    estSec: 30, avoidFor: ['膝'],
+  },
+  leg_swing: {
+    label: '脚の前後振り 左右5往復',
+    howTo: '壁に手を添え、体を反らさずに片脚を小さく前後に振る。勢いをつけず、楽に動く範囲で。',
+    why: '脚の種目の前に、股関節を大きく動かしておく。',
+    estSec: 30, avoidFor: ['腰'],
+  },
 };
 
-// 気になる部位(painAreas、日本語表記)から、対応する静的ストレッチの部位キー(STATIC_STRETCH_BY_MUSCLEの
-// キー)への近似マッピング。クールダウンのストレッチ優先順位付け(buildWarmupAndCooldown)で使う。
-// 「腰」は専用の腰ストレッチが用意DBに無いため、姿勢に関連する背中・体幹のストレッチで代用する。
-// 「手首」は前腕〜二頭筋ストレッチ(手のひらを反らす動作)が実質的に手首のストレッチを兼ねるため対応させる。
-const PAIN_AREA_TO_STRETCH_MUSCLES = {
-  肩: ['shoulders'],
-  腰: ['back', 'abs'],
-  膝: ['quads', 'hamstrings', 'calves'],
-  手首: ['biceps'],
+// 種目ごとに必要な準備(WARMUP_DRILLSのキー、優先順)。種目データに個別の指定が無ければ動作パターンから決める。
+const WARMUP_NEEDS_BY_EXERCISE = {
+  half_burpee: ['burpee_steps', 'squat_check', 'wrist_mobility'],
 };
+const WARMUP_NEEDS_BY_PATTERN = {
+  squat: ['squat_check', 'ankle_knee'],
+  hinge: ['hinge_check', 'leg_swing'],
+  push_horizontal: ['wall_pushup'],
+  push_vertical: ['arm_raise', 'shoulder_circles'],
+  pull_horizontal: ['scap_reach'],
+  pull_vertical: ['shoulder_circles', 'scap_reach'],
+  core: ['core_slide'],
+};
+const WARMUP_NEEDS_BY_ISOLATION_MUSCLE = {
+  chest: ['shoulder_circles'], back: ['scap_reach'], shoulders: ['shoulder_circles'],
+  biceps: ['elbow_forearm'], triceps: ['elbow_forearm'], quads: ['leg_swing'], hamstrings: ['leg_swing'],
+  glutes: ['leg_swing'], calves: ['ankle_knee'], abs: ['core_slide'],
+};
+// 息が上がる・跳ぶ種目。ある日は温める時間を1分足し、確かめる動きを1つ増やし、クールダウンも長めにする。
+const BREATHLESS_EXERCISE_IDS = ['half_burpee', 'jump_rope', 'running', 'stair_climbing'];
+
+function warmupNeedsOf(ex) {
+  if (WARMUP_NEEDS_BY_EXERCISE[ex.id]) return WARMUP_NEEDS_BY_EXERCISE[ex.id];
+  if (ex.pattern === 'isolation') return WARMUP_NEEDS_BY_ISOLATION_MUSCLE[(ex.primary || [])[0]] || ['shoulder_circles'];
+  const needs = WARMUP_NEEDS_BY_PATTERN[ex.pattern] || [];
+  // 床に手をつく自重の押す種目(プッシュアップ等)は手首も
+  if (ex.pattern === 'push_horizontal' && (ex.equipment || []).includes('bodyweight')) return [...needs, 'wrist_mobility'];
+  return needs;
+}
+
+// 重りを使う種目か(ダンベル・バーベル・マシン)。ウォームアップセット(軽い重さで数回)はこの種目だけに付ける。
+// 以前はequipment[0]だけを見ていたが、配列の順番で結果が変わるので「自重でもできる種目か」で判断する。
+function isExternallyLoadedExercise(ex) {
+  if (!ex || ex.type === 'cardio') return false;
+  return !(ex.equipment || []).includes('bodyweight');
+}
+
+function formatWarmupSeconds(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return s ? `${m ? `${m}分` : ''}${s}秒` : `${m}分`;
+}
 
 // 部位ごとの静的クールダウンストレッチ（保持時間20〜30秒が一般的な目安）
 const STATIC_STRETCH_BY_MUSCLE = {
@@ -70,16 +173,6 @@ const STATIC_STRETCH_BY_MUSCLE = {
   },
 };
 
-// STATIC_STRETCH_BY_MUSCLEのエントリを、ウォームアップ用の短時間版(10秒)に変換する。
-// 『健康運動実践指導者 養成用テキスト』第8章Aによれば、ウォームアップの理想的な構成は
-// 「①軽い有酸素運動→②関節を動かす体操→③主要部位の10秒程度の短い静的 or 動的ストレッチ」
-// の3段階だが、以前はクールダウン用の本格的なストレッチ(20〜30秒保持)しか持っていなかった。
-// クールダウンと全く同じ内容・同じやり方で保持時間だけ短くする、という教科書の考え方に沿い、
-// 新規にストレッチ内容を作らずクールダウン用エントリを流用する(表記だけ「10秒」に変える)。
-function toWarmupShortStretch(entry) {
-  return { label: entry.label.replace('20〜30秒', '10秒'), description: entry.description };
-}
-
 function filterByEquipment(exercises, equipmentAvailable) {
   return exercises.filter((ex) => ex.equipment.some((e) => equipmentAvailable.includes(e)));
 }
@@ -117,7 +210,8 @@ function buildSetPlan(exercise, level, goal) {
     repsMin: goalInfo.repsRange[0],
     repsMax: goalInfo.repsRange[1],
     restSec,
-    warmupSets: exercise.category === 'compound' ? levelInfo.warmupSets : 0,
+    // ウォームアップセット(軽い重さで数回)は重りを使う種目だけ。自重種目は軽くできないので付けない(2026-10-07)
+    warmupSets: exercise.category === 'compound' && isExternallyLoadedExercise(exercise) ? levelInfo.warmupSets : 0,
     note: exercise.note || '',
     description: exercise.description || '',
     demoMedia: exercise.demoMedia || null,
@@ -240,68 +334,96 @@ function sortByTrainingOrder(exercises) {
   });
 }
 
-// 選んだ種目一覧（EXERCISESの生データ）から、動作パターン・部位に応じたウォームアップ/クールダウンを組み立てる。
-// 「要望から作る」「自分で作る」どちらのモードからも同じロジックを使う。
-// painAreas: 設定画面で選んだ「気になる部位」(肩/腰/膝/手首、日本語)。渡すとクールダウンの
-// ストレッチの並び順に反映される(下記参照)。省略時(自分で作るで未取得の場合など)は空扱い。
-// minutes: 「要望から作る」で選んだ全体の時間(分)。渡すと、ウォームアップ・クールダウンをその長さに
-// 合わせる(2026-10-04〜)。教科書(docs/knowledge/warmup-cooldown-stretching.md)の「どちらも運動時間全体の
-// 10%前後」「時間が取れない時は優先度の高い部位から」に沿って:
-// ①有酸素は全体の10%(切り捨て、1〜5分) ②クールダウンのストレッチは短い日ほど優先度の高い部位に絞る
-// (15分以下2つ・30分以下3つ) ③ウォームアップの10秒ストレッチは15分以下では省き(使う部位の準備は
-// 動的ウォームアップとウォームアップセットで行う)、30分以下は2つまで ④15分以下は深呼吸も1分。
-// 動的ウォームアップは本番の動作の準備なので時間に関わらず削らない。
-// 省略時(自分で作る等)は従来どおり有酸素5分・全部位。
-function buildWarmupAndCooldown(chosen, painAreas = [], minutes = null) {
-  const patternsUsed = new Set(chosen.map((ex) => ex.pattern));
-  const musclesUsed = new Set(chosen.flatMap((ex) => ex.primary));
+// 選んだ種目一覧（EXERCISESの生データ、並びは実施順）から、ウォームアップ/クールダウンを組み立てる。
+// 「要望から作る」「自分で作る」どちらのモードからも同じロジックを使う(考え方は上の「ウォームアップ・クールダウン」節)。
+// painAreas: 「気になる部位」(肩/腰/膝/手首)。その部位に負担がかかる準備の動き(avoidFor)を出さない。
+// minutes: 全体の時間(分)。足踏みの長さ・確かめる動きの数・クールダウンのストレッチの本数を合わせる
+//   (足踏み 15分以下60秒/30分以下90秒/それ以上・指定なし120秒、動き 15分以下2つ/それ以外3つ、ストレッチ 15分以下2本/30分以下3本)。
+//   息が上がる種目(BREATHLESS_EXERCISE_IDS)がある日は足踏み+60秒・動き+1つ。
+// circuit: サーキットか。クールダウンの歩く・足踏みを5分ほどにする(息が上がる種目がある日も同じ)。
+// 有酸素だけの日は「はじめの3〜5分をゆっくり」、有酸素から始める/有酸素で終わる日はその区間で代わりにする(計測時間に含めるので所要時間に足さない)。
+function buildWarmupAndCooldown(chosen, painAreas = [], minutes = null, { circuit = false } = {}) {
   const total = Number(minutes) || 0;
   const isShort = total > 0 && total <= 15;
   const isMedium = total > 15 && total <= 30;
-  const generalMin = total > 0 ? Math.min(5, Math.max(1, Math.floor(total / 10))) : 5;
   const stretchLimit = isShort ? 2 : isMedium ? 3 : Infinity;
-  const warmupStretchLimit = isShort ? 0 : isMedium ? 2 : Infinity;
+  const strength = chosen.filter((ex) => ex.type !== 'cardio');
+  const hasCardio = chosen.length > strength.length;
+  const breathless = chosen.some((ex) => BREATHLESS_EXERCISE_IDS.includes(ex.id));
+  const firstIsCardio = chosen.length > 0 && chosen[0].type === 'cardio';
+  const lastIsCardio = chosen.length > 0 && chosen[chosen.length - 1].type === 'cardio';
 
-  // クールダウンのストレッチの並び順(優先順位)。教科書は「疲労感の強い部位／傷害歴のある部位」を
-  // 優先すべきとしているため、以下の2段階で並べ替える(どちらも既存データからの近似・代理指標であり、
-  // 本人の主観申告に基づくものではない点に注意):
-  // 1. 気になる部位(painAreas)に近い部位のストレッチを最優先
-  //    (該当する種目自体はfilterByPainAreasで既に除外済みだが、周辺部位のケアとして優先する意図)
-  // 2. その次は、このセッションで主動筋として使われた回数が多い部位ほど先
-  //    (疲労感の強さを、実際に申告してもらう代わりに使用頻度で近似する)
-  const painMuscles = new Set(painAreas.flatMap((area) => PAIN_AREA_TO_STRETCH_MUSCLES[area] || []));
+  // クールダウンのストレッチは、このセッションで主に使った回数が多い部位から。以前は「気になる部位」を最優先に
+  // していたが、痛い所を優先して伸ばす規則は避ける(Codexの指摘、2026-10-07)。気になる部位は種目の除外に使う。
   const muscleFrequency = {};
   chosen.forEach((ex) => (ex.primary || []).forEach((m) => { muscleFrequency[m] = (muscleFrequency[m] || 0) + 1; }));
-
-  const prioritizedStretches = Array.from(musclesUsed)
-    .map((m) => ({ muscle: m, entry: STATIC_STRETCH_BY_MUSCLE[m] }))
-    .filter((x) => x.entry)
-    .sort((a, b) => {
-      const painRank = (painMuscles.has(a.muscle) ? 0 : 1) - (painMuscles.has(b.muscle) ? 0 : 1);
-      if (painRank !== 0) return painRank;
-      return (muscleFrequency[b.muscle] || 0) - (muscleFrequency[a.muscle] || 0);
-    })
-    .map((x) => x.entry)
+  const stretches = Object.keys(muscleFrequency)
+    .filter((m) => STATIC_STRETCH_BY_MUSCLE[m])
+    .sort((a, b) => muscleFrequency[b] - muscleFrequency[a])
+    .map((m) => STATIC_STRETCH_BY_MUSCLE[m])
     .slice(0, stretchLimit);
 
+  // ----- ウォームアップ -----
+  let general;
+  let generalSec;
+  if (strength.length === 0) {
+    // 有酸素だけの日: 最初の数分をゆっくりにするだけ(計測する時間に含めてよいので、所要時間には足さない)
+    general = hasCardio ? 'はじめの3〜5分はゆっくりのペースで（計測する時間に含めてOK）' : '';
+    generalSec = 0;
+  } else if (firstIsCardio) {
+    general = '最初の有酸素の、はじめの3〜5分をゆっくりのペースにする（足踏みは不要）';
+    generalSec = 0;
+  } else {
+    generalSec = (isShort ? 60 : isMedium ? 90 : 120) + (breathless ? 60 : 0);
+    general = `その場で足踏み（慣れてきたら軽いジョグ）${formatWarmupSeconds(generalSec)}`;
+  }
+
+  const drillLimit = (isShort ? 2 : 3) + (breathless ? 1 : 0);
+  const picked = [];
+  const forExercises = {};
+  // 各種目の1番目の準備を種目の順に入れ、枠が余れば2番目以降を入れる(同じ準備は1つにまとめる)
+  const needLists = strength.map((ex) => ({ ex, needs: warmupNeedsOf(ex).filter((k) => {
+    const d = WARMUP_DRILLS[k];
+    return d && !(d.avoidFor || []).some((a) => painAreas.includes(a));
+  }) }));
+  const maxDepth = Math.max(0, ...needLists.map((n) => n.needs.length));
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    needLists.forEach(({ ex, needs }) => {
+      const key = needs[depth];
+      if (!key) return;
+      if (!forExercises[key]) forExercises[key] = [];
+      if (!forExercises[key].includes(ex.name)) forExercises[key].push(ex.name);
+      if (!picked.includes(key) && picked.length < drillLimit) picked.push(key);
+    });
+  }
+
   const warmup = {
-    general: `軽い有酸素運動（足踏み・その場ジョグなど）${generalMin}分で体温を上げる`,
-    generalMin, // 所要時間の見積もり(estimateMenuSeconds)用
-    dynamic: Array.from(patternsUsed).map((p) => {
-      const info = DYNAMIC_WARMUP_BY_PATTERN[p] || DYNAMIC_WARMUP_BY_PATTERN.isolation;
-      const forExercises = chosen.filter((ex) => ex.pattern === p).map((ex) => ex.name);
-      // estSec: 所要時間の見積もり用。有酸素は「ごく軽いペースで3〜5分」なので4分と見なす
-      return { label: info.label, description: info.description, forExercises, estSec: p === 'cardio' ? 240 : DYNAMIC_WARMUP_SEC };
+    general,
+    generalSec, // 所要時間の見積もり(estimateMenuSeconds)用
+    note: strength.length ? '痛みのない範囲で。痛みが出たらその動きはやめる。' : '',
+    dynamic: picked.map((key) => {
+      const d = WARMUP_DRILLS[key];
+      return { key, label: d.label, howTo: d.howTo, description: d.why, forExercises: forExercises[key] || [], estSec: d.estSec };
     }),
-    // ①有酸素→②動的な体操(上のdynamic)の後に行う、③主要部位の短い静的ストレッチ(10秒)。
-    // クールダウンと同じ部位(同じ優先順位・同じ絞り込み)を対象にし、保持時間だけ短い表記に変えて流用する。
-    staticStretch: prioritizedStretches.slice(0, warmupStretchLimit).map(toWarmupShortStretch),
   };
 
+  // ----- クールダウン -----
+  let cdGeneral;
+  let cdGeneralSec;
+  if (lastIsCardio) {
+    cdGeneral = '最後の有酸素の、終わりの3〜5分はペースを落として呼吸を整える（計測する時間に含めてOK）';
+    cdGeneralSec = 0;
+  } else if (circuit || breathless) {
+    cdGeneral = 'ゆっくり歩くか足踏みを5分ほど（呼吸が落ち着かなければ続けてOK）';
+    cdGeneralSec = 300;
+  } else {
+    cdGeneral = 'ゆっくり歩くか足踏みを1〜2分（呼吸が落ち着くまで）';
+    cdGeneralSec = isShort ? 60 : 90;
+  }
   const cooldown = {
-    static: prioritizedStretches,
-    general: isShort ? '深呼吸を意識しながら1分クールダウン' : '深呼吸を意識しながら1〜2分クールダウン',
-    generalSec: isShort ? 60 : 90, // 所要時間の見積もり(estimateMenuSeconds)用
+    general: chosen.length ? cdGeneral : '',
+    generalSec: chosen.length ? cdGeneralSec : 0,
+    static: stretches,
   };
 
   return { warmup, cooldown };
@@ -382,8 +504,9 @@ function buildCustomSetPlan(exercise, restSec, target, format) {
     targetSec: t.timed ? t.sec : null,
     fixedTarget: true,
     restSec: isCircuit ? 0 : restSec,
-    // 時間で測る種目(ハーフバーピー45秒等)に「軽い重量で数回」のウォームアップセットは合わないので付けない
-    warmupSets: !isCircuit && !t.timed && exercise.category === 'compound' ? 1 : 0,
+    // ウォームアップセット(軽い重さで数回)は重りを使う種目だけ(2026-10-07〜。以前は自重のスクワット50回にも
+    // 「準備50回」が付いていた)。時間で測る種目・サーキットにも付けない
+    warmupSets: !isCircuit && !t.timed && exercise.category === 'compound' && isExternallyLoadedExercise(exercise) ? 1 : 0,
     note: exercise.note || '',
     description: exercise.description || '',
     demoMedia: exercise.demoMedia || null,
@@ -426,18 +549,19 @@ const REP_SEC = 2.5;              // 「自分で作る」で回数を決めた�
 const CIRCUIT_TRANSITION_SEC = 15; // サーキットの種目の切り替え(休憩なしで次の種目へ)
 const CARDIO_PLANNED_SEC = 600;   // 有酸素は目標時間が無ければ10分と見なす(目標があればその時間)
 const DYNAMIC_WARMUP_SEC = 40;    // 動的ウォームアップ1つ(「スクワット10回」等)
-const WARMUP_STRETCH_SEC = 20;    // ウォームアップの10秒ストレッチ1つ(左右ある分を含む)
 const COOLDOWN_STRETCH_SEC = 50;  // クールダウンの20〜30秒ストレッチ1つ(左右ある分を含む)
-const COOLDOWN_GENERAL_SEC = 90;  // 深呼吸1〜2分(cooldown.generalSecが無い古いメニュー用)
+const COOLDOWN_GENERAL_SEC = 90;  // 終わりの1〜2分(cooldown.generalSecが無い古いメニュー用)
 
 function estimateMenuSeconds(menu) {
   const warmup = menu.warmup || {};
   const cooldown = menu.cooldown || {};
-  let sec = (Number(warmup.generalMin) || 5) * 60
+  // 足踏み: 新しいメニューはgeneralSec(0もあり=有酸素の最初をゆっくりにする日)、古いメニューはgeneralMin(分)
+  const generalSec = warmup.generalSec != null ? Number(warmup.generalSec) || 0 : (Number(warmup.generalMin) || 5) * 60;
+  // 準備の10秒ストレッチ(warmup.staticStretch)は2026-10-07に廃止。古いメニューに残っていても表示しないので数えない
+  let sec = generalSec
     + (warmup.dynamic || []).reduce((sum, d) => sum + (Number(d.estSec) || DYNAMIC_WARMUP_SEC), 0)
-    + (warmup.staticStretch || []).length * WARMUP_STRETCH_SEC
     + (cooldown.static || []).length * COOLDOWN_STRETCH_SEC
-    + (Number(cooldown.generalSec) || COOLDOWN_GENERAL_SEC);
+    + (cooldown.generalSec != null ? Number(cooldown.generalSec) || 0 : COOLDOWN_GENERAL_SEC);
   const warmupSetsOn = typeof loadWarmupSetsEnabled !== 'function' || loadWarmupSetsEnabled();
   const holdSecOf = (item) => (item.targetSec != null ? item.targetSec
     : (typeof loadHoldTargetSec === 'function' ? loadHoldTargetSec(item.exerciseId) : 30));
