@@ -1,6 +1,6 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
-const CACHE_NAME = 'training-menu-v57';
+const CACHE_NAME = 'training-menu-v58';
 // index.htmlで読み込むローカルファイルはすべてここに入れること（漏れるとオフライン起動に失敗する）。
 // 動画(media/)は容量が大きくRangeリクエストとも相性が悪いため対象外。
 const ASSETS = [

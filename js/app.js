@@ -56,7 +56,9 @@ async function hardReload() {
 // ページが更新されるようにしたい」)。ページが一番上の時に始めた縦のスワイプだけを見て、一定以上(PULL_REFRESH_PX)
 // 下げて離したら更新する。iPhoneの標準の引っぱり(上に空白が出る動き)はそのまま使い、表示を重ねるだけにする。
 // 全画面タイマー・下から出るシート・確認の小窓を開いている間(lockBodyScroll中や.open)は反応しない。
-const PULL_REFRESH_PX = 80;
+// 80pxでは軽すぎた(ユーザー要望で140pxに)。離した後は回る表示を最低0.5秒見せてから更新する(すぐ消えると更新したか分からないため)
+const PULL_REFRESH_PX = 140;
+const PULL_REFRESH_MIN_SPIN_MS = 500;
 
 function wirePullToRefresh() {
   const indicator = document.getElementById('pull-refresh');
@@ -96,7 +98,7 @@ function wirePullToRefresh() {
     const header = document.querySelector('.app-header');
     const top = header ? header.getBoundingClientRect().bottom : 0;
     const ready = pull >= PULL_REFRESH_PX;
-    indicator.style.top = `${Math.max(0, top) + Math.min(pull, PULL_REFRESH_PX) * 0.4}px`;
+    indicator.style.top = `${Math.max(0, top) + Math.min(pull, PULL_REFRESH_PX) * 0.25}px`;
     indicator.classList.add('is-visible');
     indicator.classList.toggle('is-ready', ready);
     textEl.textContent = ready ? '離すと更新' : '引っぱって更新';
@@ -108,8 +110,9 @@ function wirePullToRefresh() {
       refreshing = true;
       indicator.classList.remove('is-ready');
       indicator.classList.add('is-visible', 'is-refreshing');
+      indicator.querySelector('.pull-refresh-icon').textContent = '⟳';
       textEl.textContent = '更新中…';
-      hardReload();
+      setTimeout(() => hardReload(), PULL_REFRESH_MIN_SPIN_MS);
       return;
     }
     reset();
