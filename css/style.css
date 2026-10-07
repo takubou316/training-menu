@@ -2464,33 +2464,35 @@ body.modal-open {
   background: var(--surface);
 }
 /* ちょこっと記録(2026-10-07〜、js/ui.jsのrenderHomeQuickLog) */
-/* 腹囲の行と同じくらいの控えめな大きさに(最初の版は大きすぎた、2026-10-07 ユーザー指摘)。
-   下の「今日のメニューを作る」とは間を空ける */
+/* 下の「今日のメニュー」とは間を空ける(2026-10-07 ユーザー指摘)。ボタンは幅いっぱいの大きさのまま
+   (小さな丸ボタンも試したが「前のほうがよかった」で戻した) */
 .home-quick-panel {
   margin: 10px 0 24px;
-  padding: 8px 14px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
 }
 .home-quick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.quick-log-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.quick-log-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .quick-log-btn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 40px;
-  padding: 6px 12px;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
   border: 1px solid var(--accent);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--surface-2);
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   text-align: left;
 }
 .quick-log-btn:active { background: var(--accent-dim); }
-.quick-log-count { font-size: 12px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.quick-log-count { font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
 .quick-log-count.is-done { color: var(--accent); }
 .quick-log-empty { margin: 6px 0 0; }
 .quick-log-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--text-dim); }
