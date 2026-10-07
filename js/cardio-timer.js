@@ -62,7 +62,12 @@ function checkCardioTargetReached(activeSec) {
   if (!activeCardioTimer || activeCardioTimer.targetNotified) return;
   const targetSec = cardioTargetSecOf(activeCardioTimer.exIndex);
   if (!targetSec || activeSec < targetSec) return;
-  if (playCardioTargetReachedSound()) activeCardioTimer.targetNotified = true;
+  if (playCardioTargetReachedSound()) {
+    activeCardioTimer.targetNotified = true;
+    // アプリ内で鳴らせた(＝画面を見ている)ので、まだ送られていなければ通知の方は取り消す(二重に知らせない)
+    // (送る処理が既に取り出した後なら取り消せず、通知も届く)
+    if (typeof cancelCardioPush === 'function') cancelCardioPush().catch(() => {});
+  }
 }
 
 // 計測画面のどこかに触れたら音の準備をし直す(鳴らせずに待っている目標達成の合図を、次のティックで鳴らすため)
@@ -83,6 +88,28 @@ function onCardioTargetChanged(exIndex) {
   const targetSec = cardioTargetSecOf(exIndex);
   activeCardioTimer.targetNotified = !!targetSec && activeSec >= targetSec;
   updateCardioTimerTargetDisplay(activeSec);
+  syncCardioTargetPush();
+}
+
+// アプリを閉じていても目標時間に通知が届くよう、サーバー側の予定(js/push.js)を今の状態に合わせる。
+// 計測中で目標まで残りがある時だけ「残り時間後」に予定を入れ、それ以外(休憩中・停止・目標なし・
+// 目標を過ぎた)は消す。開始・休憩・再開・停止・目標の変更・復元のたびに呼ぶ。
+function syncCardioTargetPush() {
+  if (typeof scheduleCardioPush !== 'function') return;
+  const t = activeCardioTimer;
+  const targetSec = t ? cardioTargetSecOf(t.exIndex) : null;
+  const remainingSec = targetSec ? targetSec - currentActiveMs() / 1000 : 0;
+  // 失敗は計測に影響させない(js/push.jsのキューがログに残す)
+  if (!t || t.phase !== 'running' || !targetSec || remainingSec <= 1) {
+    cancelCardioPush().catch(() => {});
+    return;
+  }
+  const ex = currentSession && currentSession.exercises[t.exIndex];
+  scheduleCardioPush(
+    Date.now() + remainingSec * 1000,
+    '目標時間になりました',
+    `${ex ? ex.name : '有酸素'}　目標${Math.round(targetSec / 60)}分`,
+  ).catch(() => {});
 }
 
 function cardioRestTotalSec(restLog) {
@@ -174,6 +201,7 @@ function toggleCardioTimer(button) {
   setCardioTimerPhaseUi('running');
   updateCardioTimer();
   activeCardioTimer.intervalId = setInterval(updateCardioTimer, 1000);
+  syncCardioTargetPush();
 }
 
 // 「計測中」区間の累計(現在進行中の区間を含む)をミリ秒で返す。休憩中は増えない。
@@ -255,6 +283,7 @@ function pauseCardioTimerForRest() {
   activeCardioTimer.segmentStartedAt = now;
   setCardioTimerPhaseUi('resting');
   updateCardioTimer();
+  syncCardioTargetPush();
 }
 
 function resumeCardioTimerFromRest() {
@@ -264,6 +293,7 @@ function resumeCardioTimerFromRest() {
   activeCardioTimer.segmentStartedAt = Date.now();
   setCardioTimerPhaseUi('running');
   updateCardioTimer();
+  syncCardioTargetPush();
 }
 
 // 進行中の休憩区間をrestLogに記録として積む(exercise.restLogにも反映して記録画面・履歴用に残す)。
@@ -313,6 +343,7 @@ function stopCardioTimer() {
   if (targetEl) targetEl.hidden = true;
   unlockBodyScroll();
   activeCardioTimer = null;
+  syncCardioTargetPush(); // サーバー側の通知の予定も消す
   // タイマーを止めたことをスナップショットにも反映する(消し忘れると、次回起動時に
   // 既に終わったタイマーのモーダルが誤って復元されてしまう)。
   if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();

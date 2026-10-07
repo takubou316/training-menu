@@ -159,8 +159,39 @@
   再読み込みの復元直後や他アプリからの復帰直後はiPhoneでは操作するまで鳴らせないことがあるため。計測画面に
   触れると`ensureHoldTimerAudioCtx`で再開する。iOSの`interrupted`状態も再開対象。Codexレビュー指摘）。
   **他のアプリを開いている間は鳴らせない**（PWAは裏でJSが止まる）。戻った最初のティックで知らせる。iPhoneの消音モード中は
-  Web Audioは鳴らない。裏でも鳴らすにはiPhoneのショートカット＋標準タイマー連携か、Supabaseからのプッシュ通知が要る
-  （ユーザーは「今回はアプリ内だけ」を選択、2026-10-06）
+  Web Audioは鳴らない。アプリを閉じている間は、下の「目標時間のプッシュ通知」で知らせる（2026-10-07〜）
+
+### 目標時間のプッシュ通知（2026-10-07〜）
+
+アプリを閉じている・画面ロック中でも目標時間を知らせる仕組み。2026-10-06/07にiPhone実機で2案を実験して決めた
+（`experiments/`。ショートカット＋標準タイマー案は、呼ぶたびにショートカットアプリが前に出る・キャンセル/一時停止が
+iPhoneの**他のタイマーまで全部止める**ため不採用。プッシュ通知は他アプリ中・ロック中・アプリ完全終了でも音つきで届き、
+遅れ2.5〜7秒、通知を押すとホーム画面のアプリが開いた）。
+- **流れ**: 計測開始・再開・目標の変更で、Supabaseの`cardio_push_jobs`に「残り時間後にこの端末へ送る」予定をupsert。
+  休憩・停止・目標なし・目標を過ぎた時は消す（`js/cardio-timer.js`の`syncCardioTargetPush`、`js/push.js`）。
+  時刻が来た予定は、pg_cron（10秒ごと、時刻が来た予定がある時だけ）がpg_net経由でEdge Function`cardio-push-dispatch`を呼び、
+  web-pushで送る（`supabase/`）。実測で目標時刻の約10秒後に送信＋届くまで数秒
+- 予定は**1ユーザー1件**（`unique(user_id)`、`device_id`は「この端末が入れた予定だけ消す」目印）。自分の予定だけ消すので
+  iPhoneの他のタイマーに影響しない。登録・削除はPromiseの直列キューで順番に流し、頼んだ時と実行時のユーザーが違えば中止
+- **使える条件**: 記録タブ「その他の設定」の「目標時間の通知」をオン（通知の許可はボタン操作の中で求める）＋クラウド同期
+  （Googleログイン）中。どれかが欠けても計測とアプリ内の音はそのまま動く（予定の失敗は計測に影響させない）
+- ログイン状態が確定した時（`renderSyncStatus`→`renderCardioPushSetting`→`resyncCardioPushIfNeeded`）とアプリに戻った時に、
+  計測中のタイマーの状態で予定を入れ直す（起動直後のログイン確認前の操作で消し損ねた予定・再読み込みの復元・宛先の変化に追いつく）。
+  ログアウト前に予定を消す（`signOutFromSync`）
+- アプリ内で目標音を鳴らせた時は予定を取り消す（画面を見ているので二重に知らせない。送る処理が既に取り出した後なら届く）
+- サーバー側: Edge Functionは共有の秘密ヘッダ（`CARDIO_PUSH_DISPATCH_SECRET`）で呼び出し元を確かめ、`--no-verify-jwt`でデプロイ。
+  1回最大50件、先に`sent_at`を入れてから送る（重複防止）。404/410は予定を消し、それ以外の失敗は目標時刻から5分以内なら
+  送り直す（どちらも取り出した時の予定のままの時だけ、`fire_at`/`sent_at`で確認）。悪用対策として、宛先は主要ブラウザの
+  プッシュサービスだけ・予定は1日先まで（CHECK制約）。送った予定・期限切れは毎日片付け（cron`cardio-push-cleanup`）
+- **秘密の値はリポジトリに入れない**: VAPIDの秘密鍵・呼び出し用の秘密の値は、Supabaseのsecretsと、Claudeが作業したPCの
+  `~/.compstack-push-experiment/`（`vapid.json`・`dispatch-secret.txt`）だけ。cronのSQLは`supabase/cron-cardio-push.sql.template`
+  （`__SECRET__`を置き換えて実行）。VAPIDの公開鍵は`js/push.js`に直書き（公開前提の値）
+- **デプロイ手順**: Supabase CLIはPCでユーザーが`npx.cmd supabase login`済み（PowerShellは実行ポリシーで`npx`が動かないので
+  `npx.cmd`）。Claudeからは`npx supabase@2.120.0 db query --linked --project-ref ytlbjyyuqdfbscjmbwbh -f <file>`でSQL
+  （先頭が`--`のSQLを引数で渡すとオプション扱いになるので`-f`で渡す）、`functions deploy cardio-push-dispatch --no-verify-jwt --use-api`、
+  `secrets set --env-file`。関数のデプロイは日本語のパスを避け、`~/.compstack-push-experiment/deploy/supabase/functions/`へ写してから行った
+- **既知の制約**: 休憩・終了の時にネットにつながっていないと予定を消せず、後から通知が届くことがある（設定画面に明記）。
+  1ユーザー1件なので、2台で同時に計測すると後から始めた方の予定だけ残る
 
 上記4つ全て「開始時刻(`Date.now()`)だけを覚えておき、表示のたびに現在時刻との差分で経過時間を
 計算し直す」方式で統一している。ブラウザ/PWAには画面ロック中やアプリ切り替え中もJSを動かし続ける

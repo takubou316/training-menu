@@ -1,0 +1,23 @@
+-- 定期実行の登録(秘密の値を含むのでリポジトリには雛形だけ置く。__SECRET__をEdge Functionの
+-- CARDIO_PUSH_DISPATCH_SECRETと同じ値に置き換えて実行する)。
+-- 10秒ごとに「送る時刻が来た予定」があるかだけをSQLで確かめ、ある時だけEdge Functionを呼ぶ
+-- (毎回呼ぶと無料枠の呼び出し回数を消費するため)。
+create extension if not exists pg_cron with schema pg_catalog;
+create extension if not exists pg_net with schema extensions;
+
+select cron.unschedule('cardio-push-dispatch') where exists (select 1 from cron.job where jobname = 'cardio-push-dispatch');
+select cron.schedule('cardio-push-dispatch', '10 seconds', $cron$
+  select net.http_post(
+    url := 'https://ytlbjyyuqdfbscjmbwbh.supabase.co/functions/v1/cardio-push-dispatch',
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-dispatch-secret', '__SECRET__'),
+    body := '{}'::jsonb
+  )
+  where exists (select 1 from public.cardio_push_jobs where sent_at is null and fire_at <= now());
+$cron$);
+
+-- 送った予定・期限切れの予定の片付け(送信の有無に関係なく毎日。通知の宛先を長く残さないため)
+select cron.unschedule('cardio-push-cleanup') where exists (select 1 from cron.job where jobname = 'cardio-push-cleanup');
+select cron.schedule('cardio-push-cleanup', '17 3 * * *', $cron$
+  delete from public.cardio_push_jobs
+  where sent_at < now() - interval '1 day' or fire_at < now() - interval '1 day';
+$cron$);

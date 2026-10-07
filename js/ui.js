@@ -98,6 +98,8 @@ function maybeShowSyncChoiceModal() {
 let syncStatusMessage = '';
 
 function renderSyncStatus() {
+  // ログイン状態で出し方が変わる「目標時間の通知」の行も一緒に描き直す(js/push.js)
+  if (typeof renderCardioPushSetting === 'function') renderCardioPushSetting();
   const container = document.getElementById('sync-status-row');
   if (!container) return; // 記録画面をまだ開いていない場合はDOMが無いので何もしない
   const counts = SUPABASE_AVAILABLE && isCloudSyncActive() ? syncQueueCounts() : null;

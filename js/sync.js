@@ -542,6 +542,8 @@ async function signInWithGoogleForSync() {
 // セッションが残っている、という不整合を避けるため)。呼び出し元でerrorを見て表示する。
 async function signOutFromSync() {
   if (!SUPABASE_AVAILABLE) return { error: null };
+  // ログアウトすると自分の行を消せなくなるので、目標時間の通知の予定を先に消す(js/push.js)
+  if (typeof cancelCardioPush === 'function') await cancelCardioPush().catch(() => {});
   const { error } = await supabaseClient.auth.signOut();
   if (error) return { error };
   setSyncEnabled(false);
