@@ -8,8 +8,22 @@ function escapeHtml(str) {
 }
 
 function showScreen(name) {
+  const target = document.getElementById(`screen-${name}`);
+  const changed = !target.classList.contains('active');
   document.querySelectorAll('.screen').forEach((el) => el.classList.remove('active'));
-  document.getElementById(`screen-${name}`).classList.add('active');
+  target.classList.add('active');
+  // 別の画面に切り替えた時は、前の画面のスクロール位置を持ち越さず一番上から見せる(2026-10-07、実機報告
+  // 「次の画面に移った時にスクロールの途中から始まる」)。以前は記録の開始など一部の経路だけがscrollToしており、
+  // 経路を足すたびに漏れていたので、ここで一括して行う。下から出るシートを開いたまま呼ぶと、閉じた時に
+  // lockBodyScrollが覚えた位置へ戻ってしまうので、その場合は覚えた位置の方を先頭に書き換える。
+  if (changed) {
+    if (document.body.classList.contains('modal-open') && typeof bodyScrollLockSavedY !== 'undefined') {
+      bodyScrollLockSavedY = 0;
+      document.body.style.top = '0px';
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === name);
   });
