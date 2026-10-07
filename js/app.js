@@ -31,17 +31,16 @@ function wireThemePicker() {
   applyTheme(loadTheme());
 }
 
-// ヘッダー右上の更新ボタン(⟳)。standaloneでホーム画面に追加したPWAにはブラウザのURLバー・
+// 最新の状態に更新する(引っぱって更新から呼ぶ)。standaloneでホーム画面に追加したPWAにはブラウザのURLバー・
 // 更新ボタンが無く、最新コードを取ってきたい手段が「一度ホーム画面から削除して開き直す」
-// くらいしか無かった(2026-09-16、ユーザー指摘)。service-worker.jsのfetchハンドラは既に
-// ネットワーク優先(cache:'no-store')なので理屈上は単純なlocation.reload()だけでも
+// くらいしか無かった(2026-09-16、ユーザー指摘。当初はヘッダー右上の⟳ボタン、2026-10-07に引っぱって更新へ)。
+// service-worker.jsのfetchハンドラは既にネットワーク優先(cache:'no-store')なので理屈上は単純なlocation.reload()だけでも
 // 最新化されるはずだが、念のためService Workerのキャッシュ(オフライン用フォールバック)も
-// 明示的に消してから再読み込みする。
-async function hardReload(button) {
-  if (button) {
-    button.disabled = true;
-    button.classList.add('is-reloading');
-  }
+// 明示的に消してから再読み込みする。記録中のトレーニングは途中の記録(スナップショット)から復元される。
+async function hardReload() {
+  try {
+    if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot({ passive: true });
+  } catch (e) { /* 保存できなくても更新は続ける */ }
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -53,9 +52,70 @@ async function hardReload(button) {
   location.reload();
 }
 
-function wireHardReloadButton() {
-  const btn = document.getElementById('hard-reload-btn');
-  if (btn) btn.addEventListener('click', () => hardReload(btn));
+// 引っぱって更新(2026-10-07 ユーザー要望「上限界までやると空白の部分が出てくるけど、ある一定まで下げると
+// ページが更新されるようにしたい」)。ページが一番上の時に始めた縦のスワイプだけを見て、一定以上(PULL_REFRESH_PX)
+// 下げて離したら更新する。iPhoneの標準の引っぱり(上に空白が出る動き)はそのまま使い、表示を重ねるだけにする。
+// 全画面タイマー・下から出るシート・確認の小窓を開いている間(lockBodyScroll中や.open)は反応しない。
+const PULL_REFRESH_PX = 80;
+
+function wirePullToRefresh() {
+  const indicator = document.getElementById('pull-refresh');
+  if (!indicator) return;
+  const textEl = indicator.querySelector('.pull-refresh-text');
+  let startY = null;
+  let startX = 0;
+  let pull = 0;
+  let refreshing = false;
+
+  const blocked = () => bodyScrollLockCount > 0
+    || !!document.querySelector('.demo-modal.open, .rest-timer-modal:not([hidden])');
+  const reset = () => {
+    startY = null;
+    pull = 0;
+    indicator.classList.remove('is-visible', 'is-ready');
+  };
+
+  document.addEventListener('touchstart', (e) => {
+    if (refreshing || e.touches.length !== 1 || window.scrollY > 0 || blocked()) { startY = null; return; }
+    startY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    pull = 0;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (startY == null || refreshing) return;
+    const dy = e.touches[0].clientY - startY;
+    const dx = Math.abs(e.touches[0].clientX - startX);
+    // 横に流す操作(数字ホイール等)や、途中でページが下にスクロールした時はやめる
+    if (dy <= 0 || dx > dy || window.scrollY > 0) {
+      if (pull > 0) reset();
+      if (dx > Math.abs(dy)) startY = null;
+      return;
+    }
+    pull = dy;
+    const header = document.querySelector('.app-header');
+    const top = header ? header.getBoundingClientRect().bottom : 0;
+    const ready = pull >= PULL_REFRESH_PX;
+    indicator.style.top = `${Math.max(0, top) + Math.min(pull, PULL_REFRESH_PX) * 0.4}px`;
+    indicator.classList.add('is-visible');
+    indicator.classList.toggle('is-ready', ready);
+    textEl.textContent = ready ? '離すと更新' : '引っぱって更新';
+  }, { passive: true });
+
+  const end = () => {
+    if (startY == null || refreshing) return;
+    if (pull >= PULL_REFRESH_PX) {
+      refreshing = true;
+      indicator.classList.remove('is-ready');
+      indicator.classList.add('is-visible', 'is-refreshing');
+      textEl.textContent = '更新中…';
+      hardReload();
+      return;
+    }
+    reset();
+  };
+  document.addEventListener('touchend', end, { passive: true });
+  document.addEventListener('touchcancel', reset, { passive: true });
 }
 
 let bodyScrollLockCount = 0;
@@ -2793,7 +2853,7 @@ function wireSyncChoiceModal() {
 }
 
 function init() {
-  wireHardReloadButton();
+  wirePullToRefresh();
   wireThemePicker();
   wirePartExclusivity();
   wirePainExclusivity();

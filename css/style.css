@@ -85,19 +85,34 @@ html, body {
   justify-content: space-between;
 }
 
-/* standaloneでホーム画面に追加したPWAはブラウザのURLバー・更新ボタンが無く、
-   最新コードを取ってきたい時に「一度削除してから開き直す」しか手段が無かった
-   (2026-09-16、ユーザー指摘)。ここから直接location.reload()できるようにする。
-   js/app.jsのwireHardReloadButton参照。 */
-.app-header-reload {
-  flex-shrink: 0;
-  margin-left: 12px;
-  font-size: 18px;
+/* 引っぱって更新(2026-10-07〜。以前のヘッダー右上の⟳ボタンの代わり)。画面の一番上でさらに下へ
+   引っぱると、ヘッダーのすぐ下(topはJSで設定)に出てきて、一定以上で「離すと更新」になる。
+   js/app.jsのwirePullToRefresh参照。 */
+.pull-refresh {
+  position: fixed;
+  left: 50%;
+  top: 0;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -8px);
+  transition: opacity 0.15s;
 }
-.app-header-reload.is-reloading {
-  animation: app-header-reload-spin 0.8s linear infinite;
-}
-@keyframes app-header-reload-spin {
+.pull-refresh.is-visible { opacity: 1; }
+.pull-refresh.is-ready { color: var(--accent); border-color: var(--accent); }
+.pull-refresh-icon { display: inline-block; transition: transform 0.15s; }
+.pull-refresh.is-ready .pull-refresh-icon { transform: rotate(180deg); }
+.pull-refresh.is-refreshing .pull-refresh-icon { animation: pull-refresh-spin 0.8s linear infinite; }
+@keyframes pull-refresh-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
