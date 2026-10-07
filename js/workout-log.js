@@ -38,10 +38,15 @@ function buildSuggestion(planItem, bodyWeightKg) {
     if (!lastHold) {
       return { text: '初回記録です。フォームを優先し、無理のない時間から始めましょう。', weight: null };
     }
-    const secList = lastHold.sets.map((s) => s.reps).join('/');
-    const bestSec = Math.max(...lastHold.sets.map((s) => Number(s.reps) || 0));
+    // 休憩をはさんだセットは「45秒(休憩1回)」と分かるようにし、目標は続けて保持できたセットから決める
+    const secList = lastHold.sets.map((s) => `${s.reps}秒${holdSetRests(s).length > 0 ? `(休憩${holdSetRests(s).length}回)` : ''}`).join('/');
+    const continuous = lastHold.sets.filter((s) => holdSetRests(s).length === 0);
+    if (continuous.length === 0) {
+      return { text: `前回 ${secList}。今回は休憩を減らすことを目指しましょう。`, weight: null };
+    }
+    const bestSec = Math.max(...continuous.map((s) => Number(s.reps) || 0));
     return {
-      text: `前回 ${secList}秒。今回は${bestSec}秒以上を目指しましょう。`,
+      text: `前回 ${secList}。今回は休憩なしで${bestSec}秒以上を目指しましょう。`,
       weight: null,
     };
   }
@@ -319,7 +324,8 @@ function exerciseProgressSeries(exerciseId, exerciseMeta, limit) {
       if (limit && points.length >= limit) break;
       continue;
     }
-    const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup);
+    // 休憩をはさんだ保持(holdRests)は続けて保持した記録と比べられないので、推移・自己ベストの比較元から外す
+    const workingSets = ex.sets.filter((s) => s.done && !s.isWarmup && !(holdBased && holdSetRests(s).length > 0));
     if (workingSets.length === 0) continue;
     if (holdBased || isBodyweight) {
       const value = Math.max(...workingSets.map((s) => Number(s.reps) || 0));
@@ -349,9 +355,24 @@ function exerciseProgressValue(exerciseMeta, set) {
   return Number(set.weight) || 0;
 }
 
+// 保持時間系のセットで、計測タイマーの「休憩」で止めた各回の秒数(set.holdRests、2026-10-07〜)。
+// 休憩をはさむと同じ秒数でも負荷が軽くなるので記録に残し、表示・提案・自己ベストの判定で区別する。
+function holdSetRests(set) {
+  // 数値以外(壊れたバックアップ等)は数えない
+  return set && Array.isArray(set.holdRests) ? set.holdRests.filter((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0) : [];
+}
+
+// 「休憩1回・計12秒」(休憩が無ければ空文字)
+function holdRestNote(set) {
+  const rests = holdSetRests(set);
+  if (rests.length === 0) return '';
+  return `休憩${rests.length}回・計${rests.reduce((a, b) => a + b, 0)}秒`;
+}
+
 // 保存済み履歴に対してのみ比較するため、初回記録は自己ベスト更新扱いにしない。
-// 有酸素種目とウォームアップセットは対象外。
+// 有酸素種目とウォームアップセットは対象外。休憩をはさんだ保持(holdRests)も、続けて保持した記録と比べられないので対象外。
 function isPersonalRecord(exercise, set) {
+  if (holdSetRests(set).length > 0) return false;
   const currentValue = exerciseProgressValue(exercise, set);
   if (currentValue === null) return false;
   const previousPoints = exerciseProgressSeries(exercise.exerciseId, exercise, 0);
@@ -364,7 +385,7 @@ if (typeof module !== 'undefined') {
   module.exports = {
     createSessionFromMenu, applyWarmupSetsSetting, finalizeSession, buildSuggestion,
     isCardioRecorded, exerciseHasRecord, sessionHasAnyRecord, sessionIncompleteSummary,
-    exerciseProgressSeries, exerciseProgressValue, isPersonalRecord,
+    exerciseProgressSeries, exerciseProgressValue, isPersonalRecord, holdSetRests, holdRestNote,
     estimateCardioCalories,
   };
 }

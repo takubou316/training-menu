@@ -2925,4 +2925,6 @@ body.modal-open {
 .routine-custom-summary { margin: 8px 0 0; font-size: 14px; font-weight: 600; }
 .template-manage-heading { margin-top: 28px; }
 .template-manage-add-btn { width: 100%; margin-top: 10px; }
+.hold-rest-note { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.hold-rest-note[hidden] { display: none; }
 .hold-timer-paused-note { font-size: 14px; color: var(--text-dim); margin-top: 8px; text-align: center; }

@@ -729,7 +729,10 @@ function validateHistoryValue(history) {
     ids.add(s.id);
     if (Number.isNaN(new Date(s.date).getTime()) || !Array.isArray(s.exercises)) return false;
     return s.exercises.every((ex) => isPlainObject(ex) && typeof ex.exerciseId === 'string'
-      && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every(isPlainObject))));
+      && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every((set) => isPlainObject(set)
+        // 保持系の休憩の秒数(2026-10-07〜)。無いのは可、あれば0以上の数の配列
+        && (set.holdRests == null || (Array.isArray(set.holdRests)
+          && set.holdRests.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)))))));
   });
 }
 

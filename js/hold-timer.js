@@ -4,7 +4,7 @@
 // 計測結果はそのままスライダーに反映される。
 
 // 計測中に「休憩」で一時停止でき(膝をついて休む等)、「再開」で準備カウントダウンを挟んで続きから数える(2026-10-07〜)。
-// 記録される秒数は休憩を除いた合計。
+// 記録される秒数は休憩を除いた合計で、休憩した各回の秒数はセットのholdRestsに残す(休憩をはさむと負荷が変わるため)。
 
 const HOLD_TIMER_PREP_SECONDS = 5;
 
@@ -117,6 +117,9 @@ function toggleHoldTimerPause() {
     if (modal) modal.classList.remove('hold-timer-measuring');
     updateHoldTimerPaused();
   } else if (activeHoldTimer.phase === 'paused') {
+    // 休憩した秒数は、準備が終わって実際に保持を再開した時に記録へ残す(休憩をはさむと負荷が変わるため)。
+    // 休憩中・再開の準備中に「中断」で終えた分は保持の途中の休憩ではないので残さない(Codexレビュー指摘)
+    activeHoldTimer.pendingRestSec = Math.round((Date.now() - activeHoldTimer.pausedAt) / 1000);
     // 姿勢を作り直す時間として、最初と同じ準備カウントダウンを挟んでから続きを数える
     activeHoldTimer.phase = 'prep';
     activeHoldTimer.pausedAt = null;
@@ -125,6 +128,26 @@ function toggleHoldTimerPause() {
     updateHoldTimerPrep();
   }
   updateHoldTimerPauseUi();
+}
+
+function holdTimerTargetSet() {
+  if (!activeHoldTimer || typeof currentSession === 'undefined' || !currentSession) return null;
+  const ex = currentSession.exercises[activeHoldTimer.exIndex];
+  return ex && ex.sets ? ex.sets[activeHoldTimer.setIndex] || null : null;
+}
+
+// set.holdRests(休憩した各回の秒数)を書き換え、記録画面の「休憩1回・計12秒」と途中の記録の保存も合わせる。
+// restSecがnullなら空にする(計測をやり直した時)。
+function recordHoldRest(restSec) {
+  const set = holdTimerTargetSet();
+  if (!set) return;
+  set.holdRests = restSec == null ? [] : [...holdSetRests(set), restSec];
+  const note = document.querySelector(`[data-hold-rest-note="${activeHoldTimer.exIndex}:${activeHoldTimer.setIndex}"]`);
+  if (note) {
+    note.textContent = holdRestNote(set);
+    note.hidden = !note.textContent;
+  }
+  if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot();
 }
 
 function updateHoldTimerPauseUi() {
@@ -156,7 +179,12 @@ function updateHoldTimerPrep() {
   const remainingMs = activeHoldTimer.prepEndAt - Date.now();
 
   if (remainingMs <= 0) {
-    // 準備終了、ここから実測定を開始する
+    // 準備終了、ここから実測定を開始する。最初の計測開始なら、前の計測の休憩の記録は消す(秒数も上書きされるため)
+    if (activeHoldTimer.accumulatedMs === 0) recordHoldRest(null);
+    else if (activeHoldTimer.pendingRestSec != null) {
+      recordHoldRest(activeHoldTimer.pendingRestSec);
+      activeHoldTimer.pendingRestSec = null;
+    }
     activeHoldTimer.phase = 'measuring';
     activeHoldTimer.startedAt = Date.now();
     const modal = document.getElementById('hold-timer-modal');

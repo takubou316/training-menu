@@ -780,7 +780,8 @@ function setRowSummaryText(set, holdBased, hasWeightField) {
   const weightPart = hasWeightField ? `${set.weight}kg・` : '';
   // サーキットはRPEを聞かない(空)ので、その時は出さない
   const rpePart = set.rpe !== '' && set.rpe != null ? `・RPE${set.rpe}` : '';
-  return `${weightPart}${reps}${rpePart}`;
+  const restNote = holdBased ? holdRestNote(set) : '';
+  return `${weightPart}${reps}${restNote ? `（${restNote}）` : ''}${rpePart}`;
 }
 
 // sliderFieldHtml/numberWheelHtmlで共通の「ラベル＋現在値」行を組み立てる。
@@ -1353,7 +1354,8 @@ function buildRepsWheelHtml(ex, exIndex, setIndex, s) {
   return numberWheelHtml({
     exIndex, setIndex, field: 'reps', label: ex.holdBased ? '秒' : '回数',
     min: 0, max: ex.holdBased ? 300 : 100, step: 1, value: s.reps, holdBased: ex.holdBased, disabled: s.done,
-    extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>` : '',
+    extraHtml: ex.holdBased ? `<button type="button" class="hold-timer-btn" data-hold-timer="${exIndex}:${setIndex}">▶ 計測</button>
+          <div class="hold-rest-note" data-hold-rest-note="${exIndex}:${setIndex}"${holdRestNote(s) ? '' : ' hidden'}>${escapeHtml(holdRestNote(s))}</div>` : '',
   });
 }
 
@@ -1648,8 +1650,9 @@ function buildExerciseDetailHtml(ex) {
     .filter((s) => s.done && !s.isWarmup)
     .map((s) => {
       const rpeSuffix = s.rpe ? `<span class="detail-annotation">(RPE${s.rpe})</span>` : '';
+      const restNote = holdBased ? holdRestNote(s) : '';
       return holdBased
-        ? `${s.reps || 0}秒${rpeSuffix}`
+        ? `${s.reps || 0}秒${restNote ? `<span class="detail-annotation">(${restNote})</span>` : ''}${rpeSuffix}`
         : `${s.weight || 0}kg${isBodyweightLoad ? '<span class="detail-annotation">(体重換算)</span>' : ''}×${s.reps || 0}${rpeSuffix}`;
     })
     .join(', ') || '未記録';
