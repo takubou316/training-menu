@@ -38,6 +38,8 @@ try {
       <div id="home-bodyweight-section"></div>
       <!-- 腹囲(週1回が目安)。前回の値と何日前か＋記録ボタン。renderHomeWaist()(js/ui.js)が描画する。 -->
       <div id="home-waist-section"></div>
+      <!-- ちょこっと記録(食後スクワット15回など、ボタン1つで記録)。renderHomeQuickLog()(js/ui.js)が描画する。 -->
+      <div id="home-quick-section"></div>
 
       <h2>今日のメニューを作る</h2>
 
@@ -445,6 +447,16 @@ try {
       <h3 id="cardio-target-sheet-title" class="sheet-title"></h3>
       <div id="cardio-target-sheet-body"></div>
       <button type="button" class="primary-btn sheet-done-btn" data-cardio-target-close>完了</button>
+    </div>
+  </div>
+
+  <!-- ちょこっと記録のボタンの追加・削除(下から出るシート、js/ui.jsのrenderQuickSheet・js/app.jsのwireQuickLog)。 -->
+  <div id="quick-sheet" class="demo-modal sheet-modal">
+    <div class="demo-modal-backdrop" data-quick-close></div>
+    <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title">
+      <h3 id="quick-sheet-title" class="sheet-title">ちょこっと記録のボタン</h3>
+      <div id="quick-sheet-body"></div>
+      <button type="button" class="primary-btn sheet-done-btn" data-quick-close>閉じる</button>
     </div>
   </div>
 

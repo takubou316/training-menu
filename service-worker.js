@@ -1,7 +1,7 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
 // js/app.jsのAPP_VERSIONと必ず同じ番号にする(「その他の設定」のバージョン表示で比べる)
-const CACHE_NAME = 'training-menu-v59';
+const CACHE_NAME = 'training-menu-v60';
 // index.htmlで読み込むローカルファイルはすべてここに入れること（漏れるとオフライン起動に失敗する）。
 // 動画(media/)は容量が大きくRangeリクエストとも相性が悪いため対象外。
 const ASSETS = [
@@ -70,7 +70,8 @@ self.addEventListener('push', (event) => {
   try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
   event.waitUntil(self.registration.showNotification(data.title || '目標時間になりました', {
     body: data.body || '',
-    tag: 'cardio-target',
+    // 種類ごとのtag(有酸素の目標時間/予定の時刻、2026-10-07〜はサーバーが送る)。同じtagの通知は上書き表示になる
+    tag: data.tag || 'cardio-target',
     icon: 'icons/icon-192.png',
   }));
 });

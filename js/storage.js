@@ -16,6 +16,8 @@ const STORAGE_KEYS = {
   holdTargets: 'training-menu:hold-targets',
   cardioTargets: 'training-menu:cardio-targets',
   routines: 'training-menu:routines',
+  quickPresets: 'training-menu:quick-presets',
+  quickLog: 'training-menu:quick-log',
   circuitLast: 'training-menu:circuit-last',
 };
 
@@ -150,6 +152,71 @@ const DATE_KEY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 // 腹囲の値として受け付けるか。null/空文字/真偽値などがNumber()で0に化けて通らないよう、数値型に限る。
 function isValidWaistCm(cm) {
   return typeof cm === 'number' && Number.isFinite(cm) && cm >= WAIST_MIN && cm <= WAIST_MAX;
+}
+
+// ===== ちょこっと記録(2026-10-07〜) =====
+// 食後のスクワット15回など、ホームのボタン1つで「やった」を残す軽い記録。トレーニングの記録(history)とは別に持ち、
+// 記録タブの日の詳細にだけ出す。グラフ・連続日数・週のまとめ・予定の「済み」には数えない(ユーザー判断)。
+// 端末内のみ(クラウド同期しない)・バックアップ対象。
+// ボタン: [{ id, exerciseId, amount, timed }]  記録: [{ id, at(ISO), exerciseId, name, amount, timed }](新しい順)
+const QUICK_AMOUNT_MAX = 300;
+// idは画面のdata属性に入るので、英数字と-_だけに限る(細工したバックアップからHTMLを差し込ませない。Codexレビュー指摘)
+const QUICK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+function isValidQuickPreset(p) {
+  return isPlainObject(p) && typeof p.id === 'string' && QUICK_ID_PATTERN.test(p.id)
+    && typeof p.exerciseId === 'string' && QUICK_ID_PATTERN.test(p.exerciseId)
+    && Number.isInteger(p.amount) && p.amount >= 1 && p.amount <= QUICK_AMOUNT_MAX && typeof p.timed === 'boolean';
+}
+
+function isValidQuickLogEntry(e) {
+  return isPlainObject(e) && typeof e.id === 'string' && QUICK_ID_PATTERN.test(e.id)
+    && typeof e.exerciseId === 'string' && typeof e.name === 'string' && e.name.length <= 100
+    && typeof e.at === 'string' && !Number.isNaN(new Date(e.at).getTime())
+    && Number.isInteger(e.amount) && e.amount >= 1 && e.amount <= QUICK_AMOUNT_MAX && typeof e.timed === 'boolean';
+}
+
+// 配列の全要素が正しく、idが重ならないか(バックアップの検証用。重なると1件の削除で複数消えるため)
+function isValidUniqueList(v, isValidItem) {
+  if (!Array.isArray(v) || !v.every(isValidItem)) return false;
+  return new Set(v.map((x) => x.id)).size === v.length;
+}
+
+function loadQuickPresets() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.quickPresets) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(isValidQuickPreset) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveQuickPresets(presets) {
+  localStorage.setItem(STORAGE_KEYS.quickPresets, JSON.stringify(presets));
+}
+
+function loadQuickLog() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.quickLog) || '[]');
+    return Array.isArray(parsed) ? parsed.filter(isValidQuickLogEntry) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function addQuickLogEntry(entry) {
+  const log = loadQuickLog();
+  log.unshift(entry);
+  localStorage.setItem(STORAGE_KEYS.quickLog, JSON.stringify(log));
+}
+
+function deleteQuickLogEntry(id) {
+  localStorage.setItem(STORAGE_KEYS.quickLog, JSON.stringify(loadQuickLog().filter((e) => e.id !== id)));
+}
+
+// その日(YYYY-MM-DD)のちょこっと記録(古い順)
+function quickLogForDate(dateKey, log = loadQuickLog()) {
+  return log.filter((e) => localDateKey(e.at) === dateKey).sort((a, b) => new Date(a.at) - new Date(b.at));
 }
 
 // 腹囲の記録(2026-10-06〜)。体重と同じ { 'YYYY-MM-DD': cm } の形で1日1件。週1回程度の記録を想定。
@@ -572,8 +639,12 @@ function newRoutineId() {
   return `r${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 予定の「通知する時刻」('HH:MM'、無ければ通知しない。2026-10-07〜)
+const ROUTINE_REMIND_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 function isValidRoutine(r) {
   if (!isPlainObject(r) || typeof r.id !== 'string' || !ROUTINE_FREQS.includes(r.freq)) return false;
+  if (r.remindAt != null && !(typeof r.remindAt === 'string' && ROUTINE_REMIND_PATTERN.test(r.remindAt))) return false;
   if (r.freq === 'weekdays' && !(Array.isArray(r.weekdays) && r.weekdays.length > 0
     && r.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6))) return false;
   if (r.kind === 'template') return typeof r.templateId === 'string';
@@ -700,6 +771,7 @@ const BACKUP_VERSION = 1;
 const BACKUP_KEYS = [
   'settings', 'history', 'favorites', 'customTemplates', 'weeklyPlans', 'activeWeeklyPlanId',
   'streak', 'theme', 'bodyWeightLog', 'warmupSetsEnabled', 'holdTargets', 'waistLog', 'cardioTargets', 'routines',
+  'quickPresets', 'quickLog',
 ];
 // クラウド同期の送信待ちキュー(js/sync.jsのPENDING_SYNC_KEYと同じ値)と、送れなかった記録
 // (js/sync.jsのSYNC_FAILED_KEY)。どちらもバックアップには含めない。
@@ -756,6 +828,9 @@ const BACKUP_VALIDATORS = {
   cardioTargets: (v) => isPlainObject(v) && Object.values(v).every(isValidCardioTargetMin),
   // トレーニング予定(2026-10-07〜)。無い古いバックアップを読み込むと、読み込んだ旧週間プランから変換し直す
   routines: isValidRoutineState,
+  // ちょこっと記録(2026-10-07〜)
+  quickPresets: (v) => isValidUniqueList(v, isValidQuickPreset),
+  quickLog: (v) => isValidUniqueList(v, isValidQuickLogEntry),
 };
 
 // 読み込む前に中身を検証し、確認画面に出す概要を返す。不正ならErrorを投げる(この時点では何も書き込まない)。

@@ -2463,6 +2463,57 @@ body.modal-open {
   border-radius: 12px;
   background: var(--surface);
 }
+/* ちょこっと記録(2026-10-07〜、js/ui.jsのrenderHomeQuickLog) */
+.home-quick-panel {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.home-quick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.quick-log-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.quick-log-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+}
+.quick-log-btn:active { background: var(--accent-dim); }
+.quick-log-count { font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.quick-log-count.is-done { color: var(--accent); }
+.quick-log-empty { margin: 6px 0 0; }
+.quick-log-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--text-dim); }
+.quick-log-undo .ghost-pill-btn { white-space: nowrap; flex-shrink: 0; }
+.day-quick-log { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--border); }
+.day-quick-log ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.day-quick-log li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 14px; }
+.quick-day-name { font-weight: 700; }
+.quick-day-times { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--text-dim); font-size: 13px; }
+.quick-day-time { display: inline-flex; align-items: center; gap: 2px; }
+.quick-day-delete { border: none; background: none; color: var(--text-dim); font-size: 12px; padding: 4px 6px; min-width: 28px; min-height: 28px; }
+.quick-preset-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.quick-preset-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); font-weight: 600; }
+.cal-day-quick-dot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 /* 未記録・前回から7日以上たった時だけ、左の線で控えめに知らせる(警告色は使わない) */
 .home-waist-panel.is-due { border-left: 3px solid var(--accent); }
 .home-waist-panel-input { display: block; padding: 12px 14px; }
@@ -2938,6 +2989,7 @@ body.modal-open {
 .custom-editor-name-field[hidden] { display: none; }
 .custom-editor-name-field .template-name-input { width: 100%; box-sizing: border-box; }
 .custom-editor-banner-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.routine-remind-time { display: block; max-width: 160px; }
 .routine-template-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .routine-custom-summary { margin: 8px 0 0; font-size: 14px; font-weight: 600; }
 .template-manage-heading { margin-top: 28px; }

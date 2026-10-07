@@ -72,8 +72,10 @@ async function enableCardioPush() {
 }
 
 async function disableCardioPush() {
-  await cancelCardioPush();
+  // 先にオフにしておく(この後にキューで動く予定の入れ直しが、オンのつもりで予約を戻さないように。Codexレビュー指摘)
   setCardioPushEnabled(false);
+  await cancelCardioPush();
+  await cancelRoutinePush();
 }
 
 // 予定の登録・削除は「最後に頼んだ操作」だけが効くよう順番に流す(休憩→再開を素早く押した時に、
@@ -138,6 +140,8 @@ function resyncCardioPushIfNeeded(force) {
   const userId = typeof isCloudSyncActive === 'function' && isCloudSyncActive() ? currentPushUserId() : null;
   if (!force && userId === cardioPushSyncedUserId) return;
   cardioPushSyncedUserId = userId;
+  // 予定の時刻の通知も、ログインが確定した時・アプリに戻った時に入れ直す(日付が変わった・別の端末で記録した等に追いつく)
+  if (userId) scheduleRoutinePushSync(true);
   if (!userId || typeof syncCardioTargetPush !== 'function') return;
   if (typeof activeCardioTimer !== 'undefined' && activeCardioTimer) syncCardioTargetPush();
 }
@@ -145,6 +149,118 @@ function resyncCardioPushIfNeeded(force) {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') resyncCardioPushIfNeeded(true);
 });
+
+// ===== トレーニング予定の時刻の通知(2026-10-07〜) =====
+// 予定ごとの「通知する時刻」(routine.remindAt)から、この先7日分の「やる日×時刻」を計算してSupabaseの
+// routine_push_jobsへ入れる。その日が済んでいれば入れない(ユーザー判断「済んでいたら送らない」)。
+// 「やったか」はこの端末の記録にしか無いので、アプリを開いた時・予定を変えた時・記録を終えた時などに入れ直す
+// (renderTodayFocusから呼ばれる。中身が前回と同じなら送らない)。1週間以上アプリを開かないと、その先の通知は届かない。
+const ROUTINE_PUSH_DAYS = 7;
+let routinePushLastSignature = null;
+let routinePushTimer = null;
+
+// 予定がこの先やる日(dateKeyの配列、今日から)。一日おきは「やる日にやった」と仮定して先を読む
+function routineDueDateKeysAhead(r, doneDays, days = ROUTINE_PUSH_DAYS, now = new Date()) {
+  const keys = [];
+  let last = [...doneDays.keys()].filter((k) => k <= localDateKey(now)).sort().pop() || null;
+  for (let i = 0; i < days; i += 1) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
+    const key = localDateKey(d);
+    let due;
+    if (r.freq === 'daily') due = true;
+    else if (r.freq === 'weekdays') due = r.weekdays.includes(todayWeekdayIndex(d));
+    else {
+      due = last !== key && !(last && last === previousDateKey(key));
+      if (due) last = key;
+    }
+    // 今日もう済んでいる分は送らない
+    if (due && i === 0 && doneDays.has(key)) due = false;
+    if (due) keys.push(key);
+  }
+  return keys;
+}
+
+// 入れたい通知の一覧 [{ routineId, fireAt(ISO), title, body }]
+function desiredRoutinePushJobs(now = new Date()) {
+  const state = loadRoutineState();
+  if (state.allPaused) return [];
+  const templates = loadCustomTemplates();
+  const history = loadHistory();
+  const jobs = [];
+  state.items.forEach((r) => {
+    if (r.paused || !r.remindAt || !routineActionable(r, templates)) return;
+    const [hh, mm] = r.remindAt.split(':').map(Number);
+    routineDueDateKeysAhead(r, routineDoneDays(r, history), ROUTINE_PUSH_DAYS, now).forEach((key) => {
+      const [y, m, d] = key.split('-').map(Number);
+      const fire = new Date(y, m - 1, d, hh, mm, 0, 0);
+      if (fire.getTime() <= now.getTime() + 30 * 1000) return; // 過ぎた時刻は入れない
+      jobs.push({
+        routineId: r.id,
+        fireAt: fire.toISOString(),
+        title: 'トレーニングの時間です',
+        body: `${routineContentText(r, templates)}の予定です`.slice(0, 200),
+      });
+    });
+  });
+  return jobs;
+}
+
+// 予定の通知を入れ直す(短い間に何度呼ばれても最後の1回だけ動く)。force=trueなら中身が同じでも送る。
+// 待っている間に通常の呼び出しが来ても、強制の頼みは消さない(アプリに戻った時の入れ直しが打ち消されないように。Codexレビュー指摘)
+let routinePushForcePending = false;
+function scheduleRoutinePushSync(force = false) {
+  routinePushForcePending = routinePushForcePending || force;
+  clearTimeout(routinePushTimer);
+  routinePushTimer = setTimeout(() => {
+    const f = routinePushForcePending;
+    routinePushForcePending = false;
+    syncRoutinePush(f).catch((e) => console.warn('routine push:', e && e.message));
+  }, 1500);
+}
+
+// 入れ替えはサーバーの関数(replace_routine_push_jobs)が1回で行う(古い予約の削除・新しい予約の追加・件数の確認・
+// ユーザーごとの排他。supabase/migrations/20261007b_routine_push_replace_rpc.sql)。何を入れるかは、キューの順番が
+// 来た時点の最新の状態で決める(待っている間に通知オフ・予定の変更があっても古い内容で上書きしないため。Codexレビュー指摘)
+function syncRoutinePush(force = false) {
+  if (!cardioPushSupported() || typeof isCloudSyncActive !== 'function' || !isCloudSyncActive()) return Promise.resolve();
+  const userId = currentPushUserId();
+  return enqueueCardioPush(async () => {
+    assertSamePushUser(userId);
+    const deviceId = cardioPushDeviceId();
+    if (!deviceId) return;
+    // 通知がオフなら「何も入れない」=入れてあった分を消す
+    const desired = isCardioPushReady() ? desiredRoutinePushJobs() : [];
+    const signature = JSON.stringify([userId, desired]);
+    if (!force && signature === routinePushLastSignature) return;
+    if (desired.length === 0) {
+      const { error } = await supabaseClient.from('routine_push_jobs').delete().eq('user_id', userId).is('sent_at', null);
+      if (error) throw error;
+    } else {
+      const sub = await cardioPushSubscription();
+      assertSamePushUser(userId);
+      const { error } = await supabaseClient.rpc('replace_routine_push_jobs', {
+        p_device_id: deviceId,
+        p_subscription: sub.toJSON(),
+        p_jobs: desired.map((j) => ({ routine_id: j.routineId, fire_at: j.fireAt, title: j.title, body: j.body })),
+      });
+      if (error) throw error;
+    }
+    routinePushLastSignature = signature;
+  });
+}
+
+// 送っていない予定の通知をすべて消す(ログアウト・通知をオフにする時)
+function cancelRoutinePush() {
+  if (!cardioPushSupported() || typeof isCloudSyncActive !== 'function' || !isCloudSyncActive()) return Promise.resolve();
+  const userId = currentPushUserId();
+  clearTimeout(routinePushTimer);
+  return enqueueCardioPush(async () => {
+    assertSamePushUser(userId);
+    const { error } = await supabaseClient.from('routine_push_jobs').delete().eq('user_id', userId).is('sent_at', null);
+    if (error) throw error;
+    routinePushLastSignature = null;
+  });
+}
 
 // 設定画面のテスト。15秒後に届く予定を入れる(サーバー側の定期実行まで含めて確かめられる)
 function sendCardioPushTest() {
@@ -156,8 +272,8 @@ function renderCardioPushSetting() {
   resyncCardioPushIfNeeded(false); // ログイン状態が変わるたびに呼ばれる(renderSyncStatus経由)
   const row = document.getElementById('cardio-push-row');
   if (!row) return;
-  const head = '<div class="theme-picker-label">目標時間の通知</div>';
-  const desc = '<p class="hint-text">有酸素の計測中、目標時間になった時に、アプリを閉じていても・画面がロック中でも通知で知らせます。</p>';
+  const head = '<div class="theme-picker-label">通知</div>';
+  const desc = '<p class="hint-text">アプリを閉じていても・画面がロック中でも、通知で知らせます。<br>・有酸素の計測中に目標時間になった時<br>・トレーニング予定で「時刻に知らせる」にした予定の時刻（まだやっていない日だけ）</p>';
   let body;
   if (!cardioPushSupported()) {
     body = '<p class="hint-text">この端末・開き方では使えません。iPhoneはホーム画面に追加したアプリから開いてください。</p>';
@@ -167,7 +283,7 @@ function renderCardioPushSetting() {
     body = '<p class="hint-text">通知がオフになっています。iPhoneの設定アプリ →「通知」→「Compstack」で許可してください。</p>';
   } else if (isCardioPushEnabled() && Notification.permission === 'granted') {
     body = `
-      <p class="hint-text"><b>オン</b>　計測を始める時・休憩や終了の時にネットにつながっている必要があります。つながっていない時に終えると、後から通知が届くことがあります。</p>
+      <p class="hint-text"><b>オン</b>　計測を始める時・休憩や終了の時にネットにつながっている必要があります。つながっていない時に終えると、後から通知が届くことがあります。予定の通知は、アプリを開いた時にこの先7日分を予約し直すので、1週間以上開かないとその先は届きません。</p>
       <div class="backup-actions">
         <button type="button" class="ghost-pill-btn" data-cardio-push-test>テスト（15秒後に通知）</button>
         <button type="button" class="ghost-pill-btn" data-cardio-push-off>オフにする</button>
@@ -194,7 +310,11 @@ function wireCardioPushSetting() {
         const result = await enableCardioPush();
         renderCardioPushSetting();
         if (!result.ok) setStatus(result.reason === 'denied' ? '通知が許可されませんでした。' : '通知の許可が選ばれませんでした。');
-        else setStatus('オンにしました。「テスト」で届くか確かめられます。');
+        else {
+          setStatus('オンにしました。「テスト」で届くか確かめられます。');
+          // 「時刻に知らせる」にしてある予定があれば、すぐに予約する
+          scheduleRoutinePushSync(true);
+        }
       } else if (e.target.closest('[data-cardio-push-off]')) {
         await disableCardioPush();
         renderCardioPushSetting();

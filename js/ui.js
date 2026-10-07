@@ -271,6 +271,7 @@ function routineDoneText(r, status) {
 function routineSubText(r, status) {
   const parts = [routineFreqText(r)];
   if (r.kind === 'exercise' && r.targetMin) parts.push(`目標${r.targetMin}分`);
+  if (r.remindAt) parts.push(`${r.remindAt}に通知`);
   if (r.freq === 'alternate' && status.last) parts.push(`前回 ${shortDateKeyLabel(status.last)}`);
   return parts.join('・');
 }
@@ -300,6 +301,8 @@ function renderTodayFocus() {
   };
 
   const { state, templates, rows } = routineStatusPack();
+  // 予定の時刻の通知を今の状態(済み・予定の変更・日付)に合わせて入れ直す。中身が前回と同じなら何もしない(js/push.js)
+  if (typeof scheduleRoutinePushSync === 'function') scheduleRoutinePushSync();
   const active = state.allPaused ? [] : rows.filter((x) => !x.r.paused);
   if (active.length === 0) {
     container.innerHTML = state.items.length > 0 && state.allPaused
@@ -495,13 +498,27 @@ function renderRoutineSheet(draft, isNew) {
         weekdays: '選んだ曜日にホームに出ます。やらなかった日の分は持ち越しません。',
       }[draft.freq]}</p>`;
 
+  // 通知する時刻(1つ、2026-10-07〜)。iPhoneの時刻選びはそのまま使う(<input type="time">)
+  const pushReady = typeof isCardioPushReady === 'function' && isCardioPushReady();
+  const remindHtml = `
+      <div class="sheet-field-head"><span class="sheet-field-label">通知</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="通知">
+        <button type="button" class="choice-chip" role="radio" aria-checked="${!draft.remindAt}" data-routine-remind="off">しない</button>
+        <button type="button" class="choice-chip" role="radio" aria-checked="${!!draft.remindAt}" data-routine-remind="on">時刻に知らせる</button>
+      </div>
+      ${draft.remindAt ? `
+      <label class="routine-remind-time">
+        <input type="time" class="routine-select" value="${draft.remindAt}" step="300" data-routine-field="remindAt" aria-label="通知する時刻">
+      </label>
+      <p class="hint-text">やる日のこの時刻に、まだやっていなければ通知します。${pushReady ? '' : '<b>届くようにするには、記録タブ「その他の設定」の「通知」をオンにしてください（Googleでログイン中のみ）。</b>'}</p>` : ''}`;
+
   const manageHtml = isNew ? '' : `
       <div class="routine-sheet-manage">
         <button type="button" class="ghost-pill-btn" data-routine-toggle-pause>${draft.paused ? '再開する' : '休止する'}</button>
         <button type="button" class="danger-link-btn" data-routine-delete>この予定を削除する</button>
       </div>`;
 
-  body.innerHTML = `${kindHtml}${contentHtml}${freqHtml}
+  body.innerHTML = `${kindHtml}${contentHtml}${freqHtml}${remindHtml}
       <p class="error-text" id="routine-sheet-error"></p>${manageHtml}`;
 }
 
@@ -1756,12 +1773,17 @@ function buildRecordJumpLinks(dateStr, historyMap) {
   </div>`;
 }
 
-function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true } = {}) {
+// quickLog: ちょこっと記録(一覧表示で日ごとに読み直さないよう、呼び出し元で1回読んだものを渡せる)
+function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true, quickLog = null } = {}) {
   const date = recordDateFromKey(dateStr);
   const sessions = historyMap.get(dateStr) || [];
+  const quickHtml = buildDayQuickLogHtml(dateStr, quickLog);
   let bodyHtml;
   if (sessions.length) {
     bodyHtml = sessions.map((session) => buildSessionCardHtml(session, { showDate: false })).join('');
+  } else if (quickHtml) {
+    // ちょこっと記録だけの日は「記録がありません」を出さない
+    bodyHtml = '';
   } else if (historyMap.size === 0) {
     bodyHtml = `<div class="record-empty-state">
       <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
@@ -1770,7 +1792,7 @@ function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true } = {}) 
   } else {
     bodyHtml = `<p class="empty-text">この日はトレーニングの記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
   }
-  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + buildDayWaistRowHtml(dateStr, { showEmpty: showNav }) + bodyHtml;
+  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + buildDayWaistRowHtml(dateStr, { showEmpty: showNav }) + quickHtml + bodyHtml;
   return `<div class="day-detail-header">
       ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-prev aria-label="前の日">◀</button>' : '<span></span>'}
       <div><span class="day-detail-date">${recordDateLabel(date)}</span><span class="day-detail-weekday">${recordWeekdayLabel(date)}曜日</span></div>
@@ -1794,10 +1816,13 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
     grid.appendChild(blank);
   }
   const todayStr = localDateKey(new Date());
+  // ちょこっと記録だけの日は、スタンプではなく小さな点で示す
+  const quickDays = new Set(loadQuickLog().map((e) => localDateKey(e.at)));
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = new Date(recordViewYear, recordViewMonth, day);
     const dateStr = localDateKey(date);
     const hasRecord = historyMap.has(dateStr);
+    const quickOnly = !hasRecord && quickDays.has(dateStr);
     const cell = document.createElement('button');
     cell.type = 'button';
     cell.className = `cal-day ${hasRecord ? 'has-record' : 'no-record'}${dateStr === todayStr ? ' is-today' : ''}${dateStr === recordSelectedDateStr ? ' selected' : ''}`;
@@ -1809,7 +1834,7 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
     // 「日付のすぐ下に書くのはやめて」というユーザー指摘で撤回)。
     cell.innerHTML = hasRecord
       ? `${buildRecordStampImg()}<span class="cal-day-num">${day}</span>`
-      : `<span class="cal-day-num">${day}</span>`;
+      : `<span class="cal-day-num">${day}</span>${quickOnly ? '<span class="cal-day-quick-dot" aria-hidden="true"></span>' : ''}`;
     cell.addEventListener('click', () => selectRecordDate(dateStr));
     grid.appendChild(cell);
   }
@@ -1863,7 +1888,9 @@ function moveSelectedRecordDay(deltaDays) {
 function renderListView(historyMap = groupHistoryByDate(loadHistory())) {
   const container = document.getElementById('list-view-container');
   if (!container) return;
-  const dates = Array.from(historyMap.keys()).sort().reverse();
+  // ちょこっと記録だけの日も一覧に出す
+  const quickLog = loadQuickLog();
+  const dates = Array.from(new Set([...historyMap.keys(), ...quickLog.map((e) => localDateKey(e.at))])).sort().reverse();
   if (dates.length === 0) {
     container.innerHTML = `<div class="record-empty-state">
       <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
@@ -1871,7 +1898,7 @@ function renderListView(historyMap = groupHistoryByDate(loadHistory())) {
     </div>`;
     return;
   }
-  container.innerHTML = dates.map((dateStr) => `<div class="day-detail-inline">${buildRecordDayDetailHtml(dateStr, historyMap, { showNav: false })}</div>`).join('');
+  container.innerHTML = dates.map((dateStr) => `<div class="day-detail-inline">${buildRecordDayDetailHtml(dateStr, historyMap, { showNav: false, quickLog })}</div>`).join('');
 }
 
 function setRecordViewMode(mode) {
@@ -2300,6 +2327,100 @@ function waistFormHtml(dateKey, currentCm, { showCancel = false } = {}) {
         ${currentCm != null ? '<button type="button" class="danger-link-btn bodyweight-log-delete" data-waist-log-delete>この日の腹囲を削除</button>' : ''}
       </div>` : ''}
     </div>`;
+}
+
+// ===== ちょこっと記録(2026-10-07〜、データはjs/storage.jsのloadQuickPresets/loadQuickLog) =====
+function quickAmountText(amount, timed) {
+  return timed ? `${amount}秒` : `${amount}回`;
+}
+
+function quickPresetLabel(p) {
+  const ex = findExerciseById(p.exerciseId);
+  return `${ex ? ex.name.replace(/（自重）$/, '') : '（見つからない種目）'} ${quickAmountText(p.amount, p.timed)}`;
+}
+
+function quickTimeText(iso) {
+  const d = new Date(iso);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+// ホームの「ちょこっと記録」。ボタンを押すとその場で1回分を記録し、今日の回数を横に出す。
+// 直前の記録はその場で「取り消す」ことができる(押し間違い用、undoEntry)。
+function renderHomeQuickLog(undoEntry = null) {
+  const container = document.getElementById('home-quick-section');
+  if (!container) return;
+  const presets = loadQuickPresets();
+  const todayLog = quickLogForDate(localDateKey(new Date()));
+  const buttonsHtml = presets.map((p) => {
+    const count = todayLog.filter((e) => e.exerciseId === p.exerciseId && e.amount === p.amount && e.timed === p.timed).length;
+    return `
+      <button type="button" class="quick-log-btn" data-quick-log="${escapeHtml(p.id)}">
+        <span class="quick-log-name">${escapeHtml(quickPresetLabel(p))}</span>
+        <span class="quick-log-count${count > 0 ? ' is-done' : ''}">${count > 0 ? `今日 ${count}回` : '記録する'}</span>
+      </button>`;
+  }).join('');
+  const undoHtml = undoEntry ? `
+      <div class="quick-log-undo" role="status">
+        <span>${quickTimeText(undoEntry.at)}に記録しました</span>
+        <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-quick-undo="${escapeHtml(undoEntry.id)}">取り消す</button>
+      </div>` : '';
+  container.innerHTML = `
+    <div class="home-quick-panel">
+      <div class="home-quick-head">
+        <span class="home-weight-label">ちょこっと記録</span>
+        <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-quick-manage>${presets.length ? '編集' : '＋ 作る'}</button>
+      </div>
+      ${presets.length ? `<div class="quick-log-buttons">${buttonsHtml}</div>` : '<p class="hint-text quick-log-empty">食後のスクワット15回など、ボタン1つで記録できます。</p>'}
+      ${undoHtml}
+    </div>`;
+}
+
+// 記録タブの日の詳細に出す、その日のちょこっと記録(同じ種目・量はまとめて「×2（8:12・13:05）」)
+function buildDayQuickLogHtml(dateStr, log) {
+  const entries = quickLogForDate(dateStr, log || loadQuickLog());
+  if (entries.length === 0) return '';
+  const groups = new Map();
+  entries.forEach((e) => {
+    const key = `${e.exerciseId}|${e.amount}|${e.timed}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  });
+  const rows = [...groups.values()].map((list) => {
+    const first = list[0];
+    const timesHtml = list.map((e) => `<span class="quick-day-time">${quickTimeText(e.at)}<button type="button" class="quick-day-delete" data-quick-delete="${escapeHtml(e.id)}" aria-label="${quickTimeText(e.at)}の記録を削除">✕</button></span>`).join('');
+    return `<li><span class="quick-day-name">${escapeHtml(first.name)} ${quickAmountText(first.amount, first.timed)}${list.length > 1 ? ` ×${list.length}` : ''}</span><span class="quick-day-times">${timesHtml}</span></li>`;
+  }).join('');
+  return `<div class="day-quick-log"><div class="day-weight-label">ちょこっと記録</div><ul>${rows}</ul></div>`;
+}
+
+// 「ちょこっと記録」の編集シート。adding=trueなら追加の入力欄(種目・回数)を出す
+function renderQuickSheet(adding, draft) {
+  const body = document.getElementById('quick-sheet-body');
+  if (!body) return;
+  const presets = loadQuickPresets();
+  const listHtml = presets.length ? `
+      <ul class="quick-preset-list">
+        ${presets.map((p) => `<li><span>${escapeHtml(quickPresetLabel(p))}</span><button type="button" class="danger-link-btn" data-quick-preset-delete="${escapeHtml(p.id)}">削除</button></li>`).join('')}
+      </ul>` : '<p class="hint-text">まだボタンがありません。</p>';
+  if (!adding) {
+    body.innerHTML = `${listHtml}
+      <button type="button" class="ghost-pill-btn routine-new-template-btn" data-quick-add-open>＋ ボタンを追加</button>
+      <p class="hint-text">ちょこっと記録は記録タブの日ごとの記録に残ります（グラフ・連続日数・週のまとめには数えません）。</p>`;
+    return;
+  }
+  const options = EXERCISES.filter((e) => e.type !== 'cardio');
+  const ex = findExerciseById(draft.exerciseId);
+  const timed = !!(ex && ex.holdBased);
+  body.innerHTML = `
+      <div class="sheet-field-head"><span class="sheet-field-label">種目</span></div>
+      <select class="routine-select" data-quick-field="exerciseId" aria-label="種目">
+        ${options.map((e) => `<option value="${e.id}" ${e.id === draft.exerciseId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
+      </select>
+      ${sheetWheelFieldHtml({ field: 'amount', label: timed ? '秒数' : '回数', unit: timed ? '秒' : '回', min: 1, max: timed ? 300 : 100, step: 1, value: draft.amount, presets: timed ? [15, 30, 45, 60] : [5, 10, 15, 20, 30], inputAttr: 'data-quick-amount' })}
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" data-quick-add-cancel>やめる</button>
+        <button type="button" class="primary-btn" data-quick-add-save>追加する</button>
+      </div>`;
 }
 
 function renderHomeWaist() {

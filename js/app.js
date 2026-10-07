@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 59;
+const APP_VERSION = 60;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -1822,6 +1822,7 @@ function saveRoutineFromSheet() {
     if (draft.fromTemplateId) routine.fromTemplateId = draft.fromTemplateId;
   }
   if (draft.freq === 'weekdays') routine.weekdays = [...draft.weekdays].sort((a, b) => a - b);
+  if (draft.remindAt) routine.remindAt = draft.remindAt;
 
   updateRoutineState((state) => {
     const i = state.items.findIndex((r) => r.id === routine.id);
@@ -1873,6 +1874,12 @@ function wireRoutineScreen() {
       draft.freq = freqBtn.dataset.routineFreq;
       // 曜日を選ぶに切り替えた時、まだ何も選んでいなければ今日の曜日を入れておく
       if (draft.freq === 'weekdays' && draft.weekdays.length === 0) draft.weekdays = [todayWeekdayIndex()];
+      rerenderRoutineSheet();
+      return;
+    }
+    const remindBtn = e.target.closest('[data-routine-remind]');
+    if (remindBtn) {
+      draft.remindAt = remindBtn.dataset.routineRemind === 'on' ? (draft.remindAt || '19:00') : null;
       rerenderRoutineSheet();
       return;
     }
@@ -2434,6 +2441,9 @@ function finishWorkout() {
   clearActiveSessionSnapshot();
   renderRecordScreen({ selectToday: true });
   showScreen('record');
+  // 予定を済ませたので、その日の時刻の通知を取り消す(ホームを開かなくても。Codexレビュー指摘)
+  renderTodayFocus();
+  if (typeof scheduleRoutinePushSync === 'function') scheduleRoutinePushSync();
 }
 
 // targetIdがnullなら「すべて削除」、session.idを渡せばその1件だけの削除確認になる。
@@ -2651,6 +2661,128 @@ function wireWaistLog() {
     if (document.visibilityState === 'visible' && !homeWaistEditing) renderHomeWaist();
   });
   renderHomeWaist();
+}
+
+// ===== ちょこっと記録(2026-10-07〜、食後のスクワット15回など。データはjs/storage.js、描画はjs/ui.js) =====
+// 編集シートで追加中の内容(nullなら一覧を表示中)
+let quickSheetDraft = null;
+
+function newQuickId(prefix) {
+  return `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function renderQuickSheetNow() {
+  renderQuickSheet(!!quickSheetDraft, quickSheetDraft);
+  document.querySelectorAll('#quick-sheet .number-wheel-track').forEach(initNumberWheel);
+}
+
+function closeQuickSheet() {
+  const sheet = document.getElementById('quick-sheet');
+  if (!sheet.classList.contains('open')) return;
+  sheet.classList.remove('open');
+  unlockBodyScroll();
+  quickSheetDraft = null;
+  renderHomeQuickLog();
+}
+
+function wireQuickLog() {
+  document.getElementById('home-quick-section').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-quick-log]');
+    if (btn) {
+      const preset = loadQuickPresets().find((p) => p.id === btn.dataset.quickLog);
+      const ex = preset && findExerciseById(preset.exerciseId);
+      if (!ex) return;
+      const entry = { id: newQuickId('q'), at: new Date().toISOString(), exerciseId: ex.id, name: ex.name, amount: preset.amount, timed: preset.timed };
+      try {
+        addQuickLogEntry(entry);
+      } catch (err) {
+        alert('記録できませんでした。端末の空き容量を確認してください。');
+        return;
+      }
+      if (navigator.vibrate) navigator.vibrate(30);
+      renderHomeQuickLog(entry);
+      refreshRecordViewsAfterBodyWeightChange();
+      return;
+    }
+    const undo = e.target.closest('[data-quick-undo]');
+    if (undo) {
+      deleteQuickLogEntry(undo.dataset.quickUndo);
+      renderHomeQuickLog();
+      refreshRecordViewsAfterBodyWeightChange();
+      return;
+    }
+    if (e.target.closest('[data-quick-manage]')) {
+      quickSheetDraft = loadQuickPresets().length === 0 ? { exerciseId: 'bodyweight_squat', amount: 15 } : null;
+      document.getElementById('quick-sheet').classList.add('open');
+      lockBodyScroll();
+      renderQuickSheetNow();
+    }
+  });
+
+  const sheet = document.getElementById('quick-sheet');
+  sheet.addEventListener('click', (e) => {
+    if (e.target.closest('[data-quick-close]')) { closeQuickSheet(); return; }
+    if (e.target.closest('[data-quick-add-open]')) {
+      quickSheetDraft = { exerciseId: 'bodyweight_squat', amount: 15 };
+      renderQuickSheetNow();
+      return;
+    }
+    if (e.target.closest('[data-quick-add-cancel]')) {
+      quickSheetDraft = null;
+      renderQuickSheetNow();
+      return;
+    }
+    if (e.target.closest('[data-quick-add-save]')) {
+      flushNumberWheels(sheet);
+      const ex = findExerciseById(quickSheetDraft.exerciseId);
+      if (!ex) return;
+      const presets = loadQuickPresets();
+      presets.push({ id: newQuickId('p'), exerciseId: ex.id, amount: quickSheetDraft.amount, timed: !!ex.holdBased });
+      saveQuickPresets(presets);
+      quickSheetDraft = null;
+      renderQuickSheetNow();
+      renderHomeQuickLog();
+      return;
+    }
+    const del = e.target.closest('[data-quick-preset-delete]');
+    if (del) {
+      if (!confirm('このボタンを削除しますか？（これまでの記録は消えません）')) return;
+      saveQuickPresets(loadQuickPresets().filter((p) => p.id !== del.dataset.quickPresetDelete));
+      renderQuickSheetNow();
+      renderHomeQuickLog();
+    }
+  });
+  sheet.addEventListener('change', (e) => {
+    if (!quickSheetDraft || !e.target.matches('[data-quick-field="exerciseId"]')) return;
+    quickSheetDraft.exerciseId = e.target.value;
+    // 時間で測る種目(プランク等)と回数の種目で、選べる範囲を合わせ直す
+    const ex = findExerciseById(quickSheetDraft.exerciseId);
+    quickSheetDraft.amount = ex && ex.holdBased ? 30 : 15;
+    renderQuickSheetNow();
+  });
+  sheet.addEventListener('input', (e) => {
+    const input = e.target.closest('[data-quick-amount]');
+    if (!input || !quickSheetDraft) return;
+    quickSheetDraft.amount = Number(input.value);
+    const wrap = input.closest('.slider-field');
+    const numEl = wrap && wrap.querySelector('[data-sheet-value-num]');
+    if (numEl) numEl.textContent = String(quickSheetDraft.amount);
+    if (wrap) refreshWheelPresetMarks(wrap);
+  });
+
+  // 記録タブの日の詳細の✕(1回分を削除)
+  document.addEventListener('click', (e) => {
+    const del = e.target.closest('[data-quick-delete]');
+    if (!del) return;
+    if (!confirm('このちょこっと記録を削除しますか？')) return;
+    deleteQuickLogEntry(del.dataset.quickDelete);
+    renderHomeQuickLog();
+    refreshRecordViewsAfterBodyWeightChange();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') renderHomeQuickLog();
+  });
+  renderHomeQuickLog();
 }
 
 // ===== データのバックアップ（書き出し/読み込み。形式と対象はjs/storage.jsのbuildBackupObject参照） =====
@@ -2904,6 +3036,7 @@ function init() {
   restoreLastSettings();
   wireBodyWeightLog();
   wireWaistLog();
+  wireQuickLog();
   wireWarmupSetsToggle();
   wireHoldTargetEdit();
   wireBackup();
@@ -3096,6 +3229,8 @@ function init() {
     historyDeleteMode = 'all';
     document.getElementById('reset-history-modal').classList.remove('open');
     renderRecordScreen();
+    // 記録を消して「済み」でなくなった日の通知を入れ直す
+    renderTodayFocus();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

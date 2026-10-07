@@ -544,6 +544,17 @@ async function signOutFromSync() {
   if (!SUPABASE_AVAILABLE) return { error: null };
   // ログアウトすると自分の行を消せなくなるので、目標時間の通知の予定を先に消す(js/push.js)
   if (typeof cancelCardioPush === 'function') await cancelCardioPush().catch(() => {});
+  // 予定の時刻の通知も同じく先に消す(ログアウト後に届き続けないため)。消せなかった時はログアウトしない
+  // (ログアウトすると自分の行を消せなくなり、最大7日分の通知が届き続けるため。Codexレビュー指摘)
+  if (typeof cancelRoutinePush === 'function') {
+    try {
+      await cancelRoutinePush();
+    } catch (e) {
+      // 通知の時刻を決めた予定が無ければ予約も無いはずなので、ログアウトを止めない
+      const hasReminders = typeof loadRoutineState === 'function' && loadRoutineState().items.some((r) => r.remindAt);
+      if (hasReminders) return { error: new Error('予定の通知の予約を消せませんでした。ネットにつながった状態で、もう一度ログアウトしてください。') };
+    }
+  }
   const { error } = await supabaseClient.auth.signOut();
   if (error) return { error };
   setSyncEnabled(false);
