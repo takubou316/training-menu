@@ -1633,6 +1633,14 @@ body.modal-open {
   font-weight: 600;
 }
 
+.weekly-day-label-wide {
+  /* 「やる日」(一日おき)のように1文字でないラベルは、丸に押し込むと2行に折り返してはみ出すので横長にする */
+  width: auto;
+  padding: 0 10px;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
 .weekly-day-content {
   flex: 1;
   min-width: 0;
