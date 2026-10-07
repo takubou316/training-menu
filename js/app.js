@@ -879,7 +879,22 @@ function renderCustomScreen() {
   renderCustomFormatToggle();
   renderCustomExerciseListNow();
   renderCustomTemplateList(loadCustomTemplates());
-  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0;
+  // 予定画面から編集しに来ている間は、下の保存ボタン(custom-editor-save-btn)で保存するので出さない
+  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0 || !!customEditor;
+}
+
+// 今の「自分で作る」画面の中身を、保存した組み合わせ・予定の「その場で選ぶ」と同じ形にする
+function currentCustomContent() {
+  return {
+    exerciseIds: customExercises.map((ex) => ex.id),
+    restSec: { ...customRestSec },
+    format: customFormat,
+    // 有酸素種目は目標時間(分、目標なしはnull)を{cardioMin}として持つ
+    targets: Object.fromEntries(customExercises
+      .map((ex) => [ex.id, ex.type === 'cardio'
+        ? { cardioMin: customCardioTargetMin(ex, customTargets[ex.id]) }
+        : customTargetFor(ex)])),
+  };
 }
 
 // 種目ごとの目標(回数・セット数等)。まだ決めていない種目は既定値(3セット×10回、時間で測る種目は保存済みの目標秒数)。
@@ -891,14 +906,48 @@ function customTargetFor(ex) {
 // 種目データが更新されて削除されたIDは無視する。format/targetsが無い古い組み合わせは
 // 「種目ごと」・既定の目標で補う(2026-10-06より前に保存したもの)。
 function applyCustomTemplate(template) {
+  applyCustomContent(template, template.id);
+}
+
+// 中身(組み合わせ、または予定の「その場で選ぶ」)を画面に反映する。templateIdは記録に残す組み合わせのid(無ければnull)
+function applyCustomContent(content, templateId) {
   customRoutineId = null;
-  customExercises = template.exerciseIds.map((id) => findExerciseById(id)).filter(Boolean);
-  customRestSec = { ...template.restSec };
-  customTargets = { ...(template.targets || {}) };
-  customFormat = template.format === 'circuit' ? 'circuit' : 'sets';
-  customTemplateId = template.id;
+  customExercises = (content.exerciseIds || []).map((id) => findExerciseById(id)).filter(Boolean);
+  customRestSec = { ...(content.restSec || {}) };
+  customTargets = { ...(content.targets || {}) };
+  customFormat = content.format === 'circuit' ? 'circuit' : 'sets';
+  customTemplateId = templateId || null;
   document.getElementById('custom-error').textContent = '';
   renderCustomScreen();
+}
+
+function resetCustomScreenState() {
+  customExercises = [];
+  customRestSec = {};
+  customTargets = {};
+  customFormat = 'sets';
+  customTemplateId = null;
+  customRoutineId = null;
+  document.getElementById('custom-error').textContent = '';
+}
+
+// 「自分で作る」画面の中身から開始用のメニューを組む(種目が無ければfalse)
+function buildMenuFromCustom() {
+  if (customExercises.length === 0) return false;
+  const main = customExercises.map((ex) => (ex.type === 'cardio'
+    ? buildCustomCardioPlan(ex, customCardioTargetMin(ex, customTargets[ex.id]))
+    : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90, customTargetFor(ex), customFormat)));
+  currentMenu = {
+    warmup: customWarmup,
+    cooldown: customCooldown,
+    main,
+    generatedAt: new Date().toISOString(),
+    params: { custom: true, format: customFormat, templateId: currentCustomTemplateIdForRecord(), routineId: customRoutineId },
+    // サーキットの周回数・1周ごとの休憩は前回選んだ値から始め、メニュー確認画面で選び直せる
+    circuit: customFormat === 'circuit' ? loadCircuitLast() : null,
+    userReordered: false,
+  };
+  return true;
 }
 
 // 今の種目構成が、最後に読み込んだ組み合わせと同じ種目の集まりならそのidを返す(記録のtemplateId用)。
@@ -934,26 +983,64 @@ function confirmSaveTemplate() {
     document.getElementById('save-template-error').textContent = '名前を入力してください';
     return;
   }
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  saveCustomTemplate({
-    id,
-    name,
-    createdAt: new Date().toISOString(),
-    exerciseIds: customExercises.map((ex) => ex.id),
-    restSec: { ...customRestSec },
-    format: customFormat,
-    // 有酸素種目は目標時間(分、目標なしはnull)を{cardioMin}として持つ
-    targets: Object.fromEntries(customExercises
-      .map((ex) => [ex.id, ex.type === 'cardio'
-        ? { cardioMin: customCardioTargetMin(ex, customTargets[ex.id]) }
-        : customTargetFor(ex)])),
-  });
+  const id = newCustomTemplateId();
+  saveCustomTemplate({ id, name, createdAt: new Date().toISOString(), ...currentCustomContent() });
   // 保存した直後にそのまま始めた記録も、この組み合わせをやったものとして数える
   customTemplateId = id;
   closeSaveTemplateModal();
   renderCustomTemplateList(loadCustomTemplates());
-  // 予定の編集シートから作りに来た時は、作った組み合わせを選んだ状態で予定に戻る
-  if (routineTemplateReturn) returnToRoutineFromCustom(id);
+}
+
+function newCustomTemplateId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+// 組み合わせを削除する。使っている予定は消さず、中身をそのまま予定の中(「その場で選ぶ」)に移す
+// (以前は削除すると予定が「内容が見つかりません」になっていた)。削除したらtrue。
+function deleteTemplateKeepingRoutines(templateId) {
+  const template = loadCustomTemplates().find((t) => t.id === templateId);
+  if (!template) return false;
+  const users = loadRoutineState().items.filter((r) => r.kind === 'template' && r.templateId === templateId);
+  const message = users.length > 0
+    ? `「${template.name}」を削除しますか？\nこの組み合わせを使っている予定（${users.length}件）は、中身をそのまま予定の中に移すので、続けて使えます。`
+    : `「${template.name}」を削除しますか？`;
+  if (!confirm(message)) return false;
+  const content = routineCustomFromTemplate(template);
+  const before = JSON.parse(JSON.stringify(loadRoutineState()));
+  // 移した予定にも元の組み合わせのidを残し、routineIdの無い過去の記録(「自分で作る」から始めた分)で「済み」を数え続ける(Codexレビュー指摘)
+  const toCustom = (r) => {
+    r.kind = 'custom';
+    r.custom = JSON.parse(JSON.stringify(content));
+    r.fromTemplateId = templateId;
+    delete r.templateId;
+  };
+  if (users.length > 0) {
+    const ok = updateRoutineState((state) => {
+      state.items.forEach((r) => { if (r.kind === 'template' && r.templateId === templateId) toCustom(r); });
+    });
+    // 予定へ移せなかった時は組み合わせを消さない(予定が中身を失うため)
+    if (!ok) return false;
+  }
+  try {
+    deleteCustomTemplate(templateId);
+  } catch (e) {
+    // 組み合わせを消せなかった時は予定も元に戻す(予定だけ移った中途半端な状態を残さない。Codexレビュー指摘)
+    if (users.length > 0) updateRoutineState((state) => { Object.assign(state, before); });
+    alert('組み合わせを削除できませんでした。端末の空き容量を確認してください。');
+    return false;
+  }
+  if (customEditor && customEditor.returnTo && customEditor.returnTo.draft.templateId === templateId) {
+    const { draft } = customEditor.returnTo;
+    toCustom(draft);
+    draft.templateId = '';
+  }
+  renderRoutineScreen();
+  renderTodayFocus();
+  return true;
+}
+
+function routineCustomFromTemplate(t) {
+  return { exerciseIds: [...t.exerciseIds], restSec: { ...(t.restSec || {}) }, format: t.format === 'circuit' ? 'circuit' : 'sets', targets: { ...(t.targets || {}) } };
 }
 
 function addCustomExercise(id) {
@@ -1212,8 +1299,7 @@ function wireCustomScreen() {
   document.getElementById('custom-template-list').addEventListener('click', (e) => {
     const del = e.target.closest('[data-template-delete]');
     if (del) {
-      deleteCustomTemplate(del.dataset.templateDelete);
-      renderCustomTemplateList(loadCustomTemplates());
+      if (deleteTemplateKeepingRoutines(del.dataset.templateDelete)) renderCustomTemplateList(loadCustomTemplates());
       return;
     }
     const load = e.target.closest('[data-template-load]');
@@ -1235,26 +1321,20 @@ function wireCustomScreen() {
 
   document.getElementById('custom-generate-btn').addEventListener('click', () => {
     const errorEl = document.getElementById('custom-error');
-    if (customExercises.length === 0) {
+    if (!buildMenuFromCustom()) {
       errorEl.textContent = '種目を1つ以上追加してください';
       return;
     }
     errorEl.textContent = '';
-    const main = customExercises.map((ex) => (ex.type === 'cardio'
-      ? buildCustomCardioPlan(ex, customCardioTargetMin(ex, customTargets[ex.id]))
-      : buildCustomSetPlan(ex, customRestSec[ex.id] != null ? customRestSec[ex.id] : 90, customTargetFor(ex), customFormat)));
-    currentMenu = {
-      warmup: customWarmup,
-      cooldown: customCooldown,
-      main,
-      generatedAt: new Date().toISOString(),
-      params: { custom: true, format: customFormat, templateId: currentCustomTemplateIdForRecord(), routineId: customRoutineId },
-      // サーキットの周回数・1周ごとの休憩は前回選んだ値から始め、メニュー確認画面で選び直せる
-      circuit: customFormat === 'circuit' ? loadCircuitLast() : null,
-      userReordered: false,
-    };
     renderMenuScreen();
     showScreen('menu');
+  });
+
+  document.getElementById('custom-editor-save-btn').addEventListener('click', saveCustomEditor);
+  document.getElementById('custom-editor-cancel').addEventListener('click', () => finishCustomEditor(null));
+  document.getElementById('custom-editor-delete').addEventListener('click', () => {
+    if (!customEditor || !customEditor.templateId) return;
+    if (deleteTemplateKeepingRoutines(customEditor.templateId)) finishCustomEditor(null);
   });
 }
 
@@ -1464,8 +1544,12 @@ function wireMenuScreen() {
 
 // 編集中の予定(追加・変更シート)。idがnullなら新規。draftは保存を押すまで予定に反映しない。
 let routineEditing = null;
-// 予定の編集シートから「＋ 新しい組み合わせを作る」で「自分で作る」画面へ行っている間、戻る先の予定(編集中の内容ごと)
-let routineTemplateReturn = null;
+// 予定画面から「自分で作る」画面を借りて、組み合わせ・予定の中身を作る/編集している間の状態(2026-10-07〜)。
+// この間は「このメニューで進む」の代わりに保存ボタンを出し、トレーニングは始めない
+// (以前は予定から新しい組み合わせを作りに来ても大きな「このメニューで進む」が残っていて、押すと始まってしまった)。
+// { mode: 'template'(保存した組み合わせの新規/編集) | 'routineCustom'(予定の「その場で選ぶ」の中身),
+//   templateId: 編集中の組み合わせ(新規はnull), returnTo: 戻る先の予定の編集シート{id, draft}(予定画面に戻るだけならnull) }
+let customEditor = null;
 
 function renderModeWeeklyPlanSection() {
   renderTodayFocus();
@@ -1511,43 +1595,97 @@ function openRoutineSheetWithDraft(id, draft) {
   lockBodyScroll();
 }
 
-// 予定の編集シートの「＋ 新しい組み合わせを作る」。編集中の内容を覚えたまま、空の「自分で作る」画面を開く。
-// 組み合わせを保存したら(confirmSaveTemplate)、その組み合わせを選んだ状態で予定の編集シートに戻る。
-function startNewTemplateFromRoutine() {
-  if (!routineEditing) return;
-  routineTemplateReturn = { id: routineEditing.id, draft: routineEditing.draft };
+// 「自分で作る」画面を編集用に開く。fromSheet=trueなら、今の予定の編集シート(編集中の内容ごと)を覚えて、保存・取り消しの後にそこへ戻る。
+function openCustomEditor({ mode, templateId = null, fromSheet = false }) {
+  const returnTo = fromSheet && routineEditing ? { id: routineEditing.id, draft: routineEditing.draft } : null;
   closeRoutineSheet();
-  customExercises = [];
-  customRestSec = {};
-  customTargets = {};
-  customFormat = 'sets';
-  customTemplateId = null;
-  customRoutineId = null;
-  document.getElementById('custom-error').textContent = '';
-  renderCustomScreen();
-  document.getElementById('custom-routine-return').hidden = false;
+  resetCustomScreenState();
+  customEditor = { mode, templateId, returnTo };
+  const template = templateId ? loadCustomTemplates().find((t) => t.id === templateId) : null;
+  if (template) applyCustomContent(template, template.id);
+  else if (mode === 'routineCustom' && returnTo && returnTo.draft.custom) applyCustomContent(returnTo.draft.custom, null);
+  else renderCustomScreen();
+
+  const isTemplate = mode === 'template';
+  document.getElementById('custom-editor-desc').textContent = isTemplate
+    ? (template ? '組み合わせを編集しています。種目・回数・やり方を変えて「保存」を押してください（トレーニングは始まりません）。' : '新しい組み合わせを作っています。種目を選んで名前を付け、「保存」を押してください（トレーニングは始まりません）。')
+    : 'この予定だけで使う種目を選んでいます。選び終わったら「予定に入れる」を押してください（トレーニングは始まりません）。';
+  document.getElementById('custom-editor-name-field').hidden = !isTemplate;
+  document.getElementById('custom-editor-name').value = template ? template.name : '';
+  document.getElementById('custom-editor-delete').hidden = !template;
+  document.getElementById('custom-editor-cancel').textContent = returnTo ? '保存せずに予定の設定に戻る' : '保存せずに戻る';
+  const saveBtn = document.getElementById('custom-editor-save-btn');
+  saveBtn.textContent = isTemplate ? (returnTo ? '保存して予定の設定に戻る' : '保存して戻る') : '予定に入れる';
+  saveBtn.hidden = false;
+  document.getElementById('custom-generate-btn').hidden = true;
+  document.getElementById('custom-editor-banner').hidden = false;
+  document.getElementById('custom-screen-title').textContent = isTemplate ? (template ? '組み合わせを編集' : '新しい組み合わせ') : 'この予定の種目を選ぶ';
+  const toggle = document.getElementById('custom-template-toggle');
+  toggle.open = false;
+  // 既存の組み合わせを編集中に別の組み合わせを読み込むと中身が丸ごと入れ替わって紛らわしいので出さない
+  toggle.hidden = !!template;
   showScreen('custom');
-  window.scrollTo(0, 0);
 }
 
-// 予定の編集シートへ戻る。templateIdがあればそれを選んだ状態にする(nullなら保存せずに戻る)。
-function returnToRoutineFromCustom(templateId) {
-  const ret = routineTemplateReturn;
-  clearRoutineTemplateReturn();
-  if (!ret) return;
-  if (templateId) {
-    ret.draft.kind = 'template';
-    ret.draft.templateId = templateId;
+function saveCustomEditor() {
+  if (!customEditor) return;
+  const errorEl = document.getElementById('custom-error');
+  if (customExercises.length === 0) {
+    errorEl.textContent = '種目を1つ以上追加してください';
+    return;
   }
-  renderRoutineScreen();
-  showScreen('weekly');
-  openRoutineSheetWithDraft(ret.id, ret.draft);
+  const content = currentCustomContent();
+  if (customEditor.mode === 'template') {
+    const name = document.getElementById('custom-editor-name').value.trim();
+    if (!name) {
+      errorEl.textContent = '組み合わせの名前を入れてください（画面の上の欄）';
+      document.getElementById('custom-editor-name').focus();
+      return;
+    }
+    const old = customEditor.templateId ? loadCustomTemplates().find((t) => t.id === customEditor.templateId) : null;
+    let id;
+    if (old) {
+      id = old.id;
+      updateCustomTemplate({ ...old, name, ...content, updatedAt: new Date().toISOString() });
+    } else {
+      id = newCustomTemplateId();
+      saveCustomTemplate({ id, name, createdAt: new Date().toISOString(), ...content });
+    }
+    finishCustomEditor(id);
+    return;
+  }
+  if (customEditor.returnTo) customEditor.returnTo.draft.custom = content;
+  finishCustomEditor(null);
 }
 
-function clearRoutineTemplateReturn() {
-  routineTemplateReturn = null;
-  const notice = document.getElementById('custom-routine-return');
-  if (notice) notice.hidden = true;
+// 編集を終えて予定画面(と、来た時は予定の編集シート)に戻る。templateIdがあれば、それを選んだ状態でシートに戻る。
+function finishCustomEditor(templateId) {
+  const ed = customEditor;
+  closeCustomEditor();
+  if (!ed) return;
+  renderRoutineScreen();
+  renderTodayFocus();
+  showScreen('weekly');
+  if (!ed.returnTo) return;
+  const { draft } = ed.returnTo;
+  if (templateId) {
+    draft.kind = 'template';
+    draft.templateId = templateId;
+  }
+  openRoutineSheetWithDraft(ed.returnTo.id, draft);
+}
+
+// 編集用の表示をやめて通常の「自分で作る」に戻す(下のタブ・ホームの「自分で作る」で離れた時も呼ぶ。
+// 後で別の用事で開いた時に勝手に予定へ戻らないため)
+function closeCustomEditor() {
+  customEditor = null;
+  const banner = document.getElementById('custom-editor-banner');
+  if (banner) banner.hidden = true;
+  document.getElementById('custom-screen-title').textContent = '自分でメニューを作る';
+  document.getElementById('custom-template-toggle').hidden = false;
+  document.getElementById('custom-editor-save-btn').hidden = true;
+  document.getElementById('custom-generate-btn').hidden = false;
+  document.getElementById('custom-save-template-btn').hidden = customExercises.length === 0;
 }
 
 function closeRoutineSheet() {
@@ -1569,6 +1707,7 @@ function saveRoutineFromSheet() {
   const fail = (text) => { if (errorEl) errorEl.textContent = text; };
   if (draft.kind === 'template' && !draft.templateId) return fail('保存した組み合わせを選んでください');
   if (draft.kind === 'exercise' && !draft.exerciseId) return fail('種目を選んでください');
+  if (draft.kind === 'custom' && !(draft.custom && (draft.custom.exerciseIds || []).length > 0)) return fail('「種目を選ぶ」から種目を選んでください');
   if (draft.freq === 'weekdays' && draft.weekdays.length === 0) return fail('曜日を1つ以上選んでください');
 
   const routine = {
@@ -1584,6 +1723,11 @@ function saveRoutineFromSheet() {
     routine.targetMin = draft.targetMin || null;
   }
   if (draft.kind === 'parts') routine.parts = draft.parts;
+  if (draft.kind === 'custom') {
+    routine.custom = draft.custom;
+    // 組み合わせを削除して移した予定は、元の組み合わせのidを持ち続ける(過去の記録で「済み」を数えるため)
+    if (draft.fromTemplateId) routine.fromTemplateId = draft.fromTemplateId;
+  }
   if (draft.freq === 'weekdays') routine.weekdays = [...draft.weekdays].sort((a, b) => a - b);
 
   updateRoutineState((state) => {
@@ -1624,7 +1768,9 @@ function wireRoutineScreen() {
     if (!routineEditing) return;
     const { draft } = routineEditing;
     if (e.target.closest('[data-routine-cancel]')) { closeRoutineSheet(); return; }
-    if (e.target.closest('[data-routine-new-template]')) { startNewTemplateFromRoutine(); return; }
+    if (e.target.closest('[data-routine-new-template]')) { openCustomEditor({ mode: 'template', fromSheet: true }); return; }
+    if (e.target.closest('[data-routine-edit-template]')) { openCustomEditor({ mode: 'template', templateId: draft.templateId, fromSheet: true }); return; }
+    if (e.target.closest('[data-routine-edit-custom]')) { openCustomEditor({ mode: 'routineCustom', fromSheet: true }); return; }
     const kindBtn = e.target.closest('[data-routine-kind]');
     if (kindBtn) { draft.kind = kindBtn.dataset.routineKind; rerenderRoutineSheet(); return; }
     const targetBtn = e.target.closest('[data-routine-target]');
@@ -1660,22 +1806,38 @@ function wireRoutineScreen() {
     if (!routineEditing) return;
     const field = e.target.dataset && e.target.dataset.routineField;
     if (field) routineEditing.draft[field] = e.target.value;
+    // 組み合わせを選んだら「選んだ組み合わせを編集」を出す
+    if (field === 'templateId') rerenderRoutineSheet();
   });
   document.getElementById('routine-save-btn').addEventListener('click', saveRoutineFromSheet);
-  document.getElementById('custom-routine-return-cancel').addEventListener('click', () => returnToRoutineFromCustom(null));
+
+  document.getElementById('template-manage-list').addEventListener('click', (e) => {
+    const item = e.target.closest('[data-template-edit]');
+    if (item) openCustomEditor({ mode: 'template', templateId: item.dataset.templateEdit });
+  });
+  document.getElementById('template-manage-add-btn').addEventListener('click', () => openCustomEditor({ mode: 'template' }));
 }
 
-// ホームの「今日の予定」の「始める」。保存した組み合わせは「自分で作る」画面に読み込み(回数等を調整してから進める)、
-// 部位は前回の条件のまま「要望から作る」でメニューを作り、種目1つは記録をすぐ始める。
+// ホームの「今日の予定」の「始める」。押したらすぐ記録を始める(2026-10-07 ユーザー要望。以前は組み合わせだと
+// 「自分で作る」画面、部位だとメニュー確認画面で止まっていた)。ただしサーキットは周回数・1周ごとの休憩を
+// その日に選ぶので、メニュー確認画面で止める(ユーザー判断)。
 function startRoutine(routineId) {
   const routine = loadRoutineState().items.find((r) => r.id === routineId);
   if (!routine) return;
-  if (routine.kind === 'template') {
-    const template = loadCustomTemplates().find((t) => t.id === routine.templateId);
-    if (!template) return;
-    applyCustomTemplate(template);
+  if (routine.kind === 'template' || routine.kind === 'custom') {
+    const template = routine.kind === 'template' ? loadCustomTemplates().find((t) => t.id === routine.templateId) : null;
+    const content = routine.kind === 'template' ? template : routine.custom;
+    if (!content) return;
+    closeCustomEditor();
+    applyCustomContent(content, template ? template.id : null);
     customRoutineId = routine.id;
-    showScreen('custom');
+    if (!buildMenuFromCustom()) return;
+    if (customFormat === 'circuit') {
+      renderMenuScreen();
+      showScreen('menu');
+    } else {
+      handleStartWorkout();
+    }
     return;
   }
   if (routine.kind === 'parts') {
@@ -1685,7 +1847,8 @@ function startRoutine(routineId) {
     setupRoutineId = routine.id;
     // 設定画面の器具・時間・レベル・目的は起動時のrestoreLastSettings()で前回値が入っているので、
     // そのまま作れる。器具0件などで作れない時だけ設定画面を見せる。
-    if (!handleGenerate()) showScreen('setup');
+    if (handleGenerate()) handleStartWorkout();
+    else showScreen('setup');
     return;
   }
   if (routine.kind === 'exercise') {
@@ -2675,13 +2838,9 @@ function init() {
     showScreen('setup');
   });
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
-    clearRoutineTemplateReturn();
-    customExercises = [];
-    customRestSec = {};
-    customRoutineId = null;
     // 前に読み込んだ組み合わせの目標を持ち越さない(有酸素は最後に決めた目標が初期値になる。Codexレビュー指摘)
-    customTargets = {};
-    document.getElementById('custom-error').textContent = '';
+    resetCustomScreenState();
+    closeCustomEditor();
     renderCustomScreen();
     showScreen('custom');
   });
@@ -2859,6 +3018,7 @@ function init() {
   document.getElementById('rest-timer-plus10').addEventListener('click', () => addRestTimerSeconds(10));
   document.getElementById('rest-timer-end').addEventListener('click', endRestTimer);
   document.getElementById('hold-timer-cancel').addEventListener('click', stopHoldTimer);
+  document.getElementById('hold-timer-pause').addEventListener('click', toggleHoldTimerPause);
   document.getElementById('cardio-timer-rest-toggle').addEventListener('click', toggleCardioRest);
   document.getElementById('cardio-timer-stop').addEventListener('click', stopCardioTimer);
 
@@ -2869,8 +3029,8 @@ function init() {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
-      // 下のタブで離れたら、予定の編集シートへ戻る約束は取り消す(後で別の用事で保存した時に勝手に戻らないため)
-      clearRoutineTemplateReturn();
+      // 下のタブで離れたら、予定画面からの編集は取り消す(後で別の用事で「自分で作る」を開いた時に勝手に予定へ戻らないため)
+      closeCustomEditor();
       if (target === 'mode') {
         homeBodyWeightEditing = false;
         homeWaistEditing = false;

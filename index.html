@@ -134,11 +134,19 @@ try {
 
     <!-- ===== 自分で作る画面 ===== -->
     <section id="screen-custom" class="screen">
-      <h2>自分でメニューを作る</h2>
-      <!-- 予定の編集画面の「＋ 新しい組み合わせを作る」から来た時だけ出す(js/app.jsのstartNewTemplateFromRoutine) -->
-      <div id="custom-routine-return" class="custom-routine-return" hidden>
-        <p>種目を選んで「この組み合わせを保存」を押すと、予定の画面に戻ります。</p>
-        <button type="button" class="ghost-pill-btn" id="custom-routine-return-cancel">保存せずに予定に戻る</button>
+      <h2 id="custom-screen-title">自分でメニューを作る</h2>
+      <!-- 予定画面から組み合わせ・予定の中身を作る/編集しに来た時だけ出す(js/app.jsのopenCustomEditor)。
+           この間は「このメニューで進む」の代わりに保存ボタン(custom-editor-save-btn)を出し、トレーニングは始めない -->
+      <div id="custom-editor-banner" class="custom-routine-return" hidden>
+        <p id="custom-editor-desc"></p>
+        <label class="custom-editor-name-field" id="custom-editor-name-field" hidden>
+          <span class="sheet-field-label">組み合わせの名前</span>
+          <input type="text" id="custom-editor-name" class="template-name-input" placeholder="名前（例: 胸・二頭の日）" maxlength="30">
+        </label>
+        <div class="custom-editor-banner-actions">
+          <button type="button" class="ghost-pill-btn" id="custom-editor-cancel">保存せずに戻る</button>
+          <button type="button" class="danger-link-btn" id="custom-editor-delete" hidden>この組み合わせを削除する</button>
+        </div>
       </div>
 
       <details class="template-toggle" id="custom-template-toggle">
@@ -165,6 +173,7 @@ try {
 
       <p class="error-text" id="custom-error"></p>
       <button class="primary-btn" id="custom-generate-btn">このメニューで進む</button>
+      <button class="primary-btn" id="custom-editor-save-btn" hidden>保存して戻る</button>
     </section>
 
     <!-- ===== 生成されたメニュー画面 ===== -->
@@ -285,6 +294,11 @@ try {
       <div id="routine-list" class="routine-list"></div>
       <button type="button" class="primary-btn routine-add-btn" id="routine-add-btn">＋ 予定を追加</button>
       <div id="routine-footer" class="routine-footer"></div>
+
+      <h3 class="template-manage-heading">保存した組み合わせ</h3>
+      <p class="hint-text">押すと中身・名前を変えたり、削除したりできます。</p>
+      <div id="template-manage-list" class="routine-list"></div>
+      <button type="button" class="secondary-btn template-manage-add-btn" id="template-manage-add-btn">＋ 新しい組み合わせを作る</button>
     </section>
 
     <!-- ===== 豆知識画面 ===== -->
@@ -330,7 +344,9 @@ try {
   <div id="hold-timer-modal" class="rest-timer-modal" hidden>
     <div class="rest-timer-label" id="hold-timer-label">準備</div>
     <div id="hold-timer-value" class="timer-value">5</div>
+    <div class="hold-timer-paused-note" id="hold-timer-paused-note" hidden></div>
     <div class="rest-timer-actions">
+      <button type="button" id="hold-timer-pause" hidden>休憩</button>
       <button type="button" id="hold-timer-cancel">中断</button>
     </div>
   </div>

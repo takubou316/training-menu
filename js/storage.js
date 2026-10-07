@@ -409,6 +409,13 @@ function saveCustomTemplate(template) {
   return templates;
 }
 
+// 既存の組み合わせを上書きする(並び順はそのまま。予定画面の「保存した組み合わせ」からの編集、2026-10-07〜)
+function updateCustomTemplate(template) {
+  const templates = loadCustomTemplates().map((t) => (t.id === template.id ? template : t));
+  localStorage.setItem(STORAGE_KEYS.customTemplates, JSON.stringify(templates));
+  return templates;
+}
+
 function deleteCustomTemplate(id) {
   const templates = loadCustomTemplates().filter((t) => t.id !== id);
   localStorage.setItem(STORAGE_KEYS.customTemplates, JSON.stringify(templates));
@@ -572,7 +579,17 @@ function isValidRoutine(r) {
   if (r.kind === 'template') return typeof r.templateId === 'string';
   if (r.kind === 'exercise') return typeof r.exerciseId === 'string' && (r.targetMin == null || isValidCardioTargetMin(r.targetMin));
   if (r.kind === 'parts') return Array.isArray(r.parts) && r.parts.length > 0 && r.parts.every((x) => typeof x === 'string');
+  if (r.kind === 'custom') return isValidRoutineCustomContent(r.custom) && (r.fromTemplateId == null || typeof r.fromTemplateId === 'string');
   return false;
+}
+
+// 「その場で選ぶ」予定の中身(保存した組み合わせと同じ形から id・name を除いたもの、2026-10-07〜)
+function isValidRoutineCustomContent(c) {
+  return isPlainObject(c) && Array.isArray(c.exerciseIds) && c.exerciseIds.length > 0
+    && c.exerciseIds.every((id) => typeof id === 'string')
+    && (c.format == null || c.format === 'sets' || c.format === 'circuit')
+    && (c.restSec == null || isPlainObject(c.restSec))
+    && (c.targets == null || isPlainObject(c.targets));
 }
 
 function isValidRoutineState(v) {
@@ -646,6 +663,8 @@ function sessionCountsForRoutine(s, routine) {
   // 予定から始めた記録はその予定だけのもの(その予定を後で削除しても、同じ組み合わせの別の予定には回さない)
   if (s.routineId) return s.routineId === routine.id;
   if (routine.kind === 'template') return !!s.templateId && s.templateId === routine.templateId;
+  // 組み合わせを削除して「その場で選ぶ」に移した予定は、元の組み合わせの記録を引き続き数える
+  if (routine.kind === 'custom') return !!s.templateId && !!routine.fromTemplateId && s.templateId === routine.fromTemplateId;
   if (routine.kind === 'exercise') {
     return (s.exercises || []).some((ex) => ex.exerciseId === routine.exerciseId
       && (ex.type === 'cardio' ? isCardioRecorded(ex) : true));
@@ -824,7 +843,7 @@ if (typeof module !== 'undefined') {
     loadSettings, saveSettings, loadHistory, saveSession, loadTrainingStreak, getTrainingStreak, refreshTrainingStreak,
     clearHistory, deleteSession, deleteSessionsByDateKey, findLastPerformance, recordedExerciseIsTimed,
     loadFavorites, isFavoriteExercise, toggleFavoriteExercise, recentExerciseIds,
-    loadCustomTemplates, saveCustomTemplate, deleteCustomTemplate,
+    loadCustomTemplates, saveCustomTemplate, updateCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields,
     loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId,

@@ -2917,3 +2917,12 @@ body.modal-open {
   border-radius: 0;
 }
 .custom-routine-return p { margin: 0 0 8px; font-size: 13px; }
+.custom-editor-name-field { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.custom-editor-name-field[hidden] { display: none; }
+.custom-editor-name-field .template-name-input { width: 100%; box-sizing: border-box; }
+.custom-editor-banner-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.routine-template-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.routine-custom-summary { margin: 8px 0 0; font-size: 14px; font-weight: 600; }
+.template-manage-heading { margin-top: 28px; }
+.template-manage-add-btn { width: 100%; margin-top: 10px; }
+.hold-timer-paused-note { font-size: 14px; color: var(--text-dim); margin-top: 8px; text-align: center; }

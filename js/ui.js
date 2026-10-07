@@ -212,13 +212,23 @@ function routineContentText(r, templates) {
     return ex ? ex.name : '（見つからない種目）';
   }
   if (r.kind === 'parts') return (r.parts || []).map((p) => PART_LABELS[p] || p).join('・');
+  if (r.kind === 'custom') return customContentNamesText(r.custom);
   return '';
+}
+
+// 「その場で選ぶ」予定・組み合わせの中身を種目名で短く言う(「プッシュアップ・スクワット ほか3種目」)
+function customContentNamesText(content) {
+  const names = ((content && content.exerciseIds) || []).map((id) => findExerciseById(id)).filter(Boolean).map((ex) => ex.name);
+  if (names.length === 0) return '（種目が見つかりません）';
+  const shown = names.slice(0, 2).join('・');
+  return names.length > 2 ? `${shown} ほか${names.length - 2}種目` : shown;
 }
 
 // 始められる内容か(削除された組み合わせ・見つからない種目は始められない)
 function routineActionable(r, templates) {
   if (r.kind === 'template') return templates.some((t) => t.id === r.templateId);
   if (r.kind === 'exercise') return !!findExerciseById(r.exerciseId);
+  if (r.kind === 'custom') return !!r.custom && (r.custom.exerciseIds || []).some((id) => findExerciseById(id));
   return r.kind === 'parts' && (r.parts || []).length > 0;
 }
 
@@ -389,6 +399,34 @@ function renderRoutineScreen() {
         </div>`).join('')}
       </details>` : '';
   footer.innerHTML = `${pauseHtml}${legacyHtml}`;
+  renderRoutineTemplateManager(templates, state.items);
+}
+
+// 予定画面の「保存した組み合わせ」欄(一覧・編集・新規作成。削除は編集画面の中、2026-10-07〜)
+function renderRoutineTemplateManager(templates, routines) {
+  const list = document.getElementById('template-manage-list');
+  if (!list) return;
+  if (templates.length === 0) {
+    list.innerHTML = '<p class="hint-text">まだありません。よくやる種目の組み合わせを保存しておくと、予定やホームから選べます。</p>';
+    return;
+  }
+  list.innerHTML = templates.map((t) => {
+    const used = routines.filter((r) => r.kind === 'template' && r.templateId === t.id).length;
+    const meta = [
+      t.format === 'circuit' ? 'サーキット' : '種目ごと',
+      `${t.exerciseIds.length}種目`,
+      used > 0 ? `予定で使用中${used > 1 ? `（${used}件）` : ''}` : '',
+    ].filter(Boolean).join('・');
+    return `
+      <button type="button" class="routine-card" data-template-edit="${t.id}">
+        <span class="routine-card-main">
+          <span class="routine-card-name">${escapeHtml(t.name)}</span>
+          <span class="routine-card-sub">${escapeHtml(customContentNamesText(t))}</span>
+          <span class="routine-card-status">${escapeHtml(meta)}</span>
+        </span>
+        <span class="custom-target-chevron" aria-hidden="true">編集 ›</span>
+      </button>`;
+  }).join('');
 }
 
 // 予定の追加・変更シート。draftは編集中の内容(保存を押すまで予定には反映しない)。
@@ -400,7 +438,7 @@ function renderRoutineSheet(draft, isNew) {
   const templates = loadCustomTemplates();
   const cardio = EXERCISES.filter((e) => e.type === 'cardio');
 
-  const kindOptions = [['template', '保存した組み合わせ'], ['exercise', '種目1つ']];
+  const kindOptions = [['template', '保存したもの'], ['custom', 'その場で選ぶ'], ['exercise', '有酸素1つ']];
   if (draft.kind === 'parts') kindOptions.push(['parts', '部位（以前の予定）']);
   const kindHtml = `
       <div class="sheet-field-head"><span class="sheet-field-label">何をやる</span></div>
@@ -416,8 +454,16 @@ function renderRoutineSheet(draft, isNew) {
         ${templates.map((t) => `<option value="${t.id}" ${t.id === draft.templateId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
       </select>`
       : '<p class="hint-text">保存した組み合わせがまだありません。下のボタンから作れます。</p>'}
-      <button type="button" class="ghost-pill-btn routine-new-template-btn" data-routine-new-template>＋ 新しい組み合わせを作る</button>
-      <p class="hint-text">筋トレの種目1つだけの予定も、組み合わせとして保存すると入れられます。</p>`;
+      <div class="routine-template-actions">
+        ${templates.some((t) => t.id === draft.templateId) ? '<button type="button" class="ghost-pill-btn" data-routine-edit-template>選んだ組み合わせを編集</button>' : ''}
+        <button type="button" class="ghost-pill-btn" data-routine-new-template>＋ 新しく作って保存</button>
+      </div>
+      <p class="hint-text">組み合わせを編集すると、同じ組み合わせを使うほかの予定も変わります。この予定だけの中身にしたい時は「その場で選ぶ」へ。</p>`;
+  } else if (draft.kind === 'custom') {
+    const has = draft.custom && (draft.custom.exerciseIds || []).length > 0;
+    contentHtml = `
+      ${has ? `<p class="routine-custom-summary">${escapeHtml(draft.custom.format === 'circuit' ? 'サーキット・' : '')}${escapeHtml(customContentNamesText(draft.custom))}</p>` : '<p class="hint-text">この予定だけで使う種目を選びます（保存した組み合わせの一覧には出ません）。</p>'}
+      <button type="button" class="ghost-pill-btn routine-new-template-btn" data-routine-edit-custom>${has ? '種目・回数を変える' : '種目を選ぶ'}</button>`;
   } else if (draft.kind === 'exercise') {
     const targetChoices = [null, ...ROUTINE_TARGET_CHOICES];
     if (draft.targetMin && !ROUTINE_TARGET_CHOICES.includes(draft.targetMin)) targetChoices.push(draft.targetMin);
