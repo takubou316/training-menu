@@ -396,12 +396,14 @@ function renderRoutineSheet(draft, isNew) {
 
   let contentHtml = '';
   if (draft.kind === 'template') {
-    contentHtml = templates.length > 0 ? `
+    contentHtml = `${templates.length > 0 ? `
       <select class="routine-select" data-routine-field="templateId" aria-label="保存した組み合わせ">
         <option value="">選んでください</option>
         ${templates.map((t) => `<option value="${t.id}" ${t.id === draft.templateId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
       </select>`
-      : '<p class="hint-text">保存した組み合わせがまだありません。ホームの「自分で作る」で種目を選んで「この組み合わせを保存」してから選べます。</p>';
+      : '<p class="hint-text">保存した組み合わせがまだありません。下のボタンから作れます。</p>'}
+      <button type="button" class="ghost-pill-btn routine-new-template-btn" data-routine-new-template>＋ 新しい組み合わせを作る</button>
+      <p class="hint-text">筋トレの種目1つだけの予定も、組み合わせとして保存すると入れられます。</p>`;
   } else if (draft.kind === 'exercise') {
     const targetChoices = [null, ...ROUTINE_TARGET_CHOICES];
     if (draft.targetMin && !ROUTINE_TARGET_CHOICES.includes(draft.targetMin)) targetChoices.push(draft.targetMin);

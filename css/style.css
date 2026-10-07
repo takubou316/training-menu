@@ -2908,3 +2908,12 @@ body.modal-open {
 }
 .routine-sheet-manage { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .routine-sheet-actions { margin-top: 16px; }
+.routine-new-template-btn { margin-top: 10px; }
+.custom-routine-return {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  border-radius: 0;
+}
+.custom-routine-return p { margin: 0 0 8px; font-size: 13px; }

@@ -135,6 +135,11 @@ try {
     <!-- ===== 自分で作る画面 ===== -->
     <section id="screen-custom" class="screen">
       <h2>自分でメニューを作る</h2>
+      <!-- 予定の編集画面の「＋ 新しい組み合わせを作る」から来た時だけ出す(js/app.jsのstartNewTemplateFromRoutine) -->
+      <div id="custom-routine-return" class="custom-routine-return" hidden>
+        <p>種目を選んで「この組み合わせを保存」を押すと、予定の画面に戻ります。</p>
+        <button type="button" class="ghost-pill-btn" id="custom-routine-return-cancel">保存せずに予定に戻る</button>
+      </div>
 
       <details class="template-toggle" id="custom-template-toggle">
         <summary class="ghost-pill-btn">保存した組み合わせから読み込む</summary>

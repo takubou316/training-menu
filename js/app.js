@@ -952,6 +952,8 @@ function confirmSaveTemplate() {
   customTemplateId = id;
   closeSaveTemplateModal();
   renderCustomTemplateList(loadCustomTemplates());
+  // 予定の編集シートから作りに来た時は、作った組み合わせを選んだ状態で予定に戻る
+  if (routineTemplateReturn) returnToRoutineFromCustom(id);
 }
 
 function addCustomExercise(id) {
@@ -1462,6 +1464,8 @@ function wireMenuScreen() {
 
 // 編集中の予定(追加・変更シート)。idがnullなら新規。draftは保存を押すまで予定に反映しない。
 let routineEditing = null;
+// 予定の編集シートから「＋ 新しい組み合わせを作る」で「自分で作る」画面へ行っている間、戻る先の予定(編集中の内容ごと)
+let routineTemplateReturn = null;
 
 function renderModeWeeklyPlanSection() {
   renderTodayFocus();
@@ -1497,10 +1501,53 @@ function openRoutineSheet(routineId) {
       paused: false,
     };
   if (!Array.isArray(draft.weekdays)) draft.weekdays = [];
-  routineEditing = { id: existing ? existing.id : null, draft };
-  renderRoutineSheet(draft, !existing);
+  openRoutineSheetWithDraft(existing ? existing.id : null, draft);
+}
+
+function openRoutineSheetWithDraft(id, draft) {
+  routineEditing = { id, draft };
+  renderRoutineSheet(draft, !id);
   document.getElementById('routine-sheet').classList.add('open');
   lockBodyScroll();
+}
+
+// 予定の編集シートの「＋ 新しい組み合わせを作る」。編集中の内容を覚えたまま、空の「自分で作る」画面を開く。
+// 組み合わせを保存したら(confirmSaveTemplate)、その組み合わせを選んだ状態で予定の編集シートに戻る。
+function startNewTemplateFromRoutine() {
+  if (!routineEditing) return;
+  routineTemplateReturn = { id: routineEditing.id, draft: routineEditing.draft };
+  closeRoutineSheet();
+  customExercises = [];
+  customRestSec = {};
+  customTargets = {};
+  customFormat = 'sets';
+  customTemplateId = null;
+  customRoutineId = null;
+  document.getElementById('custom-error').textContent = '';
+  renderCustomScreen();
+  document.getElementById('custom-routine-return').hidden = false;
+  showScreen('custom');
+  window.scrollTo(0, 0);
+}
+
+// 予定の編集シートへ戻る。templateIdがあればそれを選んだ状態にする(nullなら保存せずに戻る)。
+function returnToRoutineFromCustom(templateId) {
+  const ret = routineTemplateReturn;
+  clearRoutineTemplateReturn();
+  if (!ret) return;
+  if (templateId) {
+    ret.draft.kind = 'template';
+    ret.draft.templateId = templateId;
+  }
+  renderRoutineScreen();
+  showScreen('weekly');
+  openRoutineSheetWithDraft(ret.id, ret.draft);
+}
+
+function clearRoutineTemplateReturn() {
+  routineTemplateReturn = null;
+  const notice = document.getElementById('custom-routine-return');
+  if (notice) notice.hidden = true;
 }
 
 function closeRoutineSheet() {
@@ -1577,6 +1624,7 @@ function wireRoutineScreen() {
     if (!routineEditing) return;
     const { draft } = routineEditing;
     if (e.target.closest('[data-routine-cancel]')) { closeRoutineSheet(); return; }
+    if (e.target.closest('[data-routine-new-template]')) { startNewTemplateFromRoutine(); return; }
     const kindBtn = e.target.closest('[data-routine-kind]');
     if (kindBtn) { draft.kind = kindBtn.dataset.routineKind; rerenderRoutineSheet(); return; }
     const targetBtn = e.target.closest('[data-routine-target]');
@@ -1614,6 +1662,7 @@ function wireRoutineScreen() {
     if (field) routineEditing.draft[field] = e.target.value;
   });
   document.getElementById('routine-save-btn').addEventListener('click', saveRoutineFromSheet);
+  document.getElementById('custom-routine-return-cancel').addEventListener('click', () => returnToRoutineFromCustom(null));
 }
 
 // ホームの「今日の予定」の「始める」。保存した組み合わせは「自分で作る」画面に読み込み(回数等を調整してから進める)、
@@ -2626,6 +2675,7 @@ function init() {
     showScreen('setup');
   });
   document.getElementById('mode-custom-btn').addEventListener('click', () => {
+    clearRoutineTemplateReturn();
     customExercises = [];
     customRestSec = {};
     customRoutineId = null;
@@ -2819,6 +2869,8 @@ function init() {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const target = btn.dataset.nav;
+      // 下のタブで離れたら、予定の編集シートへ戻る約束は取り消す(後で別の用事で保存した時に勝手に戻らないため)
+      clearRoutineTemplateReturn();
       if (target === 'mode') {
         homeBodyWeightEditing = false;
         homeWaistEditing = false;
