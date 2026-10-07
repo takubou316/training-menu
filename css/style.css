@@ -2464,33 +2464,33 @@ body.modal-open {
   background: var(--surface);
 }
 /* ちょこっと記録(2026-10-07〜、js/ui.jsのrenderHomeQuickLog) */
+/* 腹囲の行と同じくらいの控えめな大きさに(最初の版は大きすぎた、2026-10-07 ユーザー指摘)。
+   下の「今日のメニューを作る」とは間を空ける */
 .home-quick-panel {
-  margin-top: 10px;
-  padding: 10px 14px;
+  margin: 10px 0 24px;
+  padding: 8px 14px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
 }
 .home-quick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.quick-log-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.quick-log-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .quick-log-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  padding: 8px 14px;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
   border: 1px solid var(--accent);
-  border-radius: 10px;
+  border-radius: 999px;
   background: var(--surface-2);
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   text-align: left;
 }
 .quick-log-btn:active { background: var(--accent-dim); }
-.quick-log-count { font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
+.quick-log-count { font-size: 12px; font-weight: 600; color: var(--text-dim); white-space: nowrap; }
 .quick-log-count.is-done { color: var(--accent); }
 .quick-log-empty { margin: 6px 0 0; }
 .quick-log-undo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 13px; color: var(--text-dim); }
@@ -2967,6 +2967,18 @@ body.modal-open {
   border: 1px solid var(--border);
   border-radius: 10px;
   font-size: 16px;
+  /* 時刻の選び方などiPhone標準の部品も暗い背景用の明るい色で出す */
+  color-scheme: dark;
+}
+/* 選ぶ欄の右の矢印。標準の黒い矢印は暗い背景で見づらいので、明るい色の矢印に置き換える(2026-10-07 ユーザー指摘) */
+select.routine-select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23f2f0ec' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
 }
 .routine-weekday-chips { margin-top: 8px; }
 .routine-weekday-chips .choice-chip[aria-pressed="true"] {
