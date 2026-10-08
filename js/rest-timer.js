@@ -12,6 +12,7 @@ let restTimerLastBeepSec = null;
 let restTimerAutoEndTimeout = null;
 // このタイマーでプッシュ通知の予定を入れたか(入れた時だけ取り消す)
 let restTimerPushScheduled = false;
+const REST_PUSH_CANCEL_BEFORE_MS = 5000;
 
 function scheduleRestTimerPush() {
   if (typeof scheduleCardioPush !== 'function' || typeof isCardioPushReady !== 'function' || !isCardioPushReady()) return;
@@ -111,6 +112,10 @@ function updateRestTimerDisplay() {
     }
     return;
   }
+  // 画面を見ているなら、残り5秒で通知の予定を取り消す(サーバーは10秒ごとに送る予定を探すので、0秒で取り消すと
+  // 間に合わず、開いている画面にも通知が届くことがあった。アプリ内では残り3秒から音で知らせる。2026-10-08 ユーザー判断)。
+  // 残り5秒を切ってから閉じた時は通知が届かない(承知の上)。+10秒で延ばした時はaddRestTimerSecondsが入れ直す
+  if (remainingMs <= REST_PUSH_CANCEL_BEFORE_MS && document.visibilityState === 'visible') cancelRestTimerPush();
   const totalSec = Math.ceil(remainingMs / 1000);
   // 残り3・2・1秒になった瞬間にそれぞれ1回だけビープを鳴らす
   if (totalSec <= 3 && totalSec >= 1 && totalSec !== restTimerLastBeepSec) {
