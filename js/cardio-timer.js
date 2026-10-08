@@ -194,6 +194,13 @@ function toggleCardioTimer(button) {
   if (typeof ensureHoldTimerAudioCtx === 'function') ensureHoldTimerAudioCtx();
   button.classList.add('active');
   updateCardioTimerRestHistory([]); // 前回このモーダルを使った時の休憩履歴が一瞬見えないようにリセット
+  // 計測し直す時は、記録側の休憩履歴も空にする(時間は0から測り直すのに、休憩しないで終えると前の計測の
+  // 休憩が残ったまま記録されていた。2026-10-08 Codexレビュー指摘)
+  const exercise = currentSession && currentSession.exercises[exIndex];
+  if (exercise && exercise.restLog) {
+    exercise.restLog = [];
+    updateCardioRestSummaryDisplay(exIndex, []);
+  }
 
   const modal = document.getElementById('cardio-timer-modal');
   if (modal) modal.hidden = false;

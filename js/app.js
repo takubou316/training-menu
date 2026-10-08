@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 64;
+const APP_VERSION = 65;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -57,9 +57,8 @@ async function renderAppVersion() {
 // 最新の状態に更新する(引っぱって更新から呼ぶ)。standaloneでホーム画面に追加したPWAにはブラウザのURLバー・
 // 更新ボタンが無く、最新コードを取ってきたい手段が「一度ホーム画面から削除して開き直す」
 // くらいしか無かった(2026-09-16、ユーザー指摘。当初はヘッダー右上の⟳ボタン、2026-10-07に引っぱって更新へ)。
-// service-worker.jsのfetchハンドラは既にネットワーク優先(cache:'no-store')なので理屈上は単純なlocation.reload()だけでも
-// 最新化されるはずだが、念のためService Workerのキャッシュ(オフライン用フォールバック)も
-// 明示的に消してから再読み込みする。記録中のトレーニングは途中の記録(スナップショット)から復元される。
+// service-worker.jsのfetchハンドラはネットワーク優先(cache:'no-store')なので、Service Worker自体の更新を確かめてから
+// 再読み込みすれば最新になる。記録中のトレーニングは途中の記録(スナップショット)から復元される。
 async function hardReload() {
   try {
     if (typeof persistActiveSessionSnapshot === 'function') persistActiveSessionSnapshot({ passive: true });
@@ -71,14 +70,10 @@ async function hardReload() {
       if (reg) await Promise.race([reg.update(), new Promise((resolve) => setTimeout(resolve, 3000))]);
     }
   } catch (e) { /* 更新確認に失敗しても再読み込みは続ける */ }
-  try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((key) => caches.delete(key)));
-    }
-  } catch (e) {
-    // 失敗してもlocation.reload()自体はネットワーク優先で最新化されるので握りつぶす
-  }
+  // 以前はここでオフライン用のキャッシュを全部消してから再読み込みしていたが、電波が無い・途中で切れると
+  // ネットにもキャッシュにもページが無くなりアプリが開けなくなり、同じドメイン(github.io)の他のアプリの
+  // キャッシュまで消していた(2026-10-08 Codexレビュー指摘)。読み込みは元々ネット優先(取れない時だけキャッシュ)で、
+  // 古い版のキャッシュは新しいService Workerが入れ替わる時に消すので、ここでは消さない
   location.reload();
 }
 
@@ -1498,7 +1493,10 @@ function openExercisePicker(target) {
 }
 
 function closeExercisePicker() {
-  document.getElementById('exercise-picker-modal').hidden = true;
+  const modal = document.getElementById('exercise-picker-modal');
+  // 開いていない時に閉じるとスクロールのロック数だけ減り、他のシート・タイマーのロックが外れる(Escキー等。Codexレビュー指摘)
+  if (modal.hidden) return;
+  modal.hidden = true;
   exercisePickerTarget = null;
   unlockBodyScroll();
 }
@@ -2369,6 +2367,9 @@ function handleLogInput(e) {
   if (e.type === 'change' && field === 'done') {
     const exercise = currentSession.exercises[exIndex];
     const row = target.closest('.set-row');
+    // 回数・RPEのホイールを流した直後(止まって確定するまでの120ms)に完了を押すと、確定前に入力が
+    // ロックされて前の値で記録されていた(2026-10-08 Codexレビュー指摘・PCで再現)。ロックする前に確定させる
+    if (row && target.checked) flushNumberWheels(row);
     if (row) {
       // 完了にした後もスライダーが動かせてしまい、記録済みの値を誤って変えられて
       // しまうという指摘があったため、完了中は重量/回数/RPEのスライダーを操作不可にする。
@@ -3257,8 +3258,7 @@ function init() {
       closeRpeInfoModal();
       document.getElementById('reset-history-modal').classList.remove('open');
       closeSaveTemplateModal();
-      closeWeeklyDayModal();
-      closeWeeklyPlanNameModal();
+      // (以前ここで呼んでいた週間プランの小窓の関数は、予定への作り直しで無くなっており、エラーで後ろの2つが閉じなかった)
       closeFinishIncompleteModal();
       closeStartOverwriteModal();
     }

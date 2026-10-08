@@ -67,7 +67,10 @@ function openRpeInfoModal() {
 }
 
 function closeRpeInfoModal() {
-  document.getElementById('rpe-info-modal').classList.remove('open');
+  const modal = document.getElementById('rpe-info-modal');
+  // 開いていない時はロック数を減らさない(他のシート・タイマーのロックが外れるため)
+  if (!modal.classList.contains('open')) return;
+  modal.classList.remove('open');
   unlockBodyScroll();
 }
 
@@ -324,7 +327,7 @@ function renderTodayFocus() {
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
           <div class="today-focus-sub">${escapeHtml(routineSubText(r, status))}</div>
         </div>
-        <button type="button" class="today-focus-start-btn" data-routine-start="${r.id}">始める</button>
+        <button type="button" class="today-focus-start-btn" data-routine-start="${escapeHtml(r.id)}">始める</button>
       </div>`).join('');
   const brokenHtml = broken.map(({ r }) => `
       <div class="routine-today-row">
@@ -332,7 +335,7 @@ function renderTodayFocus() {
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
           <div class="today-focus-sub">内容が見つかりません。選び直してください</div>
         </div>
-        <button type="button" class="ghost-pill-btn" data-routine-fix="${r.id}">選び直す</button>
+        <button type="button" class="ghost-pill-btn" data-routine-fix="${escapeHtml(r.id)}">選び直す</button>
       </div>`).join('');
   const doneHtml = done.map(({ r, status }) => `
       <div class="routine-today-row routine-today-done">
@@ -374,7 +377,7 @@ function renderRoutineScreen() {
       else if (status.due) statusText = '今日やる日';
       else statusText = `次は${status.next}`;
       return `
-      <button type="button" class="routine-card${paused ? ' is-paused' : ''}" data-routine-edit="${r.id}">
+      <button type="button" class="routine-card${paused ? ' is-paused' : ''}" data-routine-edit="${escapeHtml(r.id)}">
         <span class="routine-card-main">
           <span class="routine-card-name">${escapeHtml(routineContentText(r, templates))}</span>
           <span class="routine-card-sub">${escapeHtml(routineSubText(r, status))}</span>
@@ -398,7 +401,7 @@ function renderRoutineScreen() {
         ${legacy.map((p) => `
         <div class="template-item">
           <div class="template-item-main"><div class="template-name">${escapeHtml(p.name)}</div></div>
-          <button type="button" class="ghost-pill-btn" data-routine-import="${p.id}">取り込む</button>
+          <button type="button" class="ghost-pill-btn" data-routine-import="${escapeHtml(p.id)}">取り込む</button>
         </div>`).join('')}
       </details>` : '';
   footer.innerHTML = `${pauseHtml}${legacyHtml}`;
@@ -421,7 +424,7 @@ function renderRoutineTemplateManager(templates, routines) {
       used > 0 ? `予定で使用中${used > 1 ? `（${used}件）` : ''}` : '',
     ].filter(Boolean).join('・');
     return `
-      <button type="button" class="routine-card" data-template-edit="${t.id}">
+      <button type="button" class="routine-card" data-template-edit="${escapeHtml(t.id)}">
         <span class="routine-card-main">
           <span class="routine-card-name">${escapeHtml(t.name)}</span>
           <span class="routine-card-sub">${escapeHtml(customContentNamesText(t))}</span>
@@ -454,7 +457,7 @@ function renderRoutineSheet(draft, isNew) {
     contentHtml = `${templates.length > 0 ? `
       <select class="routine-select" data-routine-field="templateId" aria-label="保存した組み合わせ">
         <option value="">選んでください</option>
-        ${templates.map((t) => `<option value="${t.id}" ${t.id === draft.templateId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+        ${templates.map((t) => `<option value="${escapeHtml(t.id)}" ${t.id === draft.templateId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
       </select>`
       : '<p class="hint-text">保存した組み合わせがまだありません。下のボタンから作れます。</p>'}
       <div class="routine-template-actions">
@@ -1115,11 +1118,11 @@ function renderCustomTemplateList(templates) {
     const dateLabel = `${date.getMonth() + 1}/${date.getDate()}`;
     return `
     <div class="template-item">
-      <button type="button" class="template-item-main" data-template-load="${t.id}">
+      <button type="button" class="template-item-main" data-template-load="${escapeHtml(t.id)}">
         <div class="template-name">${escapeHtml(t.name)}</div>
         <div class="template-meta">${t.format === 'circuit' ? 'サーキット・' : ''}${t.exerciseIds.length}種目・${dateLabel}保存</div>
       </button>
-      <button type="button" class="template-delete-btn" data-template-delete="${t.id}" aria-label="この組み合わせを削除">✕</button>
+      <button type="button" class="template-delete-btn" data-template-delete="${escapeHtml(t.id)}" aria-label="この組み合わせを削除">✕</button>
     </div>`;
   }).join('');
 }
@@ -1697,14 +1700,14 @@ function buildSessionCardHtml(session, { showDate = true } = {}) {
   const dateHeader = `
       <div class="h-header">
         ${showDate ? `<div class="h-date">${formatDate(session.date)}</div>` : '<span></span>'}
-        <button type="button" class="h-delete-btn" data-history-delete="${session.id}" aria-label="この記録を削除">×</button>
+        <button type="button" class="h-delete-btn" data-history-delete="${escapeHtml(session.id)}" aria-label="この記録を削除">×</button>
       </div>`;
   const expanded = expandedSessionDetailIds.has(session.id);
   const exListHtml = session.exercises
     .map((ex) => `
         <li>
-          <button type="button" class="ex-name-row-btn" data-graph-exercise="${ex.exerciseId}">
-            <span>${ex.name}${expanded ? `<span class="ex-set-detail">${buildExerciseDetailHtml(ex)}</span>` : ''}</span>
+          <button type="button" class="ex-name-row-btn" data-graph-exercise="${escapeHtml(ex.exerciseId)}">
+            <span>${escapeHtml(ex.name)}${expanded ? `<span class="ex-set-detail">${buildExerciseDetailHtml(ex)}</span>` : ''}</span>
             <span class="ex-row-link-label">推移を見る ›</span>
           </button>
         </li>`)
@@ -1713,7 +1716,7 @@ function buildSessionCardHtml(session, { showDate = true } = {}) {
     <div class="history-item">
       ${dateHeader}
       <div class="h-meta">${session.goal ? goalLabel(session.goal) : '自分で選んだ種目'}　種目数 ${session.exercises.length}${session.durationSec ? `　時間 ${formatDuration(session.durationSec)}` : ''}</div>
-      <button type="button" class="ghost-pill-btn detail-toggle-btn" data-toggle-detail="${session.id}">
+      <button type="button" class="ghost-pill-btn detail-toggle-btn" data-toggle-detail="${escapeHtml(session.id)}">
         ${expanded ? '種目名だけの表示に戻す' : 'セットの詳細を見る（重量・回数）'}
       </button>
       <ul class="ex-name-list">${exListHtml}</ul>

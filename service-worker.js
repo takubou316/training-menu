@@ -1,7 +1,7 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
 // js/app.jsのAPP_VERSIONと必ず同じ番号にする(「その他の設定」のバージョン表示で比べる)
-const CACHE_NAME = 'training-menu-v64';
+const CACHE_NAME = 'training-menu-v65';
 // index.htmlで読み込むローカルファイルはすべてここに入れること（漏れるとオフライン起動に失敗する）。
 // 動画(media/)は容量が大きくRangeリクエストとも相性が悪いため対象外。
 const ASSETS = [
@@ -35,7 +35,8 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
+    // 古い版のこのアプリのキャッシュだけ消す(同じドメイン(github.io)の他のアプリのキャッシュは消さない。2026-10-08 Codexレビュー指摘)
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('training-menu-') && k !== CACHE_NAME).map((k) => caches.delete(k))))
   );
   self.clients.claim();
 });

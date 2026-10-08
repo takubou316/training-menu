@@ -793,6 +793,10 @@ function isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string');
+}
+
 function validateHistoryValue(history) {
   if (!Array.isArray(history)) return false;
   const ids = new Set();
@@ -801,6 +805,8 @@ function validateHistoryValue(history) {
     ids.add(s.id);
     if (Number.isNaN(new Date(s.date).getTime()) || !Array.isArray(s.exercises)) return false;
     return s.exercises.every((ex) => isPlainObject(ex) && typeof ex.exerciseId === 'string'
+      // 有酸素の休憩の記録は、あれば秒数を持つ物の配列(履歴の表示で合計するため。2026-10-08 Codexレビュー指摘)
+      && (ex.restLog == null || (Array.isArray(ex.restLog) && ex.restLog.every((r) => isPlainObject(r) && Number.isFinite(r.durationSec))))
       && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every((set) => isPlainObject(set)
         // 保持系の休憩の秒数(2026-10-07〜)。無いのは可、あれば0以上の数の配列
         && (set.holdRests == null || (Array.isArray(set.holdRests)
@@ -809,10 +815,13 @@ function validateHistoryValue(history) {
 }
 
 const BACKUP_VALIDATORS = {
-  settings: (v) => isPlainObject(v),
+  // 起動時の画面の復元で .includes を使う項目は、あれば文字列の配列であること(壊れた形だと起動処理が途中で止まるため。
+  // 2026-10-08 Codexレビュー指摘)
+  settings: (v) => isPlainObject(v) && ['parts', 'equipment', 'painAreas'].every((k) => v[k] == null || isStringArray(v[k])),
   history: validateHistoryValue,
   favorites: (v) => Array.isArray(v) && v.every((id) => typeof id === 'string'),
-  customTemplates: (v) => Array.isArray(v) && v.every((t) => isPlainObject(t) && typeof t.id === 'string'),
+  // 組み合わせは一覧の表示で種目の数を数えるので、種目のidの並びまで確かめる(Codexレビュー指摘)
+  customTemplates: (v) => Array.isArray(v) && v.every((t) => isPlainObject(t) && typeof t.id === 'string' && isStringArray(t.exerciseIds)),
   weeklyPlans: (v) => Array.isArray(v) && v.every((p) => isPlainObject(p) && typeof p.id === 'string' && Array.isArray(p.days)
     // 2026-10-06追加の「一日おき」。無い(古いバックアップ)のは可、あれば形まで確かめる(壊れた形だと起動時の描画で落ちるため)
     && (p.schedule == null || p.schedule === 'weekly' || p.schedule === 'alternate')

@@ -64,17 +64,36 @@ function buildSuggestion(planItem, bodyWeightKg) {
   const isLowerBody = planItem.primary.some((m) => LOWER_BODY_MUSCLES.includes(m));
   const increment = isLowerBody ? PROGRESSION.lowerBodyIncrementKg : PROGRESSION.upperBodyIncrementKg;
 
+  // 増やす時は刻みに切り上げ、同じ重量は一番近い刻みに合わせる(snapWeightToStep参照)
   if (allAtTopRange && (maxRpe === 0 || maxRpe <= PROGRESSION.rpeThresholdForWeightIncrease)) {
-    const nextWeight = lastWeight + increment;
+    const nextWeight = snapWeightToStep(lastWeight + increment, planItem.equipment, Math.ceil);
     return {
       text: `前回 ${lastWeight}kg×${repsList}。今回は${nextWeight}kgに挑戦してみましょう。`,
       weight: nextWeight,
     };
   }
+  // 前回の重量が刻みから外れている(古い版の51.25kg等)時は、近い刻みの重量を入れ、そのことを文にも書く
+  // (「同じ重量で」と書きながら別の重量が入らないように。Codexレビュー指摘)
+  const sameWeight = snapWeightToStep(lastWeight, planItem.equipment);
   return {
-    text: `前回 ${lastWeight}kg×${repsList}。同じ重量で目標レップ数(${planItem.repsMax}回)を目指しましょう。`,
-    weight: lastWeight || null,
+    text: sameWeight === lastWeight
+      ? `前回 ${lastWeight}kg×${repsList}。同じ重量で目標レップ数(${planItem.repsMax}回)を目指しましょう。`
+      : `前回 ${lastWeight}kg×${repsList}。選べる重さに合わせて${sameWeight}kgで、目標レップ数(${planItem.repsMax}回)を目指しましょう。`,
+    weight: sameWeight || null,
   };
+}
+
+// 提案・ウォームアップの重量を、記録画面の重量スライダーで選べる刻み(js/ui.jsのWEIGHT_RANGE_BY_EQUIPMENT、
+// バーベル・マシン2.5kg/ダンベル0.5kg)に合わせる。以前は上半身の+1.25kgやウォームアップの0.5kg丸めをそのまま出しており、
+// 50kg→51.25kg(バーベル)のように選べない値になって、ラベル・つまみ・保存される値が食い違っていた
+// (2026-10-08 Codexレビュー指摘・PCで再現)。重量スライダーを出さない種目はそのまま返す
+function snapWeightToStep(kg, equipment, round = Math.round) {
+  const range = typeof WEIGHT_RANGE_BY_EQUIPMENT !== 'undefined' && WEIGHT_RANGE_BY_EQUIPMENT[equipment && equipment[0]];
+  const step = (range && range.step) || 0;
+  if (!step) return kg;
+  // 51.25/2.5=20.5の切り上げ等で、浮動小数の誤差(20.500000001)により1刻み余分に上がらないようにする
+  const units = round === Math.ceil ? Math.ceil(kg / step - 1e-9) : round(kg / step);
+  return Math.round(units * step * 100) / 100;
 }
 
 // 有酸素種目の消費カロリー目安。運動生理学でよく使われる簡易式
@@ -140,7 +159,8 @@ function createSessionFromMenu(menu, bodyWeightKg) {
       // サーキットも通常と同じくセットごとにRPEを記録する(当初は聞かない設計だったが、ユーザー要望で
       // 2026-10-06に追加)。それより前のサーキットの記録はRPEが空(表示側は出さず、同期はnull)。
       const defaultRpe = RPE_SCALE.default;
-      const warmupWeight = suggestion.weight != null ? Math.round(suggestion.weight * 0.5 * 2) / 2 : 0;
+      // 重量スライダーの刻みに合わせる(バーベルなら2.5kg刻み。以前は0.5kg丸めで25.5kgのような選べない値になっていた)
+      const warmupWeight = suggestion.weight != null ? snapWeightToStep(Math.round(suggestion.weight * 0.5 * 2) / 2, item.equipment) : 0;
       // ウォームアップセットを入れるかはユーザー設定(loadWarmupSetsEnabled)に従う。記録中に
       // 切り替えた時に入れ直せるよう、本来入る数と重量・回数の初期値は設定に関わらず保持しておく
       // (applyWarmupSetsSetting参照)。
@@ -207,7 +227,7 @@ function applyWarmupSetsSetting(session, enabled) {
     const count = ex.plannedWarmupSets != null ? ex.plannedWarmupSets : (ex.category === 'compound' ? 1 : 0);
     const firstWorking = ex.sets[0] || {};
     const template = ex.warmupSetTemplate || {
-      weight: String(Math.round((Number(firstWorking.weight) || 0) * 0.5 * 2) / 2),
+      weight: String(snapWeightToStep(Math.round((Number(firstWorking.weight) || 0) * 0.5 * 2) / 2, ex.equipment)),
       reps: firstWorking.reps || '10',
       rpe: String(RPE_SCALE.default),
     };
