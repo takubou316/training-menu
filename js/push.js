@@ -97,8 +97,13 @@ function assertSamePushUser(userId) {
   if (!userId || currentPushUserId() !== userId) throw new Error('ログイン状態が変わったため中止しました');
 }
 
-function scheduleCardioPush(fireAtMs, title, body) {
+// 1件しかない予定を今どちらが入れているか('cardio'=有酸素の目標時間 / 'rest'=セット間の休憩、2026-10-07〜)。
+// 取り消しは入れた側からだけ効くようにする(休憩の取り消しで、後から入れた有酸素の予定を消さないため。Codexレビュー指摘)
+let pushJobOwner = null;
+
+function scheduleCardioPush(fireAtMs, title, body, owner = 'cardio') {
   if (!isCardioPushReady()) return Promise.resolve();
+  pushJobOwner = owner;
   const userId = currentPushUserId();
   return enqueueCardioPush(async () => {
     const deviceId = cardioPushDeviceId();
@@ -119,8 +124,12 @@ function scheduleCardioPush(fireAtMs, title, body) {
   });
 }
 
-// この端末が入れた予定だけを消す(別の端末で始めた予定は消さない)
-function cancelCardioPush() {
+// この端末が入れた予定だけを消す(別の端末で始めた予定は消さない)。ownerを渡した時は、その種類が入れた予定の時だけ消す
+// (渡さない時=ログアウト・通知オフは種類に関係なく消す)
+function cancelCardioPush(owner) {
+  // 誰が入れたか分からない時(再読み込みの直後など)は消してよい(消し損ねた古い予定を残さないため)
+  if (owner && pushJobOwner && pushJobOwner !== owner) return Promise.resolve();
+  pushJobOwner = null;
   if (!cardioPushSupported() || typeof isCloudSyncActive !== 'function' || !isCloudSyncActive()) return Promise.resolve();
   const userId = currentPushUserId();
   return enqueueCardioPush(async () => {
@@ -273,7 +282,7 @@ function renderCardioPushSetting() {
   const row = document.getElementById('cardio-push-row');
   if (!row) return;
   const head = '<div class="theme-picker-label">通知</div>';
-  const desc = '<p class="hint-text">アプリを閉じていても・画面がロック中でも、通知で知らせます。<br>・有酸素の計測中に目標時間になった時<br>・トレーニング予定で「時刻に知らせる」にした予定の時刻（まだやっていない日だけ）</p>';
+  const desc = '<p class="hint-text">アプリを閉じていても・画面がロック中でも、通知で知らせます。<br>・セット間の休憩が終わった時（有酸素の計測中は除く）<br>・有酸素の計測中に目標時間になった時<br>・トレーニング予定で「時刻に知らせる」にした予定の時刻（まだやっていない日だけ）</p>';
   let body;
   if (!cardioPushSupported()) {
     body = '<p class="hint-text">この端末・開き方では使えません。iPhoneはホーム画面に追加したアプリから開いてください。</p>';

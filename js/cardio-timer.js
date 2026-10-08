@@ -66,7 +66,7 @@ function checkCardioTargetReached(activeSec) {
     activeCardioTimer.targetNotified = true;
     // アプリ内で鳴らせた(＝画面を見ている)ので、まだ送られていなければ通知の方は取り消す(二重に知らせない)
     // (送る処理が既に取り出した後なら取り消せず、通知も届く)
-    if (typeof cancelCardioPush === 'function') cancelCardioPush().catch(() => {});
+    if (typeof cancelCardioPush === 'function') cancelCardioPush('cardio').catch(() => {});
   }
 }
 
@@ -101,7 +101,7 @@ function syncCardioTargetPush() {
   const remainingSec = targetSec ? targetSec - currentActiveMs() / 1000 : 0;
   // 失敗は計測に影響させない(js/push.jsのキューがログに残す)
   if (!t || t.phase !== 'running' || !targetSec || remainingSec <= 1) {
-    cancelCardioPush().catch(() => {});
+    cancelCardioPush('cardio').catch(() => {});
     return;
   }
   const ex = currentSession && currentSession.exercises[t.exIndex];

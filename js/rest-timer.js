@@ -1,10 +1,30 @@
 // トレーニング記録画面でセットの「完了」を押した時に自動で始まる、全画面表示の休憩タイマー。
 // 「+10秒」で延長、「今すぐ終わる」で即座に閉じられる。0になったら少し表示してから自動で閉じる。
 
+// アプリを閉じている・画面ロック中でも休憩の終わりを知らせるため、有酸素の目標時間と同じプッシュ通知の予定を入れる
+// (2026-10-07〜、js/push.jsのscheduleCardioPush。予定は1ユーザー1件なので、有酸素の計測中は入れない)。
+
 let restTimerInterval = null;
 let restTimerEndAt = null;
 let restTimerAudioCtx = null;
 let restTimerLastBeepSec = null;
+// 0秒になった後の自動終了の予約(「今すぐ終わる」と重なって2回終了しないよう、終える時・新しく始める時に取り消す)
+let restTimerAutoEndTimeout = null;
+// このタイマーでプッシュ通知の予定を入れたか(入れた時だけ取り消す)
+let restTimerPushScheduled = false;
+
+function scheduleRestTimerPush() {
+  if (typeof scheduleCardioPush !== 'function' || typeof isCardioPushReady !== 'function' || !isCardioPushReady()) return;
+  if (typeof activeCardioTimer !== 'undefined' && activeCardioTimer) return;
+  restTimerPushScheduled = true;
+  scheduleCardioPush(restTimerEndAt, '休憩終わり', '次のセットを始めましょう', 'rest').catch(() => {});
+}
+
+function cancelRestTimerPush() {
+  if (!restTimerPushScheduled) return;
+  restTimerPushScheduled = false;
+  if (typeof cancelCardioPush === 'function') cancelCardioPush('rest').catch(() => {});
+}
 
 // 音声ファイルを持たずWeb Audio APIでビープ音を鳴らす（オフラインでも確実に再生できるため）。
 // AudioContextの生成/再開はブラウザの自動再生制限に引っかからないよう、必ずユーザー操作
@@ -38,14 +58,19 @@ function playRestTimerBeep(freq, duration) {
 
 function startRestTimer(seconds) {
   if (!seconds || seconds <= 0) return;
+  const modal = document.getElementById('rest-timer-modal');
+  if (!modal) return;
+  const alreadyOpen = restTimerEndAt != null;
+  clearTimeout(restTimerAutoEndTimeout);
+  restTimerAutoEndTimeout = null;
   restTimerEndAt = Date.now() + seconds * 1000;
   restTimerLastBeepSec = null;
   ensureRestTimerAudioCtx();
-  const modal = document.getElementById('rest-timer-modal');
-  if (!modal) return;
   modal.hidden = false;
   modal.classList.remove('rest-timer-done');
-  lockBodyScroll();
+  // 表示中にもう一度始めた時はロックを重ねない(重ねると閉じても画面が固まったままになる)
+  if (!alreadyOpen) lockBodyScroll();
+  scheduleRestTimerPush();
   updateRestTimerDisplay();
   if (restTimerInterval) clearInterval(restTimerInterval);
   restTimerInterval = setInterval(updateRestTimerDisplay, 250);
@@ -58,8 +83,13 @@ function addRestTimerSeconds(sec) {
   const modal = document.getElementById('rest-timer-modal');
   if (modal && modal.classList.contains('rest-timer-done') && restTimerEndAt > Date.now()) {
     modal.classList.remove('rest-timer-done');
+    // 0秒の後に延長した時は、自動終了の予約を取り消す(延長した時間の途中で閉じてしまわないように)
+    clearTimeout(restTimerAutoEndTimeout);
+    restTimerAutoEndTimeout = null;
     if (!restTimerInterval) restTimerInterval = setInterval(updateRestTimerDisplay, 250);
   }
+  // 通知の時刻も延長に合わせる
+  if (restTimerEndAt > Date.now()) scheduleRestTimerPush();
   updateRestTimerDisplay();
 }
 
@@ -74,7 +104,10 @@ function updateRestTimerDisplay() {
       modal.classList.add('rest-timer-done');
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
       playRestTimerBeep(1046, 0.2); // 終了の合図は高めの音で長めに
-      setTimeout(endRestTimer, 2000);
+      // 画面を見ている時だけ通知は取り消す(裏に回っていてもタイマーが動くことがあり、その時に消すと通知が届かない。Codexレビュー指摘)
+      if (document.visibilityState === 'visible') cancelRestTimerPush();
+      clearTimeout(restTimerAutoEndTimeout);
+      restTimerAutoEndTimeout = setTimeout(endRestTimer, 2000);
     }
     return;
   }
@@ -90,6 +123,11 @@ function updateRestTimerDisplay() {
 }
 
 function endRestTimer() {
+  clearTimeout(restTimerAutoEndTimeout);
+  restTimerAutoEndTimeout = null;
+  // 既に閉じている時は何もしない(2回目の終了でスクロールのロック解除が重なり、画面が古い位置へ飛んでいた)
+  if (restTimerEndAt == null && !restTimerInterval) return;
+  cancelRestTimerPush();
   if (restTimerInterval) {
     clearInterval(restTimerInterval);
     restTimerInterval = null;

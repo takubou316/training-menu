@@ -767,6 +767,19 @@ const WEIGHT_RANGE_BY_EQUIPMENT = {
   barbell: { max: 200, step: 2.5 },
   machine: { max: 150, step: 2.5 },
 };
+// 単関節(isolation)のダンベル種目(ハンマーカール等)は軽い重さしか使わないので、範囲を0〜30kgに狭めて
+// 7.5kgのような値を選びやすくする(2026-10-07 ユーザー指摘「最大60kgで7.5kgにしたいのに小さくてやりにくい」)。
+// 記録の値が30kgを超えている時だけ、その値が入るよう10kg単位で広げる。
+const ISOLATION_DUMBBELL_MAX = 30;
+
+// 記録画面の重量スライダーの範囲(重量スライダーを出さない種目はnull)
+function weightRangeForExercise(ex) {
+  const base = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
+  if (!base) return null;
+  if (!(ex.equipment[0] === 'dumbbell' && ex.category === 'isolation')) return base;
+  const maxUsed = Math.max(0, ...(ex.sets || []).map((s) => Number(s.weight) || 0));
+  return { ...base, max: Math.max(ISOLATION_DUMBBELL_MAX, Math.ceil(maxUsed / 10) * 10) };
+}
 
 // 有酸素の「時間」(秒単位で持つ)を「X分Y秒」で表示する。
 // ちょうど分の時は「Y秒」を省略する(例: 12分、12分30秒)。
@@ -1401,7 +1414,7 @@ function buildCircuitRoundsHtml(session) {
     const rowsHtml = strength.map(({ ex, exIndex }, order) => {
       const s = ex.sets[r];
       if (!s) return '';
-      const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
+      const weightRange = weightRangeForExercise(ex);
       const weightField = ex.holdBased || !weightRange
         ? ''
         : sliderFieldHtml({ exIndex, setIndex: r, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight, disabled: s.done });
@@ -1489,7 +1502,7 @@ function renderLog(session) {
         return ex.sets
           .map((s, setIndex) => {
             const label = s.isWarmup ? 'ウォームアップ：軽い重さで慣らす' : `${(workingN += 1)}`;
-            const weightRange = WEIGHT_RANGE_BY_EQUIPMENT[ex.equipment && ex.equipment[0]];
+            const weightRange = weightRangeForExercise(ex);
             const weightField = ex.holdBased || !weightRange
               ? ''
               : sliderFieldHtml({ exIndex, setIndex, field: 'weight', label: '重量', min: 0, max: weightRange.max, step: weightRange.step, value: s.weight, disabled: s.done });

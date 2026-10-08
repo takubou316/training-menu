@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 62;
+const APP_VERSION = 63;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -161,7 +161,10 @@ function lockBodyScroll() {
   document.body.style.top = `-${bodyScrollLockSavedY}px`;
 }
 function unlockBodyScroll() {
-  bodyScrollLockCount = Math.max(0, bodyScrollLockCount - 1);
+  // ロックしていないのに呼ばれた時は何もしない(以前は古い位置へwindow.scrollToしてしまい、画面が勝手に飛んでいた。
+  // 休憩タイマーが0秒の後の自動終了と「今すぐ終わる」が重なった時など。2026-10-07 実機報告)
+  if (bodyScrollLockCount === 0) return;
+  bodyScrollLockCount -= 1;
   if (bodyScrollLockCount > 0) return;
   document.body.classList.remove('modal-open');
   document.body.style.top = '';
@@ -2327,6 +2330,21 @@ function handleLogInput(e) {
     if (valueEl) valueEl.textContent = formatSliderValue(field, target.value, currentSession.exercises[exIndex].holdBased);
   }
 
+  // 重量を変えたら、まだ完了していない後ろの本セットも同じ重量にする(完了済みは実際にやった記録なので変えない)。
+  // 1セットずつ重量を決め直すのが面倒、というユーザー指摘(2026-10-07)。回数は疲れで減るのでセットごとのまま。
+  if (field === 'weight' && !set.isWarmup) {
+    currentSession.exercises[exIndex].sets.forEach((s, i) => {
+      if (i <= setIndex || s.done || s.isWarmup) return;
+      s.weight = target.value;
+      const other = document.querySelector(`input[type="range"][data-ex="${exIndex}"][data-set="${i}"][data-field="weight"]`);
+      if (!other) return;
+      other.value = target.value;
+      updateSliderTrackFill(other);
+      const otherLabel = other.closest('.slider-field')?.querySelector('.slider-value');
+      if (otherLabel) otherLabel.textContent = formatSliderValue('weight', other.value, false);
+    });
+  }
+
   if (field === 'rpe') {
     const reserveEl = target.parentElement.querySelector(`[data-rpe-reserve="${exIndex}:${setIndex}"]`);
     if (reserveEl) reserveEl.textContent = rpeReserveText(target.value);
@@ -2363,7 +2381,7 @@ function handleLogInput(e) {
       const summaryEl = row.querySelector(`[data-set-summary="${exIndex}:${setIndex}"]`);
       if (summaryEl) {
         // js/ui.jsのrenderLog内でweightFieldを出す条件(重量スライダーを持つ種目か)と揃える。
-        const hasWeightField = !exercise.holdBased && !!WEIGHT_RANGE_BY_EQUIPMENT[exercise.equipment && exercise.equipment[0]];
+        const hasWeightField = !exercise.holdBased && !!weightRangeForExercise(exercise);
         summaryEl.textContent = target.checked && !set.isWarmup ? setRowSummaryText(set, exercise.holdBased, hasWeightField) : '';
       }
     }
