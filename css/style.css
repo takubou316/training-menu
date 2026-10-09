@@ -2474,6 +2474,7 @@ body.modal-open {
   background: var(--surface);
 }
 .home-quick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.quick-once-btn { width: 100%; margin-top: 8px; }
 .quick-log-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .quick-log-btn {
   display: flex;

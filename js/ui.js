@@ -2384,9 +2384,10 @@ function renderHomeQuickLog(undoEntry = null) {
     <div class="home-quick-panel">
       <div class="home-quick-head">
         <span class="home-weight-label">ちょこっと記録</span>
-        <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-quick-manage>${presets.length ? '編集' : '＋ 作る'}</button>
+        <button type="button" class="ghost-pill-btn bodyweight-log-small-btn" data-quick-manage>${presets.length ? 'ボタンを編集' : 'ボタンを作る'}</button>
       </div>
-      ${presets.length ? `<div class="quick-log-buttons">${buttonsHtml}</div>` : '<p class="hint-text quick-log-empty">食後のスクワット15回など、ボタン1つで記録できます。</p>'}
+      ${presets.length ? `<div class="quick-log-buttons">${buttonsHtml}</div>` : '<p class="hint-text quick-log-empty">食後のスクワット15回など、よくやるものはボタンにしておくと1回押すだけで記録できます。</p>'}
+      <button type="button" class="ghost-pill-btn quick-once-btn" data-quick-once>＋ その場で記録（懸垂○回など）</button>
       ${undoHtml}
     </div>`;
 }
@@ -2409,10 +2410,16 @@ function buildDayQuickLogHtml(dateStr, log) {
   return `<div class="day-quick-log"><div class="day-weight-label">ちょこっと記録</div><ul>${rows}</ul></div>`;
 }
 
-// 「ちょこっと記録」の編集シート。adding=trueなら追加の入力欄(種目・回数)を出す
+// 「ちょこっと記録」のシート。adding=trueなら種目・回数の入力欄を出す。draft.mode==='once'なら
+// ボタンを作らずにその場で1回分を記録する(「ディップス何回」など単発の記録、2026-10-09〜)
 function renderQuickSheet(adding, draft) {
   const body = document.getElementById('quick-sheet-body');
   if (!body) return;
+  const once = !!(draft && draft.mode === 'once');
+  const title = document.getElementById('quick-sheet-title');
+  if (title) title.textContent = once ? 'その場で記録' : 'ちょこっと記録のボタン';
+  const doneBtn = document.querySelector('#quick-sheet .sheet-done-btn');
+  if (doneBtn) doneBtn.hidden = once;
   const presets = loadQuickPresets();
   const listHtml = presets.length ? `
       <ul class="quick-preset-list">
@@ -2425,17 +2432,23 @@ function renderQuickSheet(adding, draft) {
     return;
   }
   const options = EXERCISES.filter((e) => e.type !== 'cardio');
+  // ちょこっと記録で最近使った種目を上に出す(懸垂・ディップスなどを毎回長い一覧から探さなくて済むように)
+  const recentIds = [...new Set(loadQuickLog().map((e) => e.exerciseId))].filter((id) => findExerciseById(id)).slice(0, 6);
+  const optionHtml = (e) => `<option value="${escapeHtml(e.id)}" ${e.id === draft.exerciseId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`;
+  const selectHtml = recentIds.length
+    ? `<optgroup label="最近使った種目">${recentIds.map((id) => optionHtml(findExerciseById(id))).join('')}</optgroup>
+       <optgroup label="すべての種目">${options.filter((e) => !recentIds.includes(e.id)).map(optionHtml).join('')}</optgroup>`
+    : options.map(optionHtml).join('');
   const ex = findExerciseById(draft.exerciseId);
   const timed = !!(ex && ex.holdBased);
   body.innerHTML = `
+      ${once ? '<p class="hint-text">ボタンを作らずに、今やった分だけを記録します。</p>' : ''}
       <div class="sheet-field-head"><span class="sheet-field-label">種目</span></div>
-      <select class="routine-select" data-quick-field="exerciseId" aria-label="種目">
-        ${options.map((e) => `<option value="${e.id}" ${e.id === draft.exerciseId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
-      </select>
+      <select class="routine-select" data-quick-field="exerciseId" aria-label="種目">${selectHtml}</select>
       ${sheetWheelFieldHtml({ field: 'amount', label: timed ? '秒数' : '回数', unit: timed ? '秒' : '回', min: 1, max: timed ? 300 : 100, step: 1, value: draft.amount, presets: timed ? [15, 30, 45, 60] : [5, 10, 15, 20, 30], inputAttr: 'data-quick-amount' })}
       <div class="modal-actions">
-        <button type="button" class="secondary-btn" data-quick-add-cancel>やめる</button>
-        <button type="button" class="primary-btn" data-quick-add-save>追加する</button>
+        <button type="button" class="secondary-btn" ${once ? 'data-quick-close' : 'data-quick-add-cancel'}>やめる</button>
+        <button type="button" class="primary-btn" ${once ? 'data-quick-once-save' : 'data-quick-add-save'}>${once ? '記録する' : '追加する'}</button>
       </div>`;
 }
 

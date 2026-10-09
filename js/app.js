@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 65;
+const APP_VERSION = 66;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -2690,6 +2690,36 @@ function newQuickId(prefix) {
   return `${prefix}${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// 種目を選んだ時の回数の初期値: その種目を前回ちょこっと記録した時の量、無ければ10回(時間で測る種目は30秒)
+function quickDefaultAmount(exerciseId) {
+  const last = loadQuickLog().find((e) => e.exerciseId === exerciseId);
+  if (last) return last.amount;
+  const ex = findExerciseById(exerciseId);
+  return ex && ex.holdBased ? 30 : 10;
+}
+
+// ちょこっと記録を1件残してホームと記録タブに反映する(ボタンからでも、その場で記録からでも)
+function addQuickEntryNow(ex, amount) {
+  const entry = { id: newQuickId('q'), at: new Date().toISOString(), exerciseId: ex.id, name: ex.name, amount, timed: !!ex.holdBased };
+  try {
+    addQuickLogEntry(entry);
+  } catch (err) {
+    alert('記録できませんでした。端末の空き容量を確認してください。');
+    return null;
+  }
+  if (navigator.vibrate) navigator.vibrate(30);
+  renderHomeQuickLog(entry);
+  refreshRecordViewsAfterBodyWeightChange();
+  return entry;
+}
+
+function openQuickSheet(draft) {
+  quickSheetDraft = draft;
+  document.getElementById('quick-sheet').classList.add('open');
+  lockBodyScroll();
+  renderQuickSheetNow();
+}
+
 function renderQuickSheetNow() {
   renderQuickSheet(!!quickSheetDraft, quickSheetDraft);
   document.querySelectorAll('#quick-sheet .number-wheel-track').forEach(initNumberWheel);
@@ -2711,16 +2741,14 @@ function wireQuickLog() {
       const preset = loadQuickPresets().find((p) => p.id === btn.dataset.quickLog);
       const ex = preset && findExerciseById(preset.exerciseId);
       if (!ex) return;
-      const entry = { id: newQuickId('q'), at: new Date().toISOString(), exerciseId: ex.id, name: ex.name, amount: preset.amount, timed: preset.timed };
-      try {
-        addQuickLogEntry(entry);
-      } catch (err) {
-        alert('記録できませんでした。端末の空き容量を確認してください。');
-        return;
-      }
-      if (navigator.vibrate) navigator.vibrate(30);
-      renderHomeQuickLog(entry);
-      refreshRecordViewsAfterBodyWeightChange();
+      addQuickEntryNow(ex, preset.amount);
+      return;
+    }
+    if (e.target.closest('[data-quick-once]')) {
+      // 最後にちょこっと記録した種目から始める(無ければ懸垂)
+      const last = loadQuickLog()[0];
+      const exerciseId = last && findExerciseById(last.exerciseId) ? last.exerciseId : 'pullup';
+      openQuickSheet({ mode: 'once', exerciseId, amount: quickDefaultAmount(exerciseId) });
       return;
     }
     const undo = e.target.closest('[data-quick-undo]');
@@ -2731,10 +2759,7 @@ function wireQuickLog() {
       return;
     }
     if (e.target.closest('[data-quick-manage]')) {
-      quickSheetDraft = loadQuickPresets().length === 0 ? { exerciseId: 'bodyweight_squat', amount: 15 } : null;
-      document.getElementById('quick-sheet').classList.add('open');
-      lockBodyScroll();
-      renderQuickSheetNow();
+      openQuickSheet(loadQuickPresets().length === 0 ? { mode: 'preset', exerciseId: 'bodyweight_squat', amount: 15 } : null);
     }
   });
 
@@ -2742,8 +2767,17 @@ function wireQuickLog() {
   sheet.addEventListener('click', (e) => {
     if (e.target.closest('[data-quick-close]')) { closeQuickSheet(); return; }
     if (e.target.closest('[data-quick-add-open]')) {
-      quickSheetDraft = { exerciseId: 'bodyweight_squat', amount: 15 };
+      quickSheetDraft = { mode: 'preset', exerciseId: 'bodyweight_squat', amount: 15 };
       renderQuickSheetNow();
+      return;
+    }
+    if (e.target.closest('[data-quick-once-save]')) {
+      flushNumberWheels(sheet);
+      const ex = quickSheetDraft && findExerciseById(quickSheetDraft.exerciseId);
+      if (!ex) return;
+      const amount = quickSheetDraft.amount;
+      closeQuickSheet();
+      addQuickEntryNow(ex, amount);
       return;
     }
     if (e.target.closest('[data-quick-add-cancel]')) {
@@ -2775,8 +2809,9 @@ function wireQuickLog() {
     if (!quickSheetDraft || !e.target.matches('[data-quick-field="exerciseId"]')) return;
     quickSheetDraft.exerciseId = e.target.value;
     // 時間で測る種目(プランク等)と回数の種目で、選べる範囲を合わせ直す
-    const ex = findExerciseById(quickSheetDraft.exerciseId);
-    quickSheetDraft.amount = ex && ex.holdBased ? 30 : 15;
+    quickSheetDraft.amount = quickSheetDraft.mode === 'once'
+      ? quickDefaultAmount(quickSheetDraft.exerciseId)
+      : (findExerciseById(quickSheetDraft.exerciseId)?.holdBased ? 30 : 15);
     renderQuickSheetNow();
   });
   sheet.addEventListener('input', (e) => {
