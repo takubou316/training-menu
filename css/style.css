@@ -2921,6 +2921,23 @@ body.modal-open {
   padding: 8px 0;
 }
 .routine-today-row + .routine-today-row { border-top: 1px solid var(--border); }
+/* 動画の予定(2026-10-12〜): 名前の下に「動画を開く」「やった」を横並び */
+.routine-today-video { flex-direction: column; align-items: stretch; gap: 8px; }
+.routine-video-actions { display: flex; gap: 8px; }
+.routine-video-actions > * { flex: 1; text-align: center; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+.routine-video-open { text-decoration: none; }
+.routine-done-side { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.routine-uncheck-btn {
+  background: none;
+  border: none;
+  padding: 6px 2px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.routine-video-field { display: block; margin-top: 10px; }
+.routine-video-field .sheet-field-label { display: block; }
 .routine-today-text { min-width: 0; }
 .routine-today-done { font-size: 13px; color: var(--text-dim); padding: 6px 0; }
 .routine-done-badge {

@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 66;
+const APP_VERSION = 67;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -1802,6 +1802,12 @@ function saveRoutineFromSheet() {
   if (draft.kind === 'template' && !draft.templateId) return fail('保存した組み合わせを選んでください');
   if (draft.kind === 'exercise' && !draft.exerciseId) return fail('種目を選んでください');
   if (draft.kind === 'custom' && !(draft.custom && (draft.custom.exerciseIds || []).length > 0)) return fail('「種目を選ぶ」から種目を選んでください');
+  let videoUrl = null;
+  if (draft.kind === 'video') {
+    if (!(draft.title || '').trim()) return fail('名前を入れてください');
+    videoUrl = normalizeVideoUrlInput(draft.videoUrl);
+    if (!videoUrl) return fail('動画のリンク（https://〜）を貼り付けてください');
+  }
   if (draft.freq === 'weekdays' && draft.weekdays.length === 0) return fail('曜日を1つ以上選んでください');
 
   const routine = {
@@ -1821,6 +1827,12 @@ function saveRoutineFromSheet() {
     routine.custom = draft.custom;
     // 組み合わせを削除して移した予定は、元の組み合わせのidを持ち続ける(過去の記録で「済み」を数えるため)
     if (draft.fromTemplateId) routine.fromTemplateId = draft.fromTemplateId;
+  }
+  if (draft.kind === 'video') {
+    routine.title = draft.title.trim();
+    routine.videoUrl = videoUrl;
+    // 「やった」の日付は名前・リンクを変えても引き継ぐ
+    if (Array.isArray(draft.checks)) routine.checks = draft.checks;
   }
   if (draft.freq === 'weekdays') routine.weekdays = [...draft.weekdays].sort((a, b) => a - b);
   if (draft.remindAt) routine.remindAt = draft.remindAt;
@@ -1897,11 +1909,20 @@ function wireRoutineScreen() {
       return;
     }
     if (e.target.closest('[data-routine-delete]')) {
-      if (!routineEditing.id || !confirm('この予定を削除しますか？（これまでの記録は消えません）')) return;
+      const message = routineEditing.draft.kind === 'video'
+        ? 'この予定を削除しますか？（この予定の「やった」の記録も消えます）'
+        : 'この予定を削除しますか？（これまでの記録は消えません）';
+      if (!routineEditing.id || !confirm(message)) return;
       const id = routineEditing.id;
       updateRoutineState((state) => { state.items = state.items.filter((r) => r.id !== id); });
       closeRoutineSheet();
     }
+  });
+  // 文字の入力欄(動画の名前・リンク)は打つたびに覚える(入力欄から直接「保存」を押してもchangeを待たない)
+  sheet.addEventListener('input', (e) => {
+    if (!routineEditing || !(e.target.matches && e.target.matches('input[type="text"], input[type="url"]'))) return;
+    const field = e.target.dataset && e.target.dataset.routineField;
+    if (field) routineEditing.draft[field] = e.target.value;
   });
   sheet.addEventListener('change', (e) => {
     if (!routineEditing) return;
@@ -1974,6 +1995,17 @@ function wireModeWeeklyPlanSection() {
   document.getElementById('today-focus-section').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-routine-start]');
     if (btn) startRoutine(btn.dataset.routineStart);
+    // 動画の予定の「やった」／「取り消す」(今日の日付で付け外しするだけ。トレーニングの記録は作らない)
+    const check = e.target.closest('[data-routine-check], [data-routine-uncheck]');
+    if (check) {
+      const id = check.dataset.routineCheck || check.dataset.routineUncheck;
+      const checked = !!check.dataset.routineCheck;
+      const today = localDateKey(new Date());
+      updateRoutineState((state) => {
+        const r = state.items.find((x) => x.id === id);
+        if (r && r.kind === 'video') setRoutineCheck(r, today, checked);
+      });
+    }
     const fix = e.target.closest('[data-routine-fix]');
     if (fix) {
       renderRoutineScreen();

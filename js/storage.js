@@ -629,7 +629,8 @@ function setActiveWeeklyPlanId(id) {
 // 「何をやる」と「いつやる」の組を並べたリスト。旧週間プラン(1つだけ使える・曜日か一日おきのどちらか・
 // 1日1つ)では「毎日ウォーキング＋一日おきサーキット」が組めなかったため作り直した(設計はCodexと相談)。
 // { version: 1, items: [routine], allPaused: false, migratedPlanId }
-// routine = { id, kind: 'template'|'exercise'|'parts', templateId?, exerciseId?, targetMin?, parts?,
+// routine = { id, kind: 'template'|'custom'|'exercise'|'parts'|'video', templateId?, exerciseId?, targetMin?, parts?,
+//             title?, videoUrl?, checks?(動画の予定の「やった」日付キー),
 //             freq: 'daily'|'alternate'|'weekdays', weekdays?: [0..6](0=月), paused, createdAt }
 // 'parts'(部位で自動作成)は旧週間プランから引き継いだものだけ。新しく作れるのは組み合わせ・種目1つ。
 // 旧週間プラン(weeklyPlans)のデータは消さずに残し、初回だけ使用中のプランを変換する(互換、ユーザー要望)。
@@ -651,7 +652,47 @@ function isValidRoutine(r) {
   if (r.kind === 'exercise') return typeof r.exerciseId === 'string' && (r.targetMin == null || isValidCardioTargetMin(r.targetMin));
   if (r.kind === 'parts') return Array.isArray(r.parts) && r.parts.length > 0 && r.parts.every((x) => typeof x === 'string');
   if (r.kind === 'custom') return isValidRoutineCustomContent(r.custom) && (r.fromTemplateId == null || typeof r.fromTemplateId === 'string');
+  if (r.kind === 'video') {
+    return typeof r.title === 'string' && r.title.trim() !== '' && isValidVideoUrl(r.videoUrl)
+      && (r.checks == null || (Array.isArray(r.checks) && r.checks.every((k) => typeof k === 'string' && DATE_KEY_PATTERN.test(k))));
+  }
   return false;
+}
+
+// ===== 動画の予定（2026-10-12〜） =====
+// 「お風呂上がりに全身ストレッチの動画」のように、YouTube等の動画を見ながらやる習慣。トレーニングの記録は作らず、
+// ホームの「やった」で予定の中(routine.checks = [日付キー])にだけ残す(ちょこっと記録と同じく、グラフ・連続日数には数えない)。
+const ROUTINE_CHECKS_MAX = 400;
+
+function isValidVideoUrl(url) {
+  if (typeof url !== 'string' || url.length > 500) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:';
+  } catch (e) {
+    return false;
+  }
+}
+
+// 貼り付けた文字から動画のURLを取り出す(YouTubeの「共有」→「コピー」は前後に文字が付くことがあるため)。
+// 「https://」が無い「youtu.be/xxx」も補う。取り出せなければnull。
+function normalizeVideoUrlInput(text) {
+  const s = String(text || '').trim();
+  // URLに使える半角文字だけを拾い(「（https://youtu.be/xxx）」の全角括弧を含めない)、末尾の句読点・閉じ括弧は外す
+  const urlChars = "[A-Za-z0-9\\-._~:/?#\\[\\]@!$&'()*+,;=%]+";
+  const m = s.match(new RegExp(`https?://${urlChars}`)) || s.match(new RegExp(`(?:www\\.|m\\.)?(?:youtube\\.com|youtu\\.be)/${urlChars}`));
+  if (!m) return null;
+  const url = m[0].replace(/[).,!'"]+$/, '');
+  const candidate = /^https?:\/\//.test(url) ? url : `https://${url}`;
+  return isValidVideoUrl(candidate) ? candidate : null;
+}
+
+// 予定の「やった」を付ける/外す(日付キー)。routineを書き換えるだけで、保存は呼び出し側(updateRoutineState)。
+function setRoutineCheck(routine, dateKey, checked) {
+  const set = new Set(Array.isArray(routine.checks) ? routine.checks : []);
+  if (checked) set.add(dateKey);
+  else set.delete(dateKey);
+  routine.checks = [...set].sort().slice(-ROUTINE_CHECKS_MAX);
 }
 
 // 「その場で選ぶ」予定の中身(保存した組み合わせと同じ形から id・name を除いたもの、2026-10-07〜)
@@ -701,6 +742,11 @@ function loadRoutineState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (isValidRoutineState(parsed)) return parsed;
+      // 一部の予定だけ読めない時(後の版で増えた種類など)は、読める予定だけ使い、全体を旧週間プランから
+      // 作り直して上書きしない(2026-10-12、Codexレビュー指摘: 古い版が新しい種類を見ると予定が全部消えていた)
+      if (isPlainObject(parsed) && Array.isArray(parsed.items)) {
+        return { ...parsed, items: parsed.items.filter(isValidRoutine) };
+      }
     }
   } catch (e) { /* 壊れていたら下で作り直す(旧週間プランは残っているので変換し直せる) */ }
   // 初回(またはバックアップに予定が無かった時): 使用中の旧週間プランを変換する
@@ -746,6 +792,11 @@ function sessionCountsForRoutine(s, routine) {
 // その予定をやった日(日付キー)の集合と、日ごとの有酸素の合計時間(秒、種目1つの予定の目標表示用)
 function routineDoneDays(routine, history) {
   const days = new Map(); // dateKey -> cardioSec
+  // 動画の予定は記録を作らず、ホームの「やった」だけで数える
+  if (routine.kind === 'video') {
+    (routine.checks || []).forEach((key) => days.set(key, 0));
+    return days;
+  }
   history.forEach((s) => {
     if (!sessionCountsForRoutine(s, routine)) return;
     const key = sessionRoutineDateKey(s);
@@ -934,6 +985,7 @@ if (typeof module !== 'undefined') {
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields,
     loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId,
+    isValidVideoUrl, normalizeVideoUrlInput, setRoutineCheck,
     loadCircuitLast, saveCircuitLast,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
     loadTheme, saveTheme,

@@ -216,6 +216,7 @@ function routineContentText(r, templates) {
   }
   if (r.kind === 'parts') return (r.parts || []).map((p) => PART_LABELS[p] || p).join('・');
   if (r.kind === 'custom') return customContentNamesText(r.custom);
+  if (r.kind === 'video') return r.title || '';
   return '';
 }
 
@@ -232,6 +233,7 @@ function routineActionable(r, templates) {
   if (r.kind === 'template') return templates.some((t) => t.id === r.templateId);
   if (r.kind === 'exercise') return !!findExerciseById(r.exerciseId);
   if (r.kind === 'custom') return !!r.custom && (r.custom.exerciseIds || []).some((id) => findExerciseById(id));
+  if (r.kind === 'video') return isValidVideoUrl(r.videoUrl);
   return r.kind === 'parts' && (r.parts || []).length > 0;
 }
 
@@ -321,7 +323,18 @@ function renderTodayFocus() {
   const done = active.filter((x) => x.status.done);
   const later = active.filter((x) => !x.status.due && !x.status.done);
 
-  const todoHtml = todo.map(({ r, status }) => `
+  // 動画の予定は「動画を開く」(YouTubeのアプリへ)と「やった」の2つ。トレーニングの記録は作らない
+  const todoHtml = todo.map(({ r, status }) => r.kind === 'video' ? `
+      <div class="routine-today-row routine-today-video">
+        <div class="routine-today-text">
+          <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
+          <div class="today-focus-sub">${escapeHtml(routineSubText(r, status))}</div>
+        </div>
+        <div class="routine-video-actions">
+          <a class="ghost-pill-btn routine-video-open" href="${escapeHtml(r.videoUrl)}" target="_blank" rel="noopener">▶ 動画を開く</a>
+          <button type="button" class="today-focus-start-btn" data-routine-check="${escapeHtml(r.id)}">やった</button>
+        </div>
+      </div>` : `
       <div class="routine-today-row">
         <div class="routine-today-text">
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
@@ -340,7 +353,8 @@ function renderTodayFocus() {
   const doneHtml = done.map(({ r, status }) => `
       <div class="routine-today-row routine-today-done">
         <span>${escapeHtml(routineContentText(r, templates))}</span>
-        <span class="routine-done-badge">${escapeHtml(routineDoneText(r, status))}</span>
+        <span class="routine-done-side">${r.kind === 'video'
+          ? `<button type="button" class="routine-uncheck-btn" data-routine-uncheck="${escapeHtml(r.id)}">取り消す</button>` : ''}<span class="routine-done-badge">${escapeHtml(routineDoneText(r, status))}</span></span>
       </div>`).join('');
   const laterHtml = later.length > 0
     ? `<p class="routine-today-later">ほかの予定：${later.map(({ r, status }) => `${escapeHtml(routineContentText(r, templates))}（${escapeHtml(status.next || '')}）`).join('、')}</p>`
@@ -444,7 +458,7 @@ function renderRoutineSheet(draft, isNew) {
   const templates = loadCustomTemplates();
   const cardio = EXERCISES.filter((e) => e.type === 'cardio');
 
-  const kindOptions = [['template', '保存したもの'], ['custom', 'その場で選ぶ'], ['exercise', '有酸素1つ']];
+  const kindOptions = [['template', '保存したもの'], ['custom', 'その場で選ぶ'], ['exercise', '有酸素1つ'], ['video', '動画']];
   if (draft.kind === 'parts') kindOptions.push(['parts', '部位（以前の予定）']);
   const kindHtml = `
       <div class="sheet-field-head"><span class="sheet-field-label">何をやる</span></div>
@@ -482,6 +496,17 @@ function renderRoutineSheet(draft, isNew) {
       <div class="choice-chips" role="radiogroup" aria-label="目標時間">
         ${targetChoices.map((m) => `<button type="button" class="choice-chip" role="radio" aria-checked="${(draft.targetMin || null) === m}" data-routine-target="${m || ''}">${m ? `${m}分` : 'なし'}</button>`).join('')}
       </div>`;
+  } else if (draft.kind === 'video') {
+    contentHtml = `
+      <label class="routine-video-field">
+        <span class="sheet-field-label">名前</span>
+        <input type="text" class="routine-select" maxlength="40" placeholder="例: 全身ストレッチ" value="${escapeHtml(draft.title || '')}" data-routine-field="title">
+      </label>
+      <label class="routine-video-field">
+        <span class="sheet-field-label">動画のリンク</span>
+        <input type="url" class="routine-select" inputmode="url" autocomplete="off" placeholder="https://youtu.be/..." value="${escapeHtml(draft.videoUrl || '')}" data-routine-field="videoUrl">
+      </label>
+      <p class="hint-text">YouTubeアプリで動画の「共有」→「コピー」して貼り付けてください。ホームの「動画を開く」から見られて、終わったら「やった」で済みにできます（トレーニングの記録・グラフには入りません）。</p>`;
   } else if (draft.kind === 'parts') {
     contentHtml = `<p class="hint-text">${escapeHtml((draft.parts || []).map((p) => PART_LABELS[p] || p).join('・'))}（以前の週間プランから引き継いだ予定です。「始める」で前回の条件のままメニューを作ります）</p>`;
   }
