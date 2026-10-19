@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 67;
+const APP_VERSION = 68;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -2766,6 +2766,33 @@ function closeQuickSheet() {
   renderHomeQuickLog();
 }
 
+// ===== 更新内容（パッチノート、2026-10-19〜。ヘッダー右上、以前の⟳ボタンの位置） =====
+function openPatchNotes() {
+  const sheet = document.getElementById('patch-notes-sheet');
+  if (sheet.classList.contains('open')) return;
+  // NEWの印は「開く前に見ていなかった版」に付けたいので、描いてから見た版を更新する
+  renderPatchNotes(loadPatchNotesSeen(), APP_VERSION);
+  if (PATCH_NOTES.length > 0) savePatchNotesSeen(PATCH_NOTES[0].version);
+  renderPatchNotesDot();
+  sheet.classList.add('open');
+  lockBodyScroll();
+}
+
+function closePatchNotes() {
+  const sheet = document.getElementById('patch-notes-sheet');
+  if (!sheet || !sheet.classList.contains('open')) return;
+  sheet.classList.remove('open');
+  unlockBodyScroll();
+}
+
+function wirePatchNotes() {
+  document.getElementById('patch-notes-btn').addEventListener('click', openPatchNotes);
+  document.getElementById('patch-notes-sheet').addEventListener('click', (e) => {
+    if (e.target.closest('[data-patch-notes-close]')) closePatchNotes();
+  });
+  renderPatchNotesDot();
+}
+
 function wireQuickLog() {
   document.getElementById('home-quick-section').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-quick-log]');
@@ -2863,6 +2890,20 @@ function wireQuickLog() {
     if (!confirm('このちょこっと記録を削除しますか？')) return;
     deleteQuickLogEntry(del.dataset.quickDelete);
     renderHomeQuickLog();
+    refreshRecordViewsAfterBodyWeightChange();
+  });
+
+  // 記録タブの日の詳細の、動画の予定の「やった」の✕(その日の「やった」を外す。2026-10-19〜)
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-video-uncheck]');
+    if (!btn) return;
+    if (!confirm('この日の「やった」を取り消しますか？')) return;
+    const { videoUncheck: id, videoUncheckDate: dateKey } = btn.dataset;
+    updateRoutineState((state) => {
+      const r = state.items.find((x) => x.id === id);
+      if (r && r.kind === 'video') setRoutineCheck(r, dateKey, false);
+    });
+    renderTrainingStreak(loadHistory());
     refreshRecordViewsAfterBodyWeightChange();
   });
   document.addEventListener('visibilitychange', () => {
@@ -3123,6 +3164,7 @@ function init() {
   wireBodyWeightLog();
   wireWaistLog();
   wireQuickLog();
+  wirePatchNotes();
   wireWarmupSetsToggle();
   wireHoldTargetEdit();
   wireBackup();
@@ -3320,6 +3362,7 @@ function init() {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      closePatchNotes();
       closeDemoModal();
       closeExercisePicker();
       closeRpeInfoModal();

@@ -24,6 +24,8 @@ try {
 <div id="app">
   <header class="app-header">
     <h1>Compstack</h1>
+    <!-- 更新内容(パッチノート、js/patch-notes.js)。以前の⟳ボタンの位置。まだ見ていない版があれば印を出す -->
+    <button type="button" id="patch-notes-btn" class="patch-notes-btn" aria-haspopup="dialog">更新内容<span class="patch-notes-dot" id="patch-notes-dot" hidden aria-label="新しい更新があります"></span></button>
   </header>
   <!-- 画面の一番上でさらに下へ引っぱると出る「離すと更新」(js/app.jsのwirePullToRefresh) -->
   <div id="pull-refresh" class="pull-refresh" aria-hidden="true">
@@ -451,6 +453,15 @@ try {
   </div>
 
   <!-- ちょこっと記録のボタンの追加・削除(下から出るシート、js/ui.jsのrenderQuickSheet・js/app.jsのwireQuickLog)。 -->
+  <div id="patch-notes-sheet" class="demo-modal sheet-modal">
+    <div class="demo-modal-backdrop" data-patch-notes-close></div>
+    <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="patch-notes-title">
+      <h3 id="patch-notes-title" class="sheet-title">更新内容</h3>
+      <div id="patch-notes-body"></div>
+      <button type="button" class="primary-btn sheet-done-btn" data-patch-notes-close>閉じる</button>
+    </div>
+  </div>
+
   <div id="quick-sheet" class="demo-modal sheet-modal">
     <div class="demo-modal-backdrop" data-quick-close></div>
     <div class="sheet-content" role="dialog" aria-modal="true" aria-labelledby="quick-sheet-title">
@@ -539,6 +550,7 @@ try {
 <script src="js/menu-generator.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/workout-log.js"></script>
+<script src="js/patch-notes.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/session-timer.js"></script>
 <script src="js/hold-timer.js"></script>

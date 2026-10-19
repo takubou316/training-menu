@@ -1657,11 +1657,11 @@ function formatDate(iso) {
 function renderTrainingStreak(history) {
   const container = document.getElementById('training-streak-summary');
   if (!container) return;
-  const streak = calculateTrainingStreak(history); // 渡された記録から計算(読み直さない)
+  const streak = calculateTrainingStreak(history); // 渡された記録(と動画の予定の「やった」)から計算
   const today = localDateKey(new Date());
   const yesterday = previousDateKey(today);
   const streakIsCurrent = streak && (streak.last === today || streak.last === yesterday);
-  if (!history.length || !streakIsCurrent) {
+  if (!streakIsCurrent) {
     container.hidden = true;
     container.textContent = '';
     return;
@@ -1795,8 +1795,13 @@ function buildRecordStampImg() {
   return '<img class="cal-day-stamp" src="assets/stamp-record.svg" alt="" aria-hidden="true">';
 }
 
+// スタンプを押す日(トレーニングの記録がある日＋動画の予定を「やった」日)
+function stampedDateKeys(historyMap, videoDays = videoCheckDays()) {
+  return new Set([...historyMap.keys(), ...videoDays.keys()]);
+}
+
 function findNearestRecordDate(dateStr, direction, historyMap) {
-  const dates = Array.from(historyMap.keys()).sort();
+  const dates = Array.from(stampedDateKeys(historyMap)).sort();
   if (direction < 0) {
     const candidates = dates.filter((date) => date < dateStr);
     return candidates.length ? candidates[candidates.length - 1] : null;
@@ -1815,17 +1820,20 @@ function buildRecordJumpLinks(dateStr, historyMap) {
 }
 
 // quickLog: ちょこっと記録(一覧表示で日ごとに読み直さないよう、呼び出し元で1回読んだものを渡せる)
-function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true, quickLog = null } = {}) {
+// videoDays: 動画の予定の「やった」(videoCheckDays。quickLogと同じく呼び出し元で1回読んだものを渡せる)
+function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true, quickLog = null, videoDays = null } = {}) {
   const date = recordDateFromKey(dateStr);
   const sessions = historyMap.get(dateStr) || [];
   const quickHtml = buildDayQuickLogHtml(dateStr, quickLog);
+  const vDays = videoDays || videoCheckDays();
+  const videoHtml = buildDayVideoChecksHtml(dateStr, vDays);
   let bodyHtml;
   if (sessions.length) {
     bodyHtml = sessions.map((session) => buildSessionCardHtml(session, { showDate: false })).join('');
-  } else if (quickHtml) {
-    // ちょこっと記録だけの日は「記録がありません」を出さない
+  } else if (quickHtml || videoHtml) {
+    // ちょこっと記録・動画の予定だけの日は「記録がありません」を出さない
     bodyHtml = '';
-  } else if (historyMap.size === 0) {
+  } else if (stampedDateKeys(historyMap, vDays).size === 0) {
     bodyHtml = `<div class="record-empty-state">
       <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
       <button type="button" class="primary-btn" id="empty-state-start-btn">＋ メニューを作る</button>
@@ -1833,7 +1841,7 @@ function buildRecordDayDetailHtml(dateStr, historyMap, { showNav = true, quickLo
   } else {
     bodyHtml = `<p class="empty-text">この日はトレーニングの記録がありません</p>${buildRecordJumpLinks(dateStr, historyMap)}`;
   }
-  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + buildDayWaistRowHtml(dateStr, { showEmpty: showNav }) + quickHtml + bodyHtml;
+  bodyHtml = buildDayWeightRowHtml(dateStr, { showEmpty: showNav }) + buildDayWaistRowHtml(dateStr, { showEmpty: showNav }) + videoHtml + quickHtml + bodyHtml;
   return `<div class="day-detail-header">
       ${showNav ? '<button type="button" class="day-nav-btn" data-record-day-prev aria-label="前の日">◀</button>' : '<span></span>'}
       <div><span class="day-detail-date">${recordDateLabel(date)}</span><span class="day-detail-weekday">${recordWeekdayLabel(date)}曜日</span></div>
@@ -1859,10 +1867,12 @@ function renderCalendar(historyMap = groupHistoryByDate(loadHistory())) {
   const todayStr = localDateKey(new Date());
   // ちょこっと記録だけの日は、スタンプではなく小さな点で示す
   const quickDays = new Set(loadQuickLog().map((e) => localDateKey(e.at)));
+  // 動画の予定を「やった」日もトレーニングと同じスタンプ(2026-10-19〜、ユーザー判断)
+  const stampedDays = stampedDateKeys(historyMap);
   for (let day = 1; day <= daysInMonth; day += 1) {
     const date = new Date(recordViewYear, recordViewMonth, day);
     const dateStr = localDateKey(date);
-    const hasRecord = historyMap.has(dateStr);
+    const hasRecord = stampedDays.has(dateStr);
     const quickOnly = !hasRecord && quickDays.has(dateStr);
     const cell = document.createElement('button');
     cell.type = 'button';
@@ -1931,7 +1941,8 @@ function renderListView(historyMap = groupHistoryByDate(loadHistory())) {
   if (!container) return;
   // ちょこっと記録だけの日も一覧に出す
   const quickLog = loadQuickLog();
-  const dates = Array.from(new Set([...historyMap.keys(), ...quickLog.map((e) => localDateKey(e.at))])).sort().reverse();
+  const videoDays = videoCheckDays();
+  const dates = Array.from(new Set([...stampedDateKeys(historyMap, videoDays), ...quickLog.map((e) => localDateKey(e.at))])).sort().reverse();
   if (dates.length === 0) {
     container.innerHTML = `<div class="record-empty-state">
       <p class="empty-text">まだ記録がありません。<br>5分でも運動を始めてみませんか？</p>
@@ -1939,7 +1950,7 @@ function renderListView(historyMap = groupHistoryByDate(loadHistory())) {
     </div>`;
     return;
   }
-  container.innerHTML = dates.map((dateStr) => `<div class="day-detail-inline">${buildRecordDayDetailHtml(dateStr, historyMap, { showNav: false, quickLog })}</div>`).join('');
+  container.innerHTML = dates.map((dateStr) => `<div class="day-detail-inline">${buildRecordDayDetailHtml(dateStr, historyMap, { showNav: false, quickLog, videoDays })}</div>`).join('');
 }
 
 function setRecordViewMode(mode) {
@@ -2222,7 +2233,7 @@ function mondayKeyOf(dateKey) {
   return shiftDateKey(dateKey, -offset);
 }
 
-function computeWeeklySummary(history, mondayKey) {
+function computeWeeklySummary(history, mondayKey, videoDays = new Map()) {
   const sundayKey = shiftDateKey(mondayKey, 6);
   const trainingDays = new Set();
   const muscles = {}; // { muscle: { primary, secondary } }
@@ -2259,7 +2270,17 @@ function computeWeeklySummary(history, mondayKey) {
   const cardioList = [...cardio.entries()]
     .map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => (a.id === 'walking' ? -1 : b.id === 'walking' ? 1 : b.sec - a.sec));
-  return { mondayKey, sundayKey, trainingDays: trainingDays.size, workSets, muscles, cardioList };
+  // 動画の予定(2026-10-19〜): 予定ごとに「やった」日数
+  const videos = new Map(); // routineId → { title, days }
+  videoDays.forEach((list, dateKey) => {
+    if (dateKey < mondayKey || dateKey > sundayKey) return;
+    list.forEach((v) => {
+      const cur = videos.get(v.routineId) || { title: v.title, days: 0 };
+      cur.days += 1;
+      videos.set(v.routineId, cur);
+    });
+  });
+  return { mondayKey, sundayKey, trainingDays: trainingDays.size, workSets, muscles, cardioList, videoList: [...videos.values()] };
 }
 
 // 週の期間の表示。今年以外・年をまたぐ週は年も出す(前の週へいくらでも戻れるため。Codexレビュー指摘)
@@ -2283,7 +2304,7 @@ function renderWeeklySummary() {
   if (!container) return;
   const thisMonday = mondayKeyOf(localDateKey(new Date()));
   const mondayKey = shiftDateKey(thisMonday, weeklySummaryOffset * 7);
-  const s = computeWeeklySummary(loadHistory(), mondayKey);
+  const s = computeWeeklySummary(loadHistory(), mondayKey, videoCheckDays());
   const label = weeklySummaryOffset === 0 ? '今週（途中）' : weeklySummaryOffset === -1 ? '先週' : '';
   const walking = s.cardioList.find((c) => c.id === 'walking');
   const otherCardio = s.cardioList.filter((c) => c.id !== 'walking');
@@ -2303,6 +2324,7 @@ function renderWeeklySummary() {
       <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">本セット</span><span class="bodyweight-summary-value">${s.workSets}セット</span></div>
       <div class="bodyweight-summary-item"><span class="bodyweight-summary-label">ウォーキング</span><span class="bodyweight-summary-value">${walking ? formatHourMin(walking.sec) : '−'}</span></div>
     </div>
+    ${s.videoList.length ? `<p class="hint-text weekly-summary-other">動画の予定: ${s.videoList.map((v) => `${escapeHtml(v.title)} ${v.days}日`).join('、')}</p>` : ''}
     ${otherCardio.length ? `<p class="hint-text weekly-summary-other">その他の有酸素: ${otherCardio.map((c) => `${escapeHtml(c.name || '')} ${formatHourMin(c.sec)}`).join('、')}</p>` : ''}
     ${muscleRows ? `
     <table class="weekly-muscle-table">
@@ -2370,6 +2392,34 @@ function waistFormHtml(dateKey, currentCm, { showCancel = false } = {}) {
     </div>`;
 }
 
+// ===== 更新内容（パッチノート、2026-10-19〜、データはjs/patch-notes.jsのPATCH_NOTES） =====
+// 「パッチノートは見づらいことが多いからなるべく見やすく」(ユーザー要望): 1項目1行の短い文、頭に種類のラベル、
+// 新しい版を上に。まだ見ていない版と一番新しい版は開いて見せ、それより前の版は版の行だけ(押すと開く)。
+const PATCH_KIND_LABELS = { new: '新しく', change: '変更', fix: '修正' };
+
+function patchNotesHasUnseen() {
+  return PATCH_NOTES.length > 0 && PATCH_NOTES[0].version > loadPatchNotesSeen();
+}
+
+function renderPatchNotesDot() {
+  const dot = document.getElementById('patch-notes-dot');
+  if (dot) dot.hidden = !patchNotesHasUnseen();
+}
+
+function renderPatchNotes(seenVersion, currentVersion) {
+  const body = document.getElementById('patch-notes-body');
+  if (!body) return;
+  const entries = PATCH_NOTES.map((n, i) => {
+    const isNew = n.version > seenVersion;
+    const [, m, d] = n.date.split('-').map(Number);
+    const head = `<span class="patch-version">v${n.version}</span><span class="patch-date">${m}月${d}日</span>${isNew ? '<span class="patch-new">NEW</span>' : ''}`;
+    const items = `<ul class="patch-items">${n.items.map((it) => `<li class="patch-item"><span class="patch-kind patch-kind-${it.kind}">${PATCH_KIND_LABELS[it.kind] || ''}</span><span class="patch-text">${escapeHtml(it.text)}</span></li>`).join('')}</ul>`;
+    if (i === 0 || isNew) return `<section class="patch-entry"><div class="patch-head">${head}</div>${items}</section>`;
+    return `<details class="patch-entry patch-entry-old"><summary class="patch-head">${head}<span class="patch-chevron" aria-hidden="true">▾</span></summary>${items}</details>`;
+  }).join('');
+  body.innerHTML = `<p class="hint-text patch-current">いま使っている版: v${currentVersion}</p>${entries || '<p class="empty-text">まだ更新内容はありません</p>'}`;
+}
+
 // ===== ちょこっと記録(2026-10-07〜、データはjs/storage.jsのloadQuickPresets/loadQuickLog) =====
 function quickAmountText(amount, timed) {
   return timed ? `${amount}秒` : `${amount}回`;
@@ -2415,6 +2465,14 @@ function renderHomeQuickLog(undoEntry = null) {
       <button type="button" class="ghost-pill-btn quick-once-btn" data-quick-once>＋ その場で記録（懸垂○回など）</button>
       ${undoHtml}
     </div>`;
+}
+
+// 記録タブの日の詳細に出す、その日に「やった」動画の予定(2026-10-19〜)。✕は予定のchecksからその日を外す
+function buildDayVideoChecksHtml(dateStr, videoDays) {
+  const list = videoDays.get(dateStr) || [];
+  if (list.length === 0) return '';
+  const rows = list.map((v) => `<li><span class="quick-day-name">▶ ${escapeHtml(v.title)}</span><span class="quick-day-times"><span class="quick-day-time">やった<button type="button" class="quick-day-delete" data-video-uncheck="${escapeHtml(v.routineId)}" data-video-uncheck-date="${dateStr}" aria-label="${escapeHtml(v.title)}の「やった」を取り消す">✕</button></span></span></li>`).join('');
+  return `<div class="day-quick-log"><div class="day-weight-label">動画の予定</div><ul>${rows}</ul></div>`;
 }
 
 // 記録タブの日の詳細に出す、その日のちょこっと記録(同じ種目・量はまとめて「×2（8:12・13:05）」)

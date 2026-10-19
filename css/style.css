@@ -124,6 +124,86 @@ html, body {
   margin: 0;
 }
 
+/* ===== 更新内容（パッチノート、2026-10-19〜）。ヘッダー右上の、以前の⟳ボタンの位置 ===== */
+.patch-notes-btn {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: 12px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+/* まだ見ていない版がある時の印(ボタンの右上の小さな丸) */
+.patch-notes-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+}
+.patch-notes-dot[hidden] { display: none; }
+.patch-current { margin: 0 0 12px; }
+.patch-entry {
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+.patch-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.patch-entry-old summary { list-style: none; cursor: pointer; }
+.patch-entry-old summary::-webkit-details-marker { display: none; }
+.patch-chevron { margin-left: auto; color: var(--text-dim); transition: transform 0.15s; }
+.patch-entry-old[open] .patch-chevron { transform: rotate(180deg); }
+.patch-version { font-size: 16px; font-weight: 700; }
+.patch-date { font-size: 13px; color: var(--text-dim); }
+.patch-new {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+}
+.patch-items { list-style: none; margin: 10px 0 0; padding: 0; }
+.patch-entry-old:not([open]) .patch-items { display: none; }
+.patch-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.patch-item:first-child { border-top: none; padding-top: 0; }
+.patch-kind {
+  flex-shrink: 0;
+  min-width: 3.6em;
+  margin-top: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--text-dim);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+.patch-kind-new { border-color: var(--accent); color: var(--accent); }
+.patch-kind-fix { border-color: var(--accent-dim); color: var(--text); }
+
 #main {
   flex: 1;
   padding: 16px;

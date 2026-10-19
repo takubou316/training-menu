@@ -19,6 +19,7 @@ const STORAGE_KEYS = {
   quickPresets: 'training-menu:quick-presets',
   quickLog: 'training-menu:quick-log',
   circuitLast: 'training-menu:circuit-last',
+  patchNotesSeen: 'training-menu:patch-notes-seen',
 };
 
 // サーキットの「今日の周回数」「1周ごとの休憩」の前回値(次に開始する時の初期選択に使うだけ)。
@@ -280,6 +281,21 @@ function loadTheme() {
   }
 }
 
+// 更新内容(パッチノート)を最後に開いた時の版の番号。新しい版があればヘッダーのボタンに印を出す(バックアップ対象外の小さな便宜)
+function loadPatchNotesSeen() {
+  try {
+    return Number(localStorage.getItem(STORAGE_KEYS.patchNotesSeen)) || 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function savePatchNotesSeen(version) {
+  try {
+    localStorage.setItem(STORAGE_KEYS.patchNotesSeen, String(version));
+  } catch (e) { /* 印が消えないだけなので無視 */ }
+}
+
 function saveTheme(theme) {
   if (!THEME_IDS.includes(theme)) return;
   localStorage.setItem(STORAGE_KEYS.theme, theme);
@@ -351,9 +367,10 @@ function shiftDateKey(dateKey, days) {
   return localDateKey(date);
 }
 
-function calculateTrainingStreak(history) {
-  const dateKeys = [...new Set(history
-    .map((session) => localDateKey(session.date))
+// 動画の予定の「やった」日も1日として数える(2026-10-19〜、ユーザー判断「スタンプ＋連続日数にも数える」)
+function calculateTrainingStreak(history, videoDays = videoCheckDays()) {
+  const dateKeys = [...new Set([...history
+    .map((session) => localDateKey(session.date)), ...videoDays.keys()]
     .filter(Boolean))]
     .sort()
     .reverse();
@@ -661,8 +678,30 @@ function isValidRoutine(r) {
 
 // ===== 動画の予定（2026-10-12〜） =====
 // 「お風呂上がりに全身ストレッチの動画」のように、YouTube等の動画を見ながらやる習慣。トレーニングの記録は作らず、
-// ホームの「やった」で予定の中(routine.checks = [日付キー])にだけ残す(ちょこっと記録と同じく、グラフ・連続日数には数えない)。
+// ホームの「やった」で予定の中(routine.checks = [日付キー])にだけ残す。グラフには数えない。
+// 2026-10-19〜: 記録タブのカレンダーではトレーニングと同じスタンプを押し、連続日数・週のまとめにも数える
+// (ユーザー「動画を見てやったを押したのに記録で達成にならない」)。日付は videoCheckDays から取る。
 const ROUTINE_CHECKS_MAX = 400;
+
+// 動画の予定の「やった」日 → [{ routineId, title }]。予定を削除すると「やった」も消える(確認文に明記済み)。
+// loadRoutineStateは予定が無い時に旧週間プランから作って保存するので、ここでは保存済みの値を読むだけにする
+// (バックアップの読み込み途中などに呼ばれても書き込みを起こさないため)。
+function videoCheckDays() {
+  const days = new Map();
+  let items = [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.routines) || 'null');
+    if (isPlainObject(parsed) && Array.isArray(parsed.items)) items = parsed.items;
+  } catch (e) { return days; }
+  items.forEach((r) => {
+    if (!isValidRoutine(r) || r.kind !== 'video') return;
+    (r.checks || []).forEach((key) => {
+      if (!days.has(key)) days.set(key, []);
+      days.get(key).push({ routineId: r.id, title: r.title });
+    });
+  });
+  return days;
+}
 
 function isValidVideoUrl(url) {
   if (typeof url !== 'string' || url.length > 500) return false;
@@ -771,9 +810,10 @@ function saveRoutineState(state) {
 // 両方を済みにしないため)。routineIdを持たない記録(ゲーム日課のショートカット・自分で組んだメニュー等)は、
 // 組み合わせのid・種目のidがはっきり一致する時だけ補って数える。部位の予定は推測で数えない
 // (「筋トレの記録なら済み」だと脚の日の記録で胸の日まで済みになるため。Codexレビュー指摘)。
-// 日付は終えた日(finishedAt)、無い古い記録は開始日。
+// 日付は始めた日(session.date、カレンダー・連続日数と同じ)。2026-10-18までは終えた日(finishedAt)で数えていたが、
+// 夜に始めて日付をまたいで終えると、カレンダーは前の日・予定の「済み」は次の日になって食い違ったため揃えた(ユーザー要望)。
 function sessionRoutineDateKey(s) {
-  return localDateKey(s.finishedAt || s.date);
+  return localDateKey(s.date);
 }
 
 function sessionCountsForRoutine(s, routine) {
@@ -984,11 +1024,11 @@ if (typeof module !== 'undefined') {
     loadCustomTemplates, saveCustomTemplate, updateCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields,
-    loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId,
+    loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId, videoCheckDays,
     isValidVideoUrl, normalizeVideoUrlInput, setRoutineCheck,
     loadCircuitLast, saveCircuitLast,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,
-    loadTheme, saveTheme,
+    loadTheme, saveTheme, loadPatchNotesSeen, savePatchNotesSeen,
     loadBodyWeightLog, saveBodyWeightEntry, deleteBodyWeightEntry, bodyWeightEntriesSorted,
     loadWaistLog, saveWaistEntry, deleteWaistEntry, waistEntriesSorted, shiftDateKey,
     loadWarmupSetsEnabled, saveWarmupSetsEnabled,

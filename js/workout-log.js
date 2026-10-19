@@ -281,7 +281,7 @@ function finalizeSession(session) {
     durationSec: session.durationSec || 0,
     templateId: session.templateId || null,
     routineId: session.routineId || null,
-    finishedAt: new Date().toISOString(), // 週間プランの「一日おき」は終えた日で数える
+    finishedAt: new Date().toISOString(), // 終えた時刻(記録の日付・予定の「済み」は始めた日=dateで数える。2026-10-19〜)
     circuitRounds: session.circuit ? session.circuit.rounds : null,
     exercises: session.exercises.filter(exerciseHasRecord).map((e) => (e.type === 'cardio'
       ? {
