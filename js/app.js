@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 69;
+const APP_VERSION = 70;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -2167,12 +2167,15 @@ function activeSessionAlreadySaved(session) {
 // ホームに前日分が『トレーニング中』として残る」報告があり、コードと再現では原因を特定できなかったため、
 // 原因によらず「保存済みのものは途中の記録として出さない」安全網として入れた(ユーザー判断)。
 // 起動時の復元・アプリに戻った時・ホームの「トレーニング中」欄を描く時に呼ぶ。片付けたらtrue。
+// currentMenuは消さない(片付ける記録とは別に、次にやるメニューを用意している途中のことがある。Codexレビュー指摘)。
 function dropActiveWorkoutIfAlreadySaved() {
   if (!currentSession || !activeSessionAlreadySaved(currentSession)) return false;
   const onLog = document.getElementById('screen-log').classList.contains('active');
   clearActiveWorkoutState();
-  currentMenu = null;
+  closeStartOverwriteModal(); // 「途中のトレーニングに戻る／捨てて新しく始める」の確認は、もう意味が無い
   if (onLog) showScreen('mode');
+  // ホームを開いたまま戻ってきた時も「トレーニング中」欄を消す(showScreenを通らないため。Codexレビュー指摘)
+  else renderHomeResumeWorkout();
   return true;
 }
 

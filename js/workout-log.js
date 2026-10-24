@@ -303,7 +303,11 @@ function finalizeSession(session) {
       })),
   };
   saveSession(record);
-  refreshTrainingStreak();
+  // 保存できた後の付随処理(連続日数の保存値の更新)で例外が出ても、終了の失敗にしない。失敗扱いにすると保存済みの記録が
+  // 記録画面に残り、続けて入力した分は保存済みと見なされて捨てられるため(2026-10-24 Codexレビュー指摘)
+  try {
+    refreshTrainingStreak();
+  } catch (e) { /* 連続日数は表示のたびに記録から計算し直すので、ここで失敗しても実害はない */ }
   // ローカル保存が完了した後に、クラウド同期が有効な場合だけ後追いで複製する(js/sync.js参照)。
   // 失敗してもローカルの記録には一切影響しない(常にローカルが正)、という設計方針を徹底するため
   // try/catchで包む(2026-09-07Codexレビュー指摘: queueSessionForSync内のlocalStorage書き込みが
