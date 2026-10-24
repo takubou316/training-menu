@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 68;
+const APP_VERSION = 69;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -223,6 +223,13 @@ function persistActiveSessionSnapshot({ passive = false } = {}) {
 function restoreActiveSessionIfAny() {
   const snapshot = loadActiveSessionSnapshot();
   if (!snapshot || !snapshot.session || !Array.isArray(snapshot.session.exercises)) return false;
+  // もう保存済みの記録と同じトレーニングなら、途中の記録として戻さずに捨てる(dropActiveWorkoutIfAlreadySaved参照)
+  try {
+    if (activeSessionAlreadySaved(snapshot.session)) {
+      clearActiveSessionSnapshot();
+      return false;
+    }
+  } catch (e) { /* 確かめられなければ従来どおり復元する */ }
 
   // 想定外の形式のスナップショット(将来のデータ構造変更や、書き込み途中でOSに
   // プロセスを終了させられ壊れた場合など)でrenderLog等が例外を投げると、
@@ -2148,6 +2155,27 @@ function clearActiveWorkoutState() {
   clearActiveSessionSnapshot();
 }
 
+// 途中の記録(currentSession)が、もう保存済みの記録と同じトレーニングか。保存済みの記録のdateは開始時刻(ミリ秒まで)を
+// そのまま引き継ぐ(js/workout-log.jsのfinalizeSession)ので、開始時刻の一致で同じトレーニングと分かる。
+// 保存に一度挑んだ記録はrecordIdでも照らし合わせる。
+function activeSessionAlreadySaved(session) {
+  if (!session) return false;
+  return loadHistory().some((r) => (session.date && r.date === session.date) || (session.recordId && r.id === session.recordId));
+}
+
+// 保存済みなのに途中の記録として残っていたら片付ける(2026-10-24〜)。実機で「前日分を翌日に記録して終了したのに、
+// ホームに前日分が『トレーニング中』として残る」報告があり、コードと再現では原因を特定できなかったため、
+// 原因によらず「保存済みのものは途中の記録として出さない」安全網として入れた(ユーザー判断)。
+// 起動時の復元・アプリに戻った時・ホームの「トレーニング中」欄を描く時に呼ぶ。片付けたらtrue。
+function dropActiveWorkoutIfAlreadySaved() {
+  if (!currentSession || !activeSessionAlreadySaved(currentSession)) return false;
+  const onLog = document.getElementById('screen-log').classList.contains('active');
+  clearActiveWorkoutState();
+  currentMenu = null;
+  if (onLog) showScreen('mode');
+  return true;
+}
+
 // アプリが裏で生きたまま(再読み込みなしで)戻ってきた時にも、起動時と同じ「しばらく操作していなければホーム」を
 // 当てはめる(iPhoneのホーム画面アプリは裏で残ることが多く、起動時の判定だけでは足りない。2026-10-07 Codexレビュー指摘)。
 function moveStaleWorkoutToHomeIfNeeded() {
@@ -3183,6 +3211,7 @@ function init() {
     // 開いたまま日付が変わった時、週間プランの今日の予定(特に「一日おき」の今日やった/休み)を前日のまま
     // 出し続けないよう、戻ってきたら描き直す(2026-10-06 Codexレビュー指摘)。
     if (document.visibilityState === 'visible') {
+      dropActiveWorkoutIfAlreadySaved();
       renderModeWeeklyPlanSection();
       renderRoutineScreen();
       moveStaleWorkoutToHomeIfNeeded();

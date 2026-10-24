@@ -574,6 +574,8 @@ function activeSessionSummaryText(session, startTime) {
 function renderHomeResumeWorkout() {
   const container = document.getElementById('home-resume-workout-section');
   if (!container) return;
+  // 保存済みのトレーニングが途中の記録として残っていたら、出さずに片付ける(js/app.jsのdropActiveWorkoutIfAlreadySaved)
+  if (typeof dropActiveWorkoutIfAlreadySaved === 'function') dropActiveWorkoutIfAlreadySaved();
   if (typeof currentSession === 'undefined' || !currentSession) {
     container.innerHTML = '';
     return;
@@ -1479,7 +1481,21 @@ function buildCircuitRoundsHtml(session) {
       ${roundsHtml}`;
 }
 
+// 記録画面の見出しの右に「10月23日 21:00開始」(2026-10-24〜、ユーザー要望「何日の何時何分に始めたのか見たい」)。
+// 今日でも日付を出す(前日の記録を開き直した時に、今日の分と見分けられるように)。
+function renderLogStartedAt(session) {
+  const el = document.getElementById('log-started-at');
+  if (!el) return;
+  const d = new Date(session && session.date);
+  if (Number.isNaN(d.getTime())) {
+    el.textContent = '';
+    return;
+  }
+  el.textContent = `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}開始`;
+}
+
 function renderLog(session) {
+  renderLogStartedAt(session);
   const container = document.getElementById('log-content');
   const isCircuit = !!session.circuit;
   // ウォームアップは怪我予防に関わるため、記録画面を開いた時点で最初から展開しておく

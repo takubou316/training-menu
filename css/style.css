@@ -124,6 +124,19 @@ html, body {
   margin: 0;
 }
 
+/* 記録画面の見出しの右端に開始日時(2026-10-24〜、js/ui.jsのrenderLogStartedAt) */
+.log-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.log-started-at {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
 /* ===== 更新内容（パッチノート、2026-10-19〜）。ヘッダー右上の、以前の⟳ボタンの位置 ===== */
 .patch-notes-btn {
   position: relative;

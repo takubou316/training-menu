@@ -196,7 +196,10 @@ try {
 
     <!-- ===== トレーニング中の画面（セットを記録しながら進める） ===== -->
     <section id="screen-log" class="screen">
-      <h2>トレーニング中</h2>
+      <div class="log-title-row">
+        <h2>トレーニング中</h2>
+        <span class="log-started-at" id="log-started-at"></span>
+      </div>
       <p class="error-text log-autosave-error" id="log-autosave-error" hidden>途中の記録を自動保存できていません。この状態でアプリを閉じると途中の記録が消えるおそれがあります。端末の空き容量を確認してください。</p>
       <div id="log-content"></div>
       <p class="error-text finish-workout-error" id="finish-workout-error" hidden>記録を保存できませんでした。端末の空き容量を確認してから、もう一度「記録して終了」を押してください（ここまでの記録は消えていません）。</p>
