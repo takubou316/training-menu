@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 70;
+const APP_VERSION = 71;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -2002,6 +2002,9 @@ function wireModeWeeklyPlanSection() {
   document.getElementById('today-focus-section').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-routine-start]');
     if (btn) startRoutine(btn.dataset.routineStart);
+    // 予定から始めて途中のトレーニングの「続きから始める」「破棄する」(2026-10-25〜、ホーム下の欄と同じ処理)
+    if (e.target.closest('[data-resume-workout]')) resumeActiveWorkout();
+    if (e.target.closest('[data-discard-workout]')) discardActiveWorkout();
     // 動画の予定の「やった」／「取り消す」(今日の日付で付け外しするだけ。トレーニングの記録は作らない)
     const check = e.target.closest('[data-routine-check], [data-routine-uncheck]');
     if (check) {
@@ -2140,6 +2143,7 @@ function discardActiveWorkout() {
   if (!currentSession) return;
   if (!window.confirm(`${activeSessionSummaryText(currentSession, sessionStartTime)}。\nこのトレーニングを記録せずにやめますか？入力した内容は消え、元に戻せません。`)) return;
   clearActiveWorkoutState();
+  renderTodayFocus(); // 予定の行の「続きから始める」を「始める」に戻す
   renderHomeResumeWorkout();
 }
 
@@ -2174,8 +2178,11 @@ function dropActiveWorkoutIfAlreadySaved() {
   clearActiveWorkoutState();
   closeStartOverwriteModal(); // 「途中のトレーニングに戻る／捨てて新しく始める」の確認は、もう意味が無い
   if (onLog) showScreen('mode');
-  // ホームを開いたまま戻ってきた時も「トレーニング中」欄を消す(showScreenを通らないため。Codexレビュー指摘)
-  else renderHomeResumeWorkout();
+  // ホームを開いたまま戻ってきた時も「トレーニング中」欄と予定の行を描き直す(showScreenを通らないため。Codexレビュー指摘)
+  else {
+    renderTodayFocus();
+    renderHomeResumeWorkout();
+  }
   return true;
 }
 

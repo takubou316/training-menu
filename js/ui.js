@@ -27,8 +27,15 @@ function showScreen(name) {
   document.querySelectorAll('.nav-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.nav === name);
   });
-  // ホームへはナビ以外(設定画面の戻る等)からも来るため、ここで毎回描き直す
-  if (name === 'mode') renderHomeResumeWorkout();
+  // ホームへはナビ以外(設定画面の戻る等)からも来るため、ここで毎回描き直す。今日の予定も、途中のトレーニングの
+  // 有無で「始める」か「続きから始める」かが変わるので一緒に描き直す(2026-10-25〜)
+  if (name === 'mode') {
+    // 保存済みの記録が途中のまま残っていたら、描く前に片付ける(先に予定の行を描くと、押しても何も起きない
+    // 「トレーニング中」の行が残る。Codexレビュー指摘)
+    if (typeof dropActiveWorkoutIfAlreadySaved === 'function') dropActiveWorkoutIfAlreadySaved();
+    renderTodayFocus();
+    renderHomeResumeWorkout();
+  }
 }
 
 function goalLabel(goalKey) {
@@ -292,6 +299,20 @@ function routineStatusPack() {
   return { state, templates, rows };
 }
 
+// 予定から始めて、まだ記録して終了していないトレーニングの予定id(無ければnull)。
+function activeWorkoutRoutineId() {
+  return (typeof currentSession !== 'undefined' && currentSession && currentSession.routineId) || null;
+}
+
+// 今日の予定の行に途中のトレーニングを出しているか(renderTodayFocusが決める)。出している時は、ホーム一番下の
+// 「トレーニング中」欄は同じものの二重表示になるので隠す(syncHomeResumeVisibility)。
+let todayFocusShowsActiveWorkout = false;
+
+function syncHomeResumeVisibility() {
+  const section = document.getElementById('home-resume-workout-section');
+  if (section) section.hidden = todayFocusShowsActiveWorkout && !!activeWorkoutRoutineId();
+}
+
 // ホーム最上部の「今日の予定」。予定が無ければ何も出さない(「他のメニューを作る」の2枚を開いたまま)。
 // 今日やる日でまだやっていないものがあれば「始める」を並べ、2枚のカードは折りたたむ。
 // 済んだものは小さく残し、今日が休みの予定は「ほかの予定」として一行で添える。
@@ -305,6 +326,8 @@ function renderTodayFocus() {
     if (flat) detailsEl.open = true;
   };
 
+  // 前回の描画の結果を持ち越さない(予定を全部休止・削除して下の早期returnに入った時に、下の欄が隠れたままにならないように。Codexレビュー指摘)
+  todayFocusShowsActiveWorkout = false;
   const { state, templates, rows } = routineStatusPack();
   // 予定の時刻の通知を今の状態(済み・予定の変更・日付)に合わせて入れ直す。中身が前回と同じなら何もしない(js/push.js)
   if (typeof scheduleRoutinePushSync === 'function') scheduleRoutinePushSync();
@@ -314,17 +337,33 @@ function renderTodayFocus() {
       ? '<p class="today-focus-rest">予定は全部休止中です</p>'
       : '';
     setCardsFlat(true);
+    syncHomeResumeVisibility();
     return;
   }
 
   const todo = active.filter((x) => x.status.due && !x.status.done && x.actionable);
+  // 予定から始めて終えていないトレーニングは、その予定の行を「トレーニング中」にして「続きから始める」「破棄する」を出す
+  // (2026-10-25、ユーザー報告: 予定の「始める」とホーム下の「トレーニングに戻る」が並び、どちらを押せばいいか分からない)
+  const activeRoutineId = activeWorkoutRoutineId();
+  todayFocusShowsActiveWorkout = !!activeRoutineId && todo.some(({ r }) => r.id === activeRoutineId && r.kind !== 'video');
   // 組み合わせが削除された等で始められない予定も黙って消さず、選び直す案内を出す(Codexレビュー指摘)
   const broken = active.filter((x) => x.status.due && !x.status.done && !x.actionable);
   const done = active.filter((x) => x.status.done);
   const later = active.filter((x) => !x.status.due && !x.status.done);
 
   // 動画の予定は「動画を開く」(YouTubeのアプリへ)と「やった」の2つ。トレーニングの記録は作らない
-  const todoHtml = todo.map(({ r, status }) => r.kind === 'video' ? `
+  const activeRowHtml = (r) => `
+      <div class="routine-today-row routine-today-active">
+        <div class="routine-today-text">
+          <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
+          <div class="today-focus-sub routine-active-sub"><span class="routine-active-badge">トレーニング中</span>${activeSessionSummaryParts(currentSession, sessionStartTime).map((p) => `<span class="home-resume-desc-part">${escapeHtml(p)}</span>`).join('・')}</div>
+        </div>
+        <div class="routine-active-actions">
+          <button type="button" class="today-focus-start-btn" data-resume-workout>続きから始める</button>
+          <button type="button" class="ghost-pill-btn" data-discard-workout>破棄する</button>
+        </div>
+      </div>`;
+  const todoHtml = todo.map(({ r, status }) => (todayFocusShowsActiveWorkout && r.id === activeRoutineId) ? activeRowHtml(r) : r.kind === 'video' ? `
       <div class="routine-today-row routine-today-video">
         <div class="routine-today-text">
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
@@ -370,6 +409,7 @@ function renderTodayFocus() {
     </div>`;
   setCardsFlat(todo.length === 0);
   if (todo.length > 0 && detailsEl) detailsEl.open = false;
+  syncHomeResumeVisibility();
 }
 
 // 予定の画面(ボトムナビ「予定」)の一覧
@@ -580,6 +620,7 @@ function renderHomeResumeWorkout() {
     container.innerHTML = '';
     return;
   }
+  syncHomeResumeVisibility();
   container.innerHTML = `
     <div class="today-focus-panel home-resume-panel">
       <div class="home-resume-text">
