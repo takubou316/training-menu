@@ -249,30 +249,35 @@ function routineFreqText(r) {
   return ROUTINE_FREQ_LABELS[r.freq] || '';
 }
 
-// 今日の状態。due=今日やる日か、done=今日やったか、doneSec=今日の有酸素の合計秒(種目1つの予定)、
-// next=今日やる日でない時の次の日の言い方、last=前回やった日。
-function routineTodayStatus(r, doneDays, now = new Date()) {
+// 今日の状態。due=今日やる日か、done=今日やったか(1日に2回以上の予定は回数を満たしたか)、doneSec=今日の有酸素の合計秒(種目1つの予定)、
+// doneCount=今日やった回数、perDay=1日に何回の予定か、next=今日やる日でない時の次の日の言い方、last=前回やった日。
+// countsはroutineDoneCountsの結果(無ければ「やった日は1回」とみなす)。
+function routineTodayStatus(r, doneDays, now = new Date(), counts = null) {
   const today = localDateKey(now);
-  const done = doneDays.has(today);
+  const perDay = routinePerDay(r);
+  const doneCount = counts ? (counts.get(today) || 0) : (doneDays.has(today) ? 1 : 0);
+  const done = doneCount >= perDay;
   const doneSec = doneDays.get(today) || 0;
-  if (r.freq === 'daily') return { due: true, done, doneSec };
+  const base = { done, doneSec, doneCount, perDay };
+  if (r.freq === 'daily') return { ...base, due: true };
   if (r.freq === 'weekdays') {
     const todayIdx = todayWeekdayIndex(now);
-    if (r.weekdays.includes(todayIdx)) return { due: true, done, doneSec };
+    if (r.weekdays.includes(todayIdx)) return { ...base, due: true };
     const ahead = [1, 2, 3, 4, 5, 6].find((n) => r.weekdays.includes((todayIdx + n) % 7));
     const nextIdx = (todayIdx + ahead) % 7;
-    return { due: false, done, doneSec, next: ahead === 1 ? '明日' : `${WEEKDAY_LABELS[nextIdx]}曜` };
+    return { ...base, due: false, next: ahead === 1 ? '明日' : `${WEEKDAY_LABELS[nextIdx]}曜` };
   }
   // 一日おき: やった日の次の日は休み、その次の日からまた出る(やるまで出し続ける)
   const last = [...doneDays.keys()].filter((k) => k <= today).sort().pop() || null;
-  if (last === today) return { due: true, done: true, doneSec, last };
-  if (last && last === previousDateKey(today)) return { due: false, done: false, doneSec: 0, next: '明日', last };
-  return { due: true, done: false, doneSec: 0, last };
+  if (last === today) return { ...base, due: true, last };
+  if (last && last === previousDateKey(today)) return { ...base, due: false, done: false, doneSec: 0, doneCount: 0, next: '明日', last };
+  return { ...base, due: true, done: false, doneSec: 0, doneCount: 0, last };
 }
 
-// 種目1つ(有酸素)の予定の「済み・10/30分」
+// 種目1つ(有酸素)の予定の「済み・10/30分」。1日に2回以上の予定は「済み・2/2回」
 function routineDoneText(r, status) {
   if (!status.done) return '';
+  if (status.perDay > 1) return `済み・${status.doneCount}/${status.perDay}回`;
   if (r.kind === 'exercise' && r.targetMin) {
     const min = Math.floor(status.doneSec / 60);
     return min >= r.targetMin ? '済み・目標達成' : `済み・${min}/${r.targetMin}分`;
@@ -281,7 +286,10 @@ function routineDoneText(r, status) {
 }
 
 function routineSubText(r, status) {
+  const perDay = routinePerDay(r);
   const parts = [routineFreqText(r)];
+  if (perDay > 1) parts.push(`1日${perDay}回`);
+  if (perDay > 1 && status.doneCount > 0 && !status.done) parts.push(`今日${status.doneCount}/${perDay}回済み`);
   if (r.kind === 'exercise' && r.targetMin) parts.push(`目標${r.targetMin}分`);
   if (r.remindAt) parts.push(`${r.remindAt}に通知`);
   if (r.freq === 'alternate' && status.last) parts.push(`前回 ${shortDateKeyLabel(status.last)}`);
@@ -294,7 +302,7 @@ function routineStatusPack() {
   const history = loadHistory();
   const rows = state.items.map((r) => {
     const doneDays = routineDoneDays(r, history);
-    return { r, status: routineTodayStatus(r, doneDays), actionable: routineActionable(r, templates) };
+    return { r, status: routineTodayStatus(r, doneDays, new Date(), routineDoneCounts(r, history)), actionable: routineActionable(r, templates) };
   });
   return { state, templates, rows };
 }
@@ -345,10 +353,12 @@ function renderTodayFocus() {
   // 予定から始めて終えていないトレーニングは、その予定の行を「トレーニング中」にして「続きから始める」「破棄する」を出す
   // (2026-10-25、ユーザー報告: 予定の「始める」とホーム下の「トレーニングに戻る」が並び、どちらを押せばいいか分からない)
   const activeRoutineId = activeWorkoutRoutineId();
-  todayFocusShowsActiveWorkout = !!activeRoutineId && todo.some(({ r }) => r.id === activeRoutineId && r.kind !== 'video');
   // 組み合わせが削除された等で始められない予定も黙って消さず、選び直す案内を出す(Codexレビュー指摘)
   const broken = active.filter((x) => x.status.due && !x.status.done && !x.actionable);
   const done = active.filter((x) => x.status.done);
+  // 済みの予定の「もう1回」から始めた途中のトレーニングも、その行で続ける(2026-10-27〜)
+  const isActiveRow = (r) => !!activeRoutineId && r.id === activeRoutineId && r.kind !== 'video';
+  todayFocusShowsActiveWorkout = todo.some(({ r }) => isActiveRow(r)) || done.some(({ r, actionable }) => actionable && isActiveRow(r));
   const later = active.filter((x) => !x.status.due && !x.status.done);
 
   // 動画の予定は「動画を開く」(YouTubeのアプリへ)と「やった」の2つ。トレーニングの記録は作らない
@@ -363,7 +373,7 @@ function renderTodayFocus() {
           <button type="button" class="ghost-pill-btn" data-discard-workout>破棄する</button>
         </div>
       </div>`;
-  const todoHtml = todo.map(({ r, status }) => (todayFocusShowsActiveWorkout && r.id === activeRoutineId) ? activeRowHtml(r) : r.kind === 'video' ? `
+  const todoHtml = todo.map(({ r, status }) => isActiveRow(r) ? activeRowHtml(r) : r.kind === 'video' ? `
       <div class="routine-today-row routine-today-video">
         <div class="routine-today-text">
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
@@ -379,7 +389,7 @@ function renderTodayFocus() {
           <div class="today-focus-title">${escapeHtml(routineContentText(r, templates))}</div>
           <div class="today-focus-sub">${escapeHtml(routineSubText(r, status))}</div>
         </div>
-        <button type="button" class="today-focus-start-btn" data-routine-start="${escapeHtml(r.id)}">始める</button>
+        <button type="button" class="today-focus-start-btn" data-routine-start="${escapeHtml(r.id)}">${status.perDay > 1 && status.doneCount > 0 ? `${status.doneCount + 1}回目を始める` : '始める'}</button>
       </div>`).join('');
   const brokenHtml = broken.map(({ r }) => `
       <div class="routine-today-row">
@@ -389,17 +399,19 @@ function renderTodayFocus() {
         </div>
         <button type="button" class="ghost-pill-btn" data-routine-fix="${escapeHtml(r.id)}">選び直す</button>
       </div>`).join('');
-  const doneHtml = done.map(({ r, status }) => `
+  // 済みの予定(動画以外)には小さく「もう1回」(予定より多くやった日も記録できるように、2026-10-27〜)
+  const doneHtml = done.map(({ r, status, actionable }) => (actionable && isActiveRow(r)) ? activeRowHtml(r) : `
       <div class="routine-today-row routine-today-done">
         <span>${escapeHtml(routineContentText(r, templates))}</span>
         <span class="routine-done-side">${r.kind === 'video'
-          ? `<button type="button" class="routine-uncheck-btn" data-routine-uncheck="${escapeHtml(r.id)}">取り消す</button>` : ''}<span class="routine-done-badge">${escapeHtml(routineDoneText(r, status))}</span></span>
+          ? `<button type="button" class="routine-uncheck-btn" data-routine-uncheck="${escapeHtml(r.id)}">取り消す</button>`
+          : actionable ? `<button type="button" class="routine-uncheck-btn" data-routine-start="${escapeHtml(r.id)}">もう1回</button>` : ''}<span class="routine-done-badge">${escapeHtml(routineDoneText(r, status))}</span></span>
       </div>`).join('');
   const laterHtml = later.length > 0
     ? `<p class="routine-today-later">ほかの予定：${later.map(({ r, status }) => `${escapeHtml(routineContentText(r, templates))}（${escapeHtml(status.next || '')}）`).join('、')}</p>`
     : '';
-  const headline = todo.length === 0 && broken.length === 0
-    ? `<p class="today-focus-rest">${done.length > 0 ? '今日の予定は終わりました' : '今日やる予定はありません'}</p>`
+  const headline = todo.length === 0 && broken.length === 0 && !todayFocusShowsActiveWorkout
+    ?`<p class="today-focus-rest">${done.length > 0 ? '今日の予定は終わりました' : '今日やる予定はありません'}</p>`
     : '';
 
   container.innerHTML = `
@@ -428,7 +440,7 @@ function renderRoutineScreen() {
       if (paused) statusText = '休止中';
       else if (!actionable) statusText = r.kind === 'template' ? '組み合わせが削除されています。内容を選び直してください' : '内容を選び直してください';
       else if (status.done) statusText = `今日 ${routineDoneText(r, status)}`;
-      else if (status.due) statusText = '今日やる日';
+      else if (status.due) statusText = status.doneCount > 0 ? `今日 ${status.doneCount}/${status.perDay}回済み` : '今日やる日';
       else statusText = `次は${status.next}`;
       return `
       <button type="button" class="routine-card${paused ? ' is-paused' : ''}" data-routine-edit="${escapeHtml(r.id)}">
@@ -566,6 +578,15 @@ function renderRoutineSheet(draft, isNew) {
         weekdays: '選んだ曜日にホームに出ます。やらなかった日の分は持ち越しません。',
       }[draft.freq]}</p>`;
 
+  // 1日に何回(2026-10-27〜、「朝と夜にエアロバイク」のように分けてやる時)。動画は「やった」が日付だけなので出さない
+  const perDay = Number.isInteger(draft.perDay) ? draft.perDay : 1;
+  const perDayHtml = draft.kind === 'video' ? '' : `
+      <div class="sheet-field-head"><span class="sheet-field-label">1日に何回</span></div>
+      <div class="choice-chips" role="radiogroup" aria-label="1日に何回">
+        ${[1, 2, 3].map((n) => `<button type="button" class="choice-chip" role="radio" aria-checked="${perDay === n}" data-routine-per-day="${n}">${n}回</button>`).join('')}
+      </div>
+      ${perDay > 1 ? `<p class="hint-text">${perDay}回やるまでホームに「始める」が出ます（朝と夜に分けてやる時など）。</p>` : ''}`;
+
   // 通知する時刻(1つ、2026-10-07〜)。iPhoneの時刻選びはそのまま使う(<input type="time">)
   const pushReady = typeof isCardioPushReady === 'function' && isCardioPushReady();
   const remindHtml = `
@@ -586,7 +607,7 @@ function renderRoutineSheet(draft, isNew) {
         <button type="button" class="danger-link-btn" data-routine-delete>この予定を削除する</button>
       </div>`;
 
-  body.innerHTML = `${kindHtml}${contentHtml}${freqHtml}${remindHtml}
+  body.innerHTML = `${kindHtml}${contentHtml}${freqHtml}${perDayHtml}${remindHtml}
       <p class="error-text" id="routine-sheet-error"></p>${manageHtml}`;
 }
 
@@ -1198,7 +1219,7 @@ function renderCustomTemplateList(templates) {
 // equipmentFilter: 「要望から作る」で選んだ器具の配列(絞り込み対象外ならnull/undefined)。
 // 有酸素種目は器具の概念が別枠(cardio_outdoor等)で噛み合わないため、絞り込みの対象外にして
 // 常に表示する（有酸素はメニュー画面から手動追加できる仕様のため、消えてしまうと追加できなくなる）。
-function renderExercisePicker(query, isSelectedFn, filterMode, equipmentFilter) {
+function renderExercisePicker(query, isSelectedFn, filterMode, equipmentFilter, { excludeCardio = false } = {}) {
   const listEl = document.getElementById('exercise-picker-list');
   const q = (query || '').trim().toLowerCase();
   let pool = EXERCISES;
@@ -1213,6 +1234,7 @@ function renderExercisePicker(query, isSelectedFn, filterMode, equipmentFilter) 
   if (equipmentFilter) {
     pool = pool.filter((ex) => ex.type === 'cardio' || ex.equipment.some((e) => equipmentFilter.includes(e)));
   }
+  if (excludeCardio) pool = pool.filter((ex) => ex.type !== 'cardio');
   const matches = pool.filter((ex) => !q || ex.name.toLowerCase().includes(q));
 
   if (matches.length === 0) {
@@ -2550,6 +2572,22 @@ function buildDayQuickLogHtml(dateStr, log) {
   return `<div class="day-quick-log"><div class="day-weight-label">ちょこっと記録</div><ul>${rows}</ul></div>`;
 }
 
+// 「ちょこっと記録」のシートでボタンにして並べる種目(最大8つ、有酸素は除く)。ちょこっと記録で最近使った種目 →
+// トレーニングの記録で最近やった種目 → どちらも無ければ懸垂・ディップス等の定番、の順で埋める
+const QUICK_SHEET_CHIP_MAX = 8;
+const QUICK_SHEET_DEFAULT_CHIPS = ['pullup', 'parallel_bar_dip', 'pushup', 'bodyweight_squat', 'plank'];
+function quickSheetChipExerciseIds() {
+  const ids = [];
+  const add = (id) => {
+    const e = findExerciseById(id);
+    if (e && e.type !== 'cardio' && !ids.includes(id) && ids.length < QUICK_SHEET_CHIP_MAX) ids.push(id);
+  };
+  loadQuickLog().forEach((e) => add(e.exerciseId));
+  recentExerciseIds().forEach(add);
+  if (ids.length < 3) QUICK_SHEET_DEFAULT_CHIPS.forEach(add);
+  return ids;
+}
+
 // 「ちょこっと記録」のシート。adding=trueなら種目・回数の入力欄を出す。draft.mode==='once'なら
 // ボタンを作らずにその場で1回分を記録する(「ディップス何回」など単発の記録、2026-10-09〜)
 function renderQuickSheet(adding, draft) {
@@ -2571,20 +2609,25 @@ function renderQuickSheet(adding, draft) {
       <p class="hint-text">ちょこっと記録は記録タブの日ごとの記録に残ります（グラフ・連続日数・週のまとめには数えません）。</p>`;
     return;
   }
-  const options = EXERCISES.filter((e) => e.type !== 'cardio');
-  // ちょこっと記録で最近使った種目を上に出す(懸垂・ディップスなどを毎回長い一覧から探さなくて済むように)
-  const recentIds = [...new Set(loadQuickLog().map((e) => e.exerciseId))].filter((id) => findExerciseById(id)).slice(0, 6);
-  const optionHtml = (e) => `<option value="${escapeHtml(e.id)}" ${e.id === draft.exerciseId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`;
-  const selectHtml = recentIds.length
-    ? `<optgroup label="最近使った種目">${recentIds.map((id) => optionHtml(findExerciseById(id))).join('')}</optgroup>
-       <optgroup label="すべての種目">${options.filter((e) => !recentIds.includes(e.id)).map(optionHtml).join('')}</optgroup>`
-    : options.map(optionHtml).join('');
+  // 種目は「よく使う種目」のボタン＋「ほかの種目を探す」(検索できる種目ピッカー)。2026-10-27〜、以前は全種目(70近く)の
+  // <select>で、長すぎて分かりにくいとユーザー指摘。よく使う種目はちょこっと記録で最近使った順、足りなければトレーニングの記録から
+  const quickChipIds = quickSheetChipExerciseIds();
   const ex = findExerciseById(draft.exerciseId);
   const timed = !!(ex && ex.holdBased);
+  const chipsHtml = quickChipIds.map((id) => {
+    const e = findExerciseById(id);
+    return `<button type="button" class="choice-chip" role="radio" aria-checked="${id === draft.exerciseId}" data-quick-exercise="${escapeHtml(id)}">${escapeHtml(e.name.replace(/（[^）]*）$/, ''))}</button>`;
+  }).join('');
   body.innerHTML = `
       ${once ? '<p class="hint-text">ボタンを作らずに、今やった分だけを記録します。</p>' : ''}
       <div class="sheet-field-head"><span class="sheet-field-label">種目</span></div>
-      <select class="routine-select" data-quick-field="exerciseId" aria-label="種目">${selectHtml}</select>
+      ${chipsHtml ? `<div class="choice-chips quick-exercise-chips" role="radiogroup" aria-label="よく使う種目">${chipsHtml}</div>` : ''}
+      ${ex && !quickChipIds.includes(ex.id) ? `
+      <button type="button" class="custom-target-btn quick-exercise-pick-btn is-selected" data-quick-pick>
+        <span class="custom-target-summary">✓ ${escapeHtml(ex.name)}</span>
+        <span class="custom-target-chevron" aria-hidden="true">変える ›</span>
+      </button>` : `
+      <button type="button" class="ghost-pill-btn quick-exercise-pick-btn" data-quick-pick>🔍 ほかの種目を探す</button>`}
       ${sheetWheelFieldHtml({ field: 'amount', label: timed ? '秒数' : '回数', unit: timed ? '秒' : '回', min: 1, max: timed ? 300 : 100, step: 1, value: draft.amount, presets: timed ? [15, 30, 45, 60] : [5, 10, 15, 20, 30], inputAttr: 'data-quick-amount' })}
       <div class="modal-actions">
         <button type="button" class="secondary-btn" ${once ? 'data-quick-close' : 'data-quick-add-cancel'}>やめる</button>

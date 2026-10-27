@@ -660,9 +660,17 @@ function newRoutineId() {
 // 予定の「通知する時刻」('HH:MM'、無ければ通知しない。2026-10-07〜)
 const ROUTINE_REMIND_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
+// 1日に何回やる予定か(routine.perDay、無ければ1回。2026-10-27〜、ユーザー「エアロバイクを朝と夜の2回に分けたい」)。
+// 動画の予定は「やった」が日付だけなので1日1回のまま
+const ROUTINE_PER_DAY_MAX = 3;
+function routinePerDay(r) {
+  return r.kind !== 'video' && Number.isInteger(r.perDay) && r.perDay > 1 ? Math.min(r.perDay, ROUTINE_PER_DAY_MAX) : 1;
+}
+
 function isValidRoutine(r) {
   if (!isPlainObject(r) || typeof r.id !== 'string' || !ROUTINE_FREQS.includes(r.freq)) return false;
   if (r.remindAt != null && !(typeof r.remindAt === 'string' && ROUTINE_REMIND_PATTERN.test(r.remindAt))) return false;
+  if (r.perDay != null && !(Number.isInteger(r.perDay) && r.perDay >= 1 && r.perDay <= ROUTINE_PER_DAY_MAX)) return false;
   if (r.freq === 'weekdays' && !(Array.isArray(r.weekdays) && r.weekdays.length > 0
     && r.weekdays.every((d) => Number.isInteger(d) && d >= 0 && d <= 6))) return false;
   if (r.kind === 'template') return typeof r.templateId === 'string';
@@ -827,6 +835,21 @@ function sessionCountsForRoutine(s, routine) {
       && (ex.type === 'cardio' ? isCardioRecorded(ex) : true));
   }
   return false;
+}
+
+// その予定を日ごとに何回やったか(日付キー → 記録の件数)。1日に2回以上の予定の「1/2回済み」に使う
+function routineDoneCounts(routine, history) {
+  const counts = new Map();
+  if (routine.kind === 'video') {
+    (routine.checks || []).forEach((key) => counts.set(key, 1));
+    return counts;
+  }
+  history.forEach((s) => {
+    if (!sessionCountsForRoutine(s, routine)) return;
+    const key = sessionRoutineDateKey(s);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return counts;
 }
 
 // その予定をやった日(日付キー)の集合と、日ごとの有酸素の合計時間(秒、種目1つの予定の目標表示用)
@@ -1024,7 +1047,7 @@ if (typeof module !== 'undefined') {
     loadCustomTemplates, saveCustomTemplate, updateCustomTemplate, deleteCustomTemplate,
     defaultWeeklyPlanDays, loadWeeklyPlans, saveWeeklyPlans, createWeeklyPlan, updateWeeklyPlanDays,
     deleteWeeklyPlan, getActiveWeeklyPlanId, setActiveWeeklyPlanId, updateWeeklyPlanFields,
-    loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, newRoutineId, videoCheckDays,
+    loadRoutineState, saveRoutineState, routinesFromWeeklyPlan, isValidRoutine, routineDoneDays, routineDoneCounts, routinePerDay, newRoutineId, videoCheckDays,
     isValidVideoUrl, normalizeVideoUrlInput, setRoutineCheck,
     loadCircuitLast, saveCircuitLast,
     saveActiveSessionSnapshot, loadActiveSessionSnapshot, clearActiveSessionSnapshot,

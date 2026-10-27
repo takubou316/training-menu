@@ -2568,6 +2568,10 @@ body.modal-open {
 }
 .home-quick-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .quick-once-btn { width: 100%; margin-top: 8px; }
+/* ちょこっと記録のシートの種目選び(よく使う種目のボタン＋「ほかの種目を探す」、2026-10-27〜) */
+.quick-exercise-chips { margin-bottom: 10px; }
+.quick-exercise-pick-btn { width: 100%; }
+.quick-exercise-pick-btn.is-selected { border-color: var(--accent); }
 .quick-log-buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .quick-log-btn {
   display: flex;

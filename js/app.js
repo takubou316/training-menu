@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 71;
+const APP_VERSION = 72;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -1441,12 +1441,15 @@ function wireCustomScreen() {
 function isExercisePickerSelected(id) {
   if (exercisePickerTarget === 'custom') return customExercises.some((ex) => ex.id === id);
   if (exercisePickerTarget === 'menu') return currentMenu && currentMenu.main.some((item) => item.exerciseId === id);
+  if (exercisePickerTarget === 'quick') return !!quickSheetDraft && quickSheetDraft.exerciseId === id;
   return false;
 }
 
 function renderExercisePickerNow() {
   const equipmentFilter = exercisePickerEquipmentFilterActive ? exercisePickerEquipmentFilter : null;
-  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter, equipmentFilter);
+  // ちょこっと記録は回数・秒数だけを残すので有酸素は出さない
+  renderExercisePicker(document.getElementById('exercise-picker-search').value, isExercisePickerSelected, exercisePickerFilter, equipmentFilter,
+    { excludeCardio: exercisePickerTarget === 'quick' });
 }
 
 // 絞り込み(フィルター切り替え・検索)で表示される一覧そのものが変わる時に呼ぶ。
@@ -1517,6 +1520,11 @@ function handleExercisePickerSelect(id) {
     }
   } else if (exercisePickerTarget === 'menu') {
     toggleMenuExercise(id);
+  } else if (exercisePickerTarget === 'quick') {
+    // ちょこっと記録の種目は1つだけなので、選んだらすぐ閉じてシートに戻る
+    closeExercisePicker();
+    setQuickDraftExercise(id);
+    return;
   }
   renderExercisePickerNow();
 }
@@ -1843,6 +1851,7 @@ function saveRoutineFromSheet() {
   }
   if (draft.freq === 'weekdays') routine.weekdays = [...draft.weekdays].sort((a, b) => a - b);
   if (draft.remindAt) routine.remindAt = draft.remindAt;
+  if (draft.kind !== 'video' && Number.isInteger(draft.perDay) && draft.perDay > 1) routine.perDay = draft.perDay;
 
   updateRoutineState((state) => {
     const i = state.items.findIndex((r) => r.id === routine.id);
@@ -1897,6 +1906,8 @@ function wireRoutineScreen() {
       rerenderRoutineSheet();
       return;
     }
+    const perDayBtn = e.target.closest('[data-routine-per-day]');
+    if (perDayBtn) { draft.perDay = Number(perDayBtn.dataset.routinePerDay); rerenderRoutineSheet(); return; }
     const remindBtn = e.target.closest('[data-routine-remind]');
     if (remindBtn) {
       draft.remindAt = remindBtn.dataset.routineRemind === 'on' ? (draft.remindAt || '19:00') : null;
@@ -2783,6 +2794,17 @@ function addQuickEntryNow(ex, amount) {
   return entry;
 }
 
+// シートの種目を変える(よく使う種目のボタン・種目ピッカーから)。時間で測る種目(プランク等)と回数の種目で量を合わせ直す
+function setQuickDraftExercise(exerciseId) {
+  if (!quickSheetDraft || !findExerciseById(exerciseId)) return;
+  if (quickSheetDraft.exerciseId === exerciseId) return;
+  quickSheetDraft.exerciseId = exerciseId;
+  quickSheetDraft.amount = quickSheetDraft.mode === 'once'
+    ? quickDefaultAmount(exerciseId)
+    : (findExerciseById(exerciseId).holdBased ? 30 : 15);
+  renderQuickSheetNow();
+}
+
 function openQuickSheet(draft) {
   quickSheetDraft = draft;
   document.getElementById('quick-sheet').classList.add('open');
@@ -2868,6 +2890,16 @@ function wireQuickLog() {
       renderQuickSheetNow();
       return;
     }
+    const chip = e.target.closest('[data-quick-exercise]');
+    if (chip && quickSheetDraft) {
+      flushNumberWheels(sheet);
+      setQuickDraftExercise(chip.dataset.quickExercise);
+      return;
+    }
+    if (e.target.closest('[data-quick-pick]') && quickSheetDraft) {
+      openExercisePicker('quick');
+      return;
+    }
     if (e.target.closest('[data-quick-once-save]')) {
       flushNumberWheels(sheet);
       const ex = quickSheetDraft && findExerciseById(quickSheetDraft.exerciseId);
@@ -2901,15 +2933,6 @@ function wireQuickLog() {
       renderQuickSheetNow();
       renderHomeQuickLog();
     }
-  });
-  sheet.addEventListener('change', (e) => {
-    if (!quickSheetDraft || !e.target.matches('[data-quick-field="exerciseId"]')) return;
-    quickSheetDraft.exerciseId = e.target.value;
-    // 時間で測る種目(プランク等)と回数の種目で、選べる範囲を合わせ直す
-    quickSheetDraft.amount = quickSheetDraft.mode === 'once'
-      ? quickDefaultAmount(quickSheetDraft.exerciseId)
-      : (findExerciseById(quickSheetDraft.exerciseId)?.holdBased ? 30 : 15);
-    renderQuickSheetNow();
   });
   sheet.addEventListener('input', (e) => {
     const input = e.target.closest('[data-quick-amount]');

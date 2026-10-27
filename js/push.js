@@ -169,7 +169,8 @@ let routinePushLastSignature = null;
 let routinePushTimer = null;
 
 // 予定がこの先やる日(dateKeyの配列、今日から)。一日おきは「やる日にやった」と仮定して先を読む
-function routineDueDateKeysAhead(r, doneDays, days = ROUTINE_PUSH_DAYS, now = new Date()) {
+// countsがあれば、1日に2回以上の予定は回数を満たした時だけ「今日は済み」とみなす
+function routineDueDateKeysAhead(r, doneDays, days = ROUTINE_PUSH_DAYS, now = new Date(), counts = null) {
   const keys = [];
   let last = [...doneDays.keys()].filter((k) => k <= localDateKey(now)).sort().pop() || null;
   for (let i = 0; i < days; i += 1) {
@@ -183,7 +184,7 @@ function routineDueDateKeysAhead(r, doneDays, days = ROUTINE_PUSH_DAYS, now = ne
       if (due) last = key;
     }
     // 今日もう済んでいる分は送らない
-    if (due && i === 0 && doneDays.has(key)) due = false;
+    if (due && i === 0 && (counts ? (counts.get(key) || 0) >= routinePerDay(r) : doneDays.has(key))) due = false;
     if (due) keys.push(key);
   }
   return keys;
@@ -199,7 +200,7 @@ function desiredRoutinePushJobs(now = new Date()) {
   state.items.forEach((r) => {
     if (r.paused || !r.remindAt || !routineActionable(r, templates)) return;
     const [hh, mm] = r.remindAt.split(':').map(Number);
-    routineDueDateKeysAhead(r, routineDoneDays(r, history), ROUTINE_PUSH_DAYS, now).forEach((key) => {
+    routineDueDateKeysAhead(r, routineDoneDays(r, history), ROUTINE_PUSH_DAYS, now, routineDoneCounts(r, history)).forEach((key) => {
       const [y, m, d] = key.split('-').map(Number);
       const fire = new Date(y, m - 1, d, hh, mm, 0, 0);
       if (fire.getTime() <= now.getTime() + 30 * 1000) return; // 過ぎた時刻は入れない
