@@ -39,18 +39,23 @@ function aiShareTextForSend() {
   return aiInfoState.sharing ? aiInfoState.shownShareText : '';
 }
 
-function aiShareSinceKey(days, now) {
-  return shiftDateKey(localDateKey(now), -(days - 1));
+// 期間に入る日付キーか(今日からdays日前〜今日。端末の時計のずれで保存された未来の日付や、形の壊れたキーは入れない。Codexレビュー指摘)
+function aiShareInRange(key, days, now) {
+  if (typeof key !== 'string' || !DATE_KEY_PATTERN.test(key)) return false;
+  const today = localDateKey(now);
+  return key >= shiftDateKey(today, -(days - 1)) && key <= today;
 }
 
 function aiTrainingLines(days, now) {
-  const since = aiShareSinceKey(days, now);
-  const sessions = loadHistory()
-    .filter((s) => { const key = localDateKey(s.date); return key && key >= since; })
+  // 履歴は形を検証せずに読むので、壊れた1件でプレビュー全体が描けなくならないよう、形の合うものだけ使う(Codexレビュー指摘)
+  const history = loadHistory();
+  const sessions = (Array.isArray(history) ? history : [])
+    .filter((s) => isPlainObject(s) && Array.isArray(s.exercises) && aiShareInRange(localDateKey(s.date), days, now))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
   if (sessions.length === 0) return ['（この期間の記録はありません）'];
   return sessions.map((s) => {
-    const parts = (s.exercises || []).filter(exerciseHasRecord).map((ex) => {
+    const parts = s.exercises.filter((ex) => isPlainObject(ex)
+      && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every(isPlainObject))) && exerciseHasRecord(ex)).map((ex) => {
       const name = ex.name || (findExerciseById(ex.exerciseId) || {}).name || ex.exerciseId;
       if (ex.type === 'cardio') {
         const dist = Number(ex.distance) > 0 ? `・${ex.distance}km` : '';
@@ -59,7 +64,7 @@ function aiTrainingLines(days, now) {
       // 自重種目の重量は体重から計算した目安なので、実際の重りと誤解されないよう渡さない
       const meta = findExerciseById(ex.exerciseId);
       const bodyweight = !!(meta && meta.equipment && meta.equipment[0] === 'bodyweight');
-      const sets = (ex.sets || []).filter((set) => set.done !== false && !set.isWarmup).map((set) => {
+      const sets = ex.sets.filter((set) => isPlainObject(set) && set.done !== false && !set.isWarmup).map((set) => {
         const amount = ex.holdBased ? `${set.reps}秒` : `${set.reps}回`;
         const weight = !bodyweight && Number(set.weight) > 0 ? `${set.weight}kg×` : '';
         const rpe = set.rpe ? `(RPE${set.rpe})` : '';
@@ -73,11 +78,10 @@ function aiTrainingLines(days, now) {
 }
 
 function aiQuickLines(days, now) {
-  const since = aiShareSinceKey(days, now);
   const byDay = new Map();
   loadQuickLog().forEach((e) => {
     const key = localDateKey(e.at);
-    if (!key || key < since) return;
+    if (!aiShareInRange(key, days, now)) return;
     const label = `${e.name} ${e.timed ? `${e.amount}秒` : `${e.amount}回`}`;
     if (!byDay.has(key)) byDay.set(key, new Map());
     const m = byDay.get(key);
@@ -88,10 +92,10 @@ function aiQuickLines(days, now) {
 }
 
 function aiDateValueLines(log, days, now, unit) {
-  const since = aiShareSinceKey(days, now);
-  const keys = Object.keys(log).filter((k) => k >= since).sort();
+  const keys = Object.keys(isPlainObject(log) ? log : {})
+    .filter((k) => aiShareInRange(k, days, now) && Number.isFinite(Number(log[k])) && Number(log[k]) > 0).sort();
   if (keys.length === 0) return ['（この期間の記録はありません）'];
-  return keys.map((k) => `- ${k}: ${log[k]}${unit}`);
+  return keys.map((k) => `- ${k}: ${Number(log[k])}${unit}`);
 }
 
 function aiRoutineLines() {
@@ -125,15 +129,7 @@ function buildAiShareText(itemKeys, now = new Date()) {
 function renderAiPanel() {
   const panel = document.getElementById('info-panel-ai');
   if (!panel) return;
-  const { sharing, items } = aiInfoState;
-  const shareText = sharing ? buildAiShareText(items) : '';
-  // 送る時は作り直さず、画面に見せたこの文章を渡す(見せた後に記録が増えた・日付をまたいだ時のずれを防ぐ。Codexレビュー指摘)
-  aiInfoState.shownShareText = shareText;
-  const itemsHtml = AI_SHARE_ITEMS.map((item) => `
-          <label class="ai-share-item">
-            <input type="checkbox" data-ai-share-item="${item.key}" ${items.has(item.key) ? 'checked' : ''}>
-            <span>${escapeHtml(item.label)}<span class="ai-share-item-note">${escapeHtml(item.note)}</span></span>
-          </label>`).join('');
+  const { sharing } = aiInfoState;
   panel.innerHTML = `
       <div class="ai-caution" role="note">
         <div class="ai-caution-title">AIの答えは正しいとは限りません</div>
@@ -148,24 +144,62 @@ function renderAiPanel() {
       <label class="sheet-field-label" for="ai-question">質問</label>
       <textarea id="ai-question" class="ai-question" rows="3" maxlength="1000" placeholder="例: 最近のスクワットの回数の伸び方をどう思う？">${escapeHtml(aiInfoState.question)}</textarea>
 
-      <div class="sheet-field-head"><span class="sheet-field-label">自分の記録をAIに見せる</span></div>
-      <div class="segmented" role="radiogroup" aria-label="自分の記録をAIに見せるか">
-        <button type="button" class="segmented-btn" role="radio" aria-checked="${!sharing}" data-ai-share="off">見せない</button>
-        <button type="button" class="segmented-btn" role="radio" aria-checked="${sharing}" data-ai-share="on">この質問だけ見せる</button>
+      <div class="sheet-field-head"><span class="sheet-field-label" id="ai-share-label">自分の記録をAIに見せる</span></div>
+      <div class="segmented" role="radiogroup" aria-labelledby="ai-share-label">
+        <label class="segmented-btn ai-share-choice"><input type="radio" name="ai-share" value="off" data-ai-share ${sharing ? '' : 'checked'}>見せない</label>
+        <label class="segmented-btn ai-share-choice"><input type="radio" name="ai-share" value="on" data-ai-share ${sharing ? 'checked' : ''}>この質問だけ見せる</label>
       </div>
-      ${sharing ? `
+      <div id="ai-share-area"></div>
+
+      <button type="button" class="primary-btn ai-send-btn" disabled>送る（承認されたら使えます）</button>`;
+  renderAiShareArea();
+}
+
+// 「見せない／この質問だけ見せる」の下(項目の選択とプレビュー)。ラジオボタン自体は描き直さない(操作中のフォーカスを失わないため。Codexレビュー指摘)
+function renderAiShareArea() {
+  const area = document.getElementById('ai-share-area');
+  if (!area) return;
+  if (!aiInfoState.sharing) {
+    aiInfoState.shownShareText = '';
+    area.innerHTML = '<p class="hint-text">記録は見せずに、質問の文だけを送ります。記録を踏まえて答えてほしい時は「この質問だけ見せる」を選んでください。</p>';
+    return;
+  }
+  const itemsHtml = AI_SHARE_ITEMS.map((item) => `
+          <label class="ai-share-item">
+            <input type="checkbox" data-ai-share-item="${item.key}" ${aiInfoState.items.has(item.key) ? 'checked' : ''}>
+            <span>${escapeHtml(item.label)}<span class="ai-share-item-note">${escapeHtml(item.note)}</span></span>
+          </label>`).join('');
+  area.innerHTML = `
       <div class="ai-share-box">
         <p class="hint-text">見せるものを選んでください。下の「AIに渡す内容」の文章だけが、この質問と一緒にOpenAIに送られます（名前・メールアドレスは送りません）。送った後は「見せない」に戻ります。</p>
         <div class="ai-share-items">${itemsHtml}
         </div>
         <details class="ai-share-preview" open>
-          <summary>AIに渡す内容（${shareText.length}文字）</summary>
-          <pre class="ai-share-text">${shareText ? escapeHtml(shareText) : '（何も選ばれていません）'}</pre>
+          <summary id="ai-share-summary"></summary>
+          <pre class="ai-share-text" id="ai-share-text"></pre>
         </details>
-      </div>` : `
-      <p class="hint-text">記録は見せずに、質問の文だけを送ります。記録を踏まえて答えてほしい時は「この質問だけ見せる」を選んでください。</p>`}
+      </div>`;
+  updateAiSharePreview();
+}
 
-      <button type="button" class="primary-btn ai-send-btn" disabled>送る（承認されたら使えます）</button>`;
+// 渡す文章を作り直してプレビューだけを書き換える(チェックの付け外しで項目のチェックボックスを作り直さない)。
+// 作れなかった時は「見せない」に戻す(画面は「見せない」なのに内部だけ見せる状態、にならないように。Codexレビュー指摘)
+function updateAiSharePreview() {
+  let text;
+  try {
+    text = buildAiShareText(aiInfoState.items);
+  } catch (e) {
+    resetAiShareConsent();
+    const off = document.querySelector('[data-ai-share][value="off"]');
+    if (off) off.checked = true;
+    const area = document.getElementById('ai-share-area');
+    if (area) area.innerHTML = '<p class="error-text">記録を読み取れなかったため、記録は見せない設定に戻しました。</p>';
+    return;
+  }
+  // 送る時は作り直さず、画面に見せたこの文章を渡す(見せた後に記録が増えた・日付をまたいだ時のずれを防ぐ。Codexレビュー指摘)
+  aiInfoState.shownShareText = text;
+  document.getElementById('ai-share-summary').textContent = `AIに渡す内容（${text.length}文字）`;
+  document.getElementById('ai-share-text').textContent = text || '（何も選ばれていません）';
 }
 
 function setInfoTab(tab) {
@@ -173,7 +207,8 @@ function setInfoTab(tab) {
   document.querySelectorAll('[data-info-tab]').forEach((btn) => {
     const on = btn.dataset.infoTab === tab;
     btn.setAttribute('aria-selected', String(on));
-    btn.setAttribute('aria-checked', String(on));
+    // 選ばれているタブだけTabキーで止まり、タブ同士は←→で移る(WAI-ARIAのタブの作法)
+    btn.tabIndex = on ? 0 : -1;
   });
   document.getElementById('info-panel-ai').hidden = !ai;
   document.getElementById('info-panel-knowledge').hidden = ai;
@@ -190,27 +225,34 @@ function enterInfoScreen() {
 }
 
 function wireInfoScreen() {
-  document.querySelectorAll('[data-info-tab]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      // タブを切り替えて戻ってきた時も、許可は選び直してもらう
-      if (btn.dataset.infoTab === 'ai') resetAiShareConsent();
-      setInfoTab(btn.dataset.infoTab);
+  const tabs = [...document.querySelectorAll('[data-info-tab]')];
+  const selectTab = (btn) => {
+    // タブを切り替えて戻ってきた時も、許可は選び直してもらう
+    if (btn.dataset.infoTab === 'ai') resetAiShareConsent();
+    setInfoTab(btn.dataset.infoTab);
+  };
+  tabs.forEach((btn, i) => {
+    btn.addEventListener('click', () => selectTab(btn));
+    btn.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      selectTab(next);
+      next.focus();
     });
   });
   const panel = document.getElementById('info-panel-ai');
-  panel.addEventListener('click', (e) => {
-    const share = e.target.closest('[data-ai-share]');
-    if (share) {
-      aiInfoState.sharing = share.dataset.aiShare === 'on';
-      renderAiPanel();
-    }
-  });
   panel.addEventListener('change', (e) => {
+    if (e.target.matches('[data-ai-share]')) {
+      aiInfoState.sharing = e.target.value === 'on';
+      renderAiShareArea();
+      return;
+    }
     const box = e.target.closest('[data-ai-share-item]');
     if (!box) return;
     if (box.checked) aiInfoState.items.add(box.dataset.aiShareItem);
     else aiInfoState.items.delete(box.dataset.aiShareItem);
-    renderAiPanel();
+    updateAiSharePreview();
   });
   // 質問の文は描き直しても消えないよう覚えておく
   panel.addEventListener('input', (e) => {
