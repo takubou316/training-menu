@@ -182,6 +182,8 @@ function routineDueDateKeysAhead(r, doneDays, days = ROUTINE_PUSH_DAYS, now = ne
     else {
       due = last !== key && !(last && last === previousDateKey(key));
       if (due) last = key;
+      // 今日もうやっていても、1日に2回以上の予定で回数が足りなければ今日はまだやる日(ホームの「2回目を始める」と揃える。Codexレビュー指摘)
+      if (i === 0 && last === key) due = true;
     }
     // 今日もう済んでいる分は送らない
     if (due && i === 0 && (counts ? (counts.get(key) || 0) >= routinePerDay(r) : doneDays.has(key))) due = false;
