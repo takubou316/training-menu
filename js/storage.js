@@ -921,6 +921,8 @@ function validateHistoryValue(history) {
     return s.exercises.every((ex) => isPlainObject(ex) && typeof ex.exerciseId === 'string'
       // 有酸素の休憩の記録は、あれば秒数を持つ物の配列(履歴の表示で合計するため。2026-10-08 Codexレビュー指摘)
       && (ex.restLog == null || (Array.isArray(ex.restLog) && ex.restLog.every((r) => isPlainObject(r) && Number.isFinite(r.durationSec))))
+      // 有酸素のきつさ(2026-10-28〜)。無いのは可、あれば0〜10の整数
+      && (ex.type !== 'cardio' || ex.rpe == null || (Number.isInteger(ex.rpe) && ex.rpe >= 0 && ex.rpe <= 10))
       && (ex.type === 'cardio' || (Array.isArray(ex.sets) && ex.sets.every((set) => isPlainObject(set)
         // 保持系の休憩の秒数(2026-10-07〜)。無いのは可、あれば0以上の数の配列
         && (set.holdRests == null || (Array.isArray(set.holdRests)

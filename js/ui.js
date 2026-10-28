@@ -1673,6 +1673,35 @@ function buildHoldTargetMetaHtml(ex, exIndex) {
       </div>`;
 }
 
+// 有酸素の「きつさ」(2026-10-28〜、ユーザー要望)。筋トレのRPE(あと何回できたか)は有酸素に合わないので以前撤廃しており、
+// 有酸素向けのBorg CR10(0〜10)を種目ごとに1つ、終わった後に入れる(ユーザー判断)。未入力でもよい。カロリー計算には使わない
+const CARDIO_RPE_WORDS = {
+  0: '何もしていない', 1: 'とても楽', 2: '楽', 3: 'ふつう', 4: 'ややきつい', 5: 'きつい',
+  6: 'きつい', 7: 'とてもきつい', 8: 'とてもきつい', 9: 'とてもきつい', 10: '限界',
+};
+
+function isValidCardioRpe(v) {
+  return normalizeCardioRpe(v) != null;
+}
+
+function cardioRpeText(v) {
+  const n = normalizeCardioRpe(v);
+  return n != null ? `${n}（${CARDIO_RPE_WORDS[n]}）` : '未入力';
+}
+
+function buildCardioRpeFieldHtml(ex, exIndex) {
+  const current = normalizeCardioRpe(ex.rpe);
+  const chips = [null, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => `
+          <label class="choice-chip cardio-rpe-chip"><input type="radio" name="cardio-rpe-${exIndex}" value="${n == null ? '' : n}" ${current === n ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="rpe">${n == null ? 'なし' : n}</label>`).join('');
+  return `
+      <div class="cardio-rpe-field">
+        <div class="slider-label"><span>きつさ（0〜10）</span><span class="slider-value" data-cardio-rpe-text="${exIndex}">${cardioRpeText(current)}</span></div>
+        <div class="choice-chips cardio-rpe-chips" role="radiogroup" aria-label="${escapeHtml(ex.name)}のきつさ" aria-describedby="cardio-rpe-hint-${exIndex}">${chips}
+        </div>
+        <p class="hint-text cardio-rpe-hint" id="cardio-rpe-hint-${exIndex}">終わった後に、全体を通してどのくらいきつかったか。3=ふつう・5=きつい・7=とてもきつい・10=限界</p>
+      </div>`;
+}
+
 // 有酸素種目(type:'cardio')専用の記録カード。セット/回数/重量ではなく時間・距離(該当種目のみ)を
 // 記録し、体重×MET×時間から推定消費カロリーを表示する。ex.durationは秒単位(1秒刻み)で持つ
 // (以前は分単位・15秒刻みだったが、計測タイマーとの丸め誤差が出るため秒単位に統一した)。
@@ -1721,6 +1750,7 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       </div>` : ''}
       <div class="ex-note" data-cardio-calorie="${exIndex}">推定消費カロリー: 約${Math.round(calories)}kcal</div>
       <div class="ex-note" data-cardio-rest-summary="${exIndex}" ${(ex.restLog && ex.restLog.length) ? '' : 'hidden'}>${formatCardioRestSummary(ex.restLog)}</div>
+      ${buildCardioRpeFieldHtml(ex, exIndex)}
       <label class="done-toggle">
         <input type="checkbox" ${ex.done ? 'checked' : ''} data-cardio-ex="${exIndex}" data-cardio-field="done">
         <span class="done-toggle-pill">完了</span>
@@ -1776,7 +1806,7 @@ function buildExerciseDetailHtml(ex) {
     // 完了を押し忘れても時間があれば実施した扱い(isCardioRecorded)。2026-10-03以前に
     // 完了を押さずに保存された記録も、時間が残っていればここで表示されるようになる。
     return isCardioRecorded(ex)
-      ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}`
+      ? `${formatMinSec(ex.duration || 0)}${ex.distance ? `・${Number(ex.distance).toFixed(1)}km` : ''}${restSummary ? `・${restSummary}` : ''}${isValidCardioRpe(ex.rpe) ? `・きつさ${cardioRpeText(ex.rpe)}` : ''}`
       : '未記録';
   }
   const exerciseMeta = findExerciseById(ex.exerciseId);

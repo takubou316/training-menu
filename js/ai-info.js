@@ -59,7 +59,9 @@ function aiTrainingLines(days, now) {
       const name = ex.name || (findExerciseById(ex.exerciseId) || {}).name || ex.exerciseId;
       if (ex.type === 'cardio') {
         const dist = Number(ex.distance) > 0 ? `・${ex.distance}km` : '';
-        return `${name} ${formatMinSec(Number(ex.duration) || 0)}${dist}`;
+        const rpeValue = normalizeCardioRpe(ex.rpe);
+        const rpe = rpeValue != null ? `・きつさ${rpeValue}/10` : '';
+        return `${name} ${formatMinSec(Number(ex.duration) || 0)}${dist}${rpe}`;
       }
       // 自重種目の重量は体重から計算した目安なので、実際の重りと誤解されないよう渡さない
       const meta = findExerciseById(ex.exerciseId);

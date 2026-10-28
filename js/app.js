@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 75;
+const APP_VERSION = 76;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -2355,6 +2355,15 @@ function handleCardioLogInput(e) {
   }
 
   const ex = currentSession.exercises[exIndex];
+  if (field === 'rpe') {
+    // 有酸素のきつさ(0〜10、「なし」は未入力。2026-10-28〜)。ラジオボタンはinputとchangeの両方が来るので、changeだけで保存する
+    if (e.type !== 'change') return;
+    ex.rpe = normalizeCardioRpe(target.value);
+    const textEl = document.querySelector(`[data-cardio-rpe-text="${exIndex}"]`);
+    if (textEl) textEl.textContent = cardioRpeText(ex.rpe);
+    persistActiveSessionSnapshot();
+    return;
+  }
   ex[field] = field === 'done' ? target.checked : target.value;
   if (field !== 'done') {
     // .parentElementではなく.closest('.slider-field')を使う理由は下のhandleLogInputの

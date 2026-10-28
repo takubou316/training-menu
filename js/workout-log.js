@@ -238,6 +238,14 @@ function applyWarmupSetsSetting(session, enabled) {
 // ===== 「完了」したかの判定（2026-10-03〜） =====
 // 有酸素は「完了」を押し忘れても、時間が計測・入力されていれば実施したものとして扱う
 // (ウォーキングを計測したのに完了を押さずに記録を終え、記録に残らなかった実例があったため)。
+// 有酸素のきつさ(Borg CR10、0〜10の整数)にする。それ以外(空・null・小数・範囲外・真偽値・配列・" 7 "等)はnull=未入力。
+// 記録画面・記録の保存・履歴の表示・AIに渡す文章で同じ判定を使う(Number()だと false→0・[7]→7 のように通ってしまう。Codexレビュー指摘)
+function normalizeCardioRpe(v) {
+  if (typeof v === 'number') return Number.isInteger(v) && v >= 0 && v <= 10 ? v : null;
+  if (typeof v === 'string' && /^(?:[0-9]|10)$/.test(v)) return Number(v);
+  return null;
+}
+
 function isCardioRecorded(ex) {
   return !!ex.done || Number(ex.duration) > 0;
 }
@@ -292,6 +300,8 @@ function finalizeSession(session) {
         distance: e.distance,
         restLog: e.restLog || [],
         met: e.met,
+        // 有酸素のきつさ(Borg CR10の0〜10、2026-10-28〜)。未入力ならnull
+        rpe: normalizeCardioRpe(e.rpe),
         done: true,
       }
       : {

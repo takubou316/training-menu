@@ -2922,6 +2922,22 @@ body.modal-open {
   color: #fff;
 }
 
+/* 有酸素のきつさ(0〜10、2026-10-28〜)。中のラジオボタンは隠し、選択中はchoice-chipの選択の見た目 */
+.cardio-rpe-field { margin: 10px 0 4px; }
+.cardio-rpe-chips { gap: 6px; }
+.cardio-rpe-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px; /* Appleのタップ領域の目安 */
+  padding: 0 8px;
+}
+.cardio-rpe-chip input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.cardio-rpe-chip:has(input:checked) { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+.cardio-rpe-chip:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cardio-rpe-hint { margin: 6px 0 0; }
+
 /* 一覧の各種目の「3セット × 20回・休憩90秒　変更 ›」 */
 .custom-target-btn {
   display: flex;
