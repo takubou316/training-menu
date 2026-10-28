@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 76;
+const APP_VERSION = 77;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -3230,8 +3230,6 @@ function init() {
   wireRoutineScreen();
   wireModeWeeklyPlanSection();
   wireKnowledgeScreen();
-  // js/ai-info.jsは後から足したファイルなので、古いindex.html(キャッシュ)と組み合わさって読み込まれていない時も起動を止めない
-  if (typeof wireInfoScreen === 'function') wireInfoScreen();
   restoreLastSettings();
   wireBodyWeightLog();
   wireWaistLog();
@@ -3472,11 +3470,7 @@ function init() {
       }
       if (target === 'record') renderRecordScreen();
       if (target === 'weekly') enterWeeklyScreenFromNav();
-      if (target === 'knowledge') {
-        // 情報画面(2026-10-27〜、旧「豆知識」)。中のタブは豆知識とAIに聞く(js/ai-info.js)
-        renderKnowledgeScreen();
-        if (typeof enterInfoScreen === 'function') enterInfoScreen();
-      }
+      if (target === 'knowledge') renderKnowledgeScreen(); // 情報画面(旧「豆知識」)
       stopHoldTimer();
       stopCardioTimer();
       endRestTimer();

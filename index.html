@@ -318,17 +318,9 @@ try {
       <button type="button" class="secondary-btn template-manage-add-btn" id="template-manage-add-btn">＋ 新しい組み合わせを作る</button>
     </section>
 
-    <!-- ===== 情報画面（2026-10-27〜、旧「豆知識」。中のタブで豆知識とAIに聞くを切り替える。AIはjs/ai-info.js） ===== -->
+    <!-- ===== 情報画面（2026-10-27〜、旧「豆知識」。2026-10-28に「AIに聞く」タブは廃止） ===== -->
     <section id="screen-knowledge" class="screen">
       <h2>情報</h2>
-      <div class="segmented info-tabs" role="tablist" aria-label="情報の種類">
-        <button type="button" class="segmented-btn" role="tab" id="info-tab-knowledge" aria-controls="info-panel-knowledge" aria-selected="true" data-info-tab="knowledge">豆知識</button>
-        <button type="button" class="segmented-btn" role="tab" id="info-tab-ai" aria-controls="info-panel-ai" aria-selected="false" tabindex="-1" data-info-tab="ai">AIに聞く</button>
-      </div>
-
-      <div id="info-panel-ai" role="tabpanel" aria-labelledby="info-tab-ai" hidden></div>
-
-      <div id="info-panel-knowledge" role="tabpanel" aria-labelledby="info-tab-knowledge">
       <p class="hint-text">教科書（JATIトレーニング指導者テキスト等）を参考にした、種目に限らない一般的な知識です。</p>
 
       <div id="knowledge-today-tip" class="knowledge-today-tip"></div>
@@ -339,7 +331,6 @@ try {
       </div>
 
       <div id="knowledge-list"></div>
-      </div>
     </section>
   </main>
 
@@ -570,7 +561,6 @@ try {
 <script src="js/rest-timer.js"></script>
 <script src="js/sync.js"></script>
 <script src="js/push.js"></script>
-<script src="js/ai-info.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

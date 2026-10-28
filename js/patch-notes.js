@@ -6,6 +6,13 @@
 // v68より前の版は載せていない（ユーザー判断「今回からでいい」）。
 const PATCH_NOTES = [
   {
+    version: 77,
+    date: '2026-10-28',
+    items: [
+      { kind: 'change', text: '「情報」の「AIに聞く」タブをなくしました（ChatGPTとつなぐ予定をやめたため）。「情報」は豆知識だけになります' },
+    ],
+  },
+  {
     version: 76,
     date: '2026-10-28',
     items: [

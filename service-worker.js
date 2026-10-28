@@ -1,7 +1,7 @@
 // 静的アセットのみをオフラインキャッシュする。バックエンドAPIは持たないため素通し対象はない。
 
 // js/app.jsのAPP_VERSIONと必ず同じ番号にする(「その他の設定」のバージョン表示で比べる)
-const CACHE_NAME = 'training-menu-v76';
+const CACHE_NAME = 'training-menu-v77';
 // index.htmlで読み込むローカルファイルはすべてここに入れること（漏れるとオフライン起動に失敗する）。
 // 動画(media/)は容量が大きくRangeリクエストとも相性が悪いため対象外。
 const ASSETS = [
@@ -24,7 +24,6 @@ const ASSETS = [
   './js/rest-timer.js',
   './js/sync.js',
   './js/push.js',
-  './js/ai-info.js',
   './js/app.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
