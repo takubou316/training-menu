@@ -441,6 +441,10 @@ RPEは`js/rules.js`の`RPE_SCALE`（1〜10、0.5刻み）を使用。レジス�
 - **きつさ（2026-10-28〜、v76）**: 上の筋トレ用RPEとは別に、**有酸素向けのBorg CR10（0〜10の整数）を種目ごとに1つ**（ユーザー判断）。記録カードに「なし／0〜10」の
   ボタン（中はラジオボタン、`buildCardioRpeFieldHtml`）、言葉は`CARDIO_RPE_WORDS`（3=ふつう・5=きつい・7=とてもきつい・10=限界）。`ex.rpe`（未入力はnull）として記録・履歴の詳細・
   出す。カロリー計算には使わない。バックアップ検証は0〜10の整数かnull。**クラウド同期には送っていない**（表に列が無い）
+- **続きから測る（2026-11-04〜、v78）**: 計測を止めた後の▶は「続きから測る」（記録の時間`ex.duration`と休憩`ex.restLog`の続き。目標を過ぎていれば知らせ済み扱い）、
+  横の「0から測り直す」（確認あり）で0から（`toggleCardioTimer(button, fromZero)`）。時間を変えたら`updateCardioTimerIdleButtons`でボタンを合わせる
+- **押して数字で入力（2026-11-04〜、v78）**: 有酸素の「時間」（分・秒）と保持時間系セットの秒数の表示はボタンで、押すと小窓`#direct-input-modal`（`openDirectInput`/`submitDirectInput`）。
+  開く時と確定時の両方で、完了済みのセット・計測中の有酸素は弾く。`type="number"`の読めない入力（`validity.badInput`）は空欄(0)と区別してエラーにする
 - **推定消費カロリー**を`体重×MET×時間`で表示する（`js/workout-log.js`の`estimateCardioCalories`。
   MET値は2024 Adult Compendium of Physical Activities(Ainsworth et al.)の中強度時の代表値）
 - 自動生成（要望から作る）のアルゴリズムには組み込んでいない（部位・動作パターンベースの選定と

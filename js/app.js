@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 77;
+const APP_VERSION = 78;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -84,6 +84,37 @@ async function hardReload() {
 // 80pxでは軽すぎた(ユーザー要望で140pxに)。離した後は回る表示を最低0.5秒見せてから更新する(すぐ消えると更新したか分からないため)
 const PULL_REFRESH_PX = 140;
 const PULL_REFRESH_MIN_SPIN_MS = 500;
+
+// 下のメニュー(.bottom-nav、position:fixed)が画面の途中に浮いて出る不具合への対策(2026-11-04、iPhone実機の
+// スクショ2枚で報告。YouTubeアプリから戻った直後の画面など)。iPhoneのホーム画面アプリでは、キーボードを閉じた後や
+// 他のアプリから戻った後に、固定表示の位置が古い画面の高さのまま残ることがある(iOS側の既知の挙動)。
+// 原因の場面はPCで再現できていないため、起こりやすいきっかけ(入力欄から離れた・画面に戻った・表示領域の高さが
+// 変わった)のたびに、固定表示の位置を計算し直させる。
+function nudgeFixedLayout() {
+  const nav = document.querySelector('.bottom-nav');
+  if (nav) {
+    nav.style.transform = 'translateX(-50%) translateZ(0)';
+    void nav.offsetHeight; // ここで一度レイアウトを確定させる
+    requestAnimationFrame(() => { nav.style.transform = ''; });
+  }
+  // スクロール位置を同じ値で入れ直すと、iOSが表示領域を測り直す(シート等でロック中は触らない)
+  if (!document.body.classList.contains('modal-open')) window.scrollTo(window.scrollX, window.scrollY);
+}
+
+function wireFixedLayoutRecovery() {
+  let timer = null;
+  const schedule = (delay = 120) => {
+    clearTimeout(timer);
+    timer = setTimeout(nudgeFixedLayout, delay);
+  };
+  document.addEventListener('focusout', () => schedule(), true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') schedule(200);
+  });
+  window.addEventListener('pageshow', () => schedule(200));
+  window.addEventListener('resize', () => schedule());
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', () => schedule());
+}
 
 function wirePullToRefresh() {
   const indicator = document.getElementById('pull-refresh');
@@ -1378,6 +1409,7 @@ function wireCustomScreen() {
 
   wireCustomTargetSheet();
   wireCardioTargetSheet();
+  wireDirectInput();
 
   document.getElementById('custom-wu-cd').addEventListener('click', (e) => {
     // ⓘ(data-info-toggle)は#mainの共通ハンドラで処理されるのでここでは扱わない
@@ -2333,9 +2365,121 @@ function applyCardioDurationValue(exIndex, value) {
     const calories = estimateCardioCalories(ex.met, getBodyWeightKg(), Number(ex.duration) || 0);
     calorieEl.textContent = `推定消費カロリー: 約${Math.round(calories)}kcal`;
   }
+  if (typeof updateCardioTimerIdleButtons === 'function') updateCardioTimerIdleButtons(exIndex);
   // 計測タイマーはDOMイベントを経由せずここを直接呼ぶため、「記録して終了」の可否もここで更新する
   // (時間が入れば完了を押していなくても記録できる、isCardioRecorded参照)。
   updateFinishButtonState();
+}
+
+// ===== 押して数字で入力（2026-11-04〜） =====
+// ユーザー要望「時間のところをタップしたら入力できるようにしたい」。有酸素の「時間」(分・秒)と、
+// プランク等の保持時間系セットの秒数で、値の表示を押すと小窓(#direct-input-modal)で数字を打てる。
+// 決めた値はホイール・スライダーと同じ経路で反映する(保持系はnumberWheelSetValue、有酸素はapplyCardioDurationValue)。
+let directInputTarget = null; // { kind: 'cardio'|'hold', exIndex, setIndex }
+
+function openDirectInput(trigger) {
+  if (!currentSession) return;
+  const kind = trigger.dataset.directInput;
+  const exIndex = Number(trigger.dataset.directEx);
+  const setIndex = trigger.dataset.directSet != null ? Number(trigger.dataset.directSet) : null;
+  const ex = currentSession.exercises[exIndex];
+  if (!ex) return;
+  let currentSec;
+  if (kind === 'cardio') {
+    // 計測中はタイマーの値が正なので打たせない(計測画面が前に出ているので普通は押せない)
+    if (typeof activeCardioTimer !== 'undefined' && activeCardioTimer && activeCardioTimer.exIndex === exIndex) return;
+    currentSec = Math.max(0, Math.floor(Number(ex.duration) || 0));
+  } else {
+    const set = ex.sets && ex.sets[setIndex];
+    const input = document.querySelector(`input[data-ex="${exIndex}"][data-set="${setIndex}"][data-field="reps"]`);
+    // 完了済みのセットは値を変えない(ホイールと同じ)
+    if (!set || !input || input.disabled || set.done) return;
+    currentSec = Number(input.value) || 0;
+  }
+  directInputTarget = { kind, exIndex, setIndex };
+  const isCardio = kind === 'cardio';
+  document.getElementById('direct-input-title').textContent = `${ex.name}の${isCardio ? '時間' : '秒数'}`;
+  document.getElementById('direct-input-min-wrap').hidden = !isCardio;
+  const minEl = document.getElementById('direct-input-min');
+  const secEl = document.getElementById('direct-input-sec');
+  minEl.value = isCardio ? String(Math.floor(currentSec / 60)) : '';
+  secEl.value = String(isCardio ? currentSec % 60 : currentSec);
+  document.getElementById('direct-input-error').textContent = '';
+  document.getElementById('direct-input-modal').classList.add('open');
+  // 打ち始めやすいよう、最初の欄を選んだ状態にする(iPhoneは操作の中でfocusすればキーボードが出る)
+  const first = isCardio ? minEl : secEl;
+  first.focus();
+  first.select();
+}
+
+function closeDirectInput() {
+  const modal = document.getElementById('direct-input-modal');
+  if (!modal.classList.contains('open')) return;
+  modal.classList.remove('open');
+  directInputTarget = null;
+  if (document.activeElement && modal.contains(document.activeElement)) document.activeElement.blur();
+}
+
+function parseDirectInputNumber(el) {
+  // type="number"は「-」等の数として読めない入力だとvalueが空になる。空欄(0)と区別してエラーにする(Codexレビュー指摘)
+  if (el.validity && el.validity.badInput) return null;
+  const raw = String(el.value).trim();
+  if (raw === '') return 0;
+  if (!/^\d+$/.test(raw)) return null;
+  return Number(raw);
+}
+
+function submitDirectInput() {
+  const t = directInputTarget;
+  if (!t || !currentSession) return closeDirectInput();
+  const ex = currentSession.exercises[t.exIndex];
+  const errorEl = document.getElementById('direct-input-error');
+  const sec = parseDirectInputNumber(document.getElementById('direct-input-sec'));
+  // 小窓を開いている間に計測が始まった・セットが完了した時は反映しない(開く時と同じ条件を確定時にも確かめる)
+  if (!ex || (t.kind === 'cardio' && typeof activeCardioTimer !== 'undefined' && activeCardioTimer && activeCardioTimer.exIndex === t.exIndex)
+    || (t.kind === 'hold' && (!ex.sets[t.setIndex] || ex.sets[t.setIndex].done))) {
+    closeDirectInput();
+    return;
+  }
+  if (t.kind === 'cardio') {
+    const min = parseDirectInputNumber(document.getElementById('direct-input-min'));
+    if (min == null || sec == null) { errorEl.textContent = '0以上の整数で入力してください'; return; }
+    if (sec > 59) { errorEl.textContent = '秒は0〜59で入力してください'; return; }
+    const total = min * 60 + sec;
+    if (total > 24 * 3600) { errorEl.textContent = '24時間以内で入力してください'; return; }
+    const slider = document.querySelector(`[data-cardio-ex="${t.exIndex}"][data-cardio-field="duration"]`);
+    if (slider) {
+      // スライダーの上限(既定120分)を超える時は10分単位で広げる(計測タイマーと同じ)
+      if (total > Number(slider.max)) {
+        slider.max = String(Math.ceil(total / 600) * 600);
+        const maxLabel = slider.closest('.slider-track-row')?.querySelector('.slider-bound-max');
+        if (maxLabel) maxLabel.textContent = `${Number(slider.max) / 60}分`;
+      }
+      slider.value = String(total);
+      if (typeof updateSliderTrackFill === 'function') updateSliderTrackFill(slider);
+    }
+    applyCardioDurationValue(t.exIndex, total);
+  } else {
+    const input = document.querySelector(`input[data-ex="${t.exIndex}"][data-set="${t.setIndex}"][data-field="reps"]`);
+    const max = input ? Number(input.max) : 300;
+    if (sec == null) { errorEl.textContent = '0以上の整数で入力してください'; return; }
+    if (sec > max) { errorEl.textContent = `${max}秒以内で入力してください`; return; }
+    const track = input && input.closest('.slider-field')?.querySelector('.number-wheel-track');
+    if (track) numberWheelSetValue(track, sec);
+  }
+  persistActiveSessionSnapshot();
+  closeDirectInput();
+}
+
+function wireDirectInput() {
+  const modal = document.getElementById('direct-input-modal');
+  modal.addEventListener('click', (e) => {
+    if (e.target.closest('[data-direct-input-close]')) closeDirectInput();
+  });
+  document.getElementById('direct-input-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    submitDirectInput();
+  });
 }
 
 // 有酸素種目は「セット」がなく、時間・距離・きつさを直接その種目に持たせているため、
@@ -3216,6 +3360,7 @@ function wireSyncChoiceModal() {
 
 function init() {
   wirePullToRefresh();
+  wireFixedLayoutRecovery();
   renderAppVersion();
   // 新しいService Workerのキャッシュは読み込み後に作られるので、少し後にもう一度見る
   setTimeout(renderAppVersion, 3000);
@@ -3319,8 +3464,18 @@ function init() {
     }
     const holdTimerTrigger = e.target.closest('[data-hold-timer]');
     if (holdTimerTrigger) toggleHoldTimer(holdTimerTrigger);
+    const directInputTrigger = e.target.closest('[data-direct-input]');
+    if (directInputTrigger) {
+      openDirectInput(directInputTrigger);
+      return;
+    }
     const cardioTimerTrigger = e.target.closest('[data-cardio-timer]');
     if (cardioTimerTrigger) toggleCardioTimer(cardioTimerTrigger);
+    // 「0から測り直す」: 記録に入っている時間・休憩を消して0から測る(消えるので確認を挟む)
+    const cardioRestartTrigger = e.target.closest('[data-cardio-timer-restart]');
+    if (cardioRestartTrigger && window.confirm('今の時間と休憩の記録を消して、0から測り直しますか？')) {
+      toggleCardioTimer(cardioRestartTrigger, true);
+    }
     const cardioTargetTrigger = e.target.closest('[data-cardio-target-custom], [data-cardio-target-log]');
     if (cardioTargetTrigger) {
       openCardioTargetSheet(cardioTargetTrigger.dataset.cardioTargetCustom != null
@@ -3442,6 +3597,7 @@ function init() {
       // (以前ここで呼んでいた週間プランの小窓の関数は、予定への作り直しで無くなっており、エラーで後ろの2つが閉じなかった)
       closeFinishIncompleteModal();
       closeStartOverwriteModal();
+      closeDirectInput();
     }
   });
 

@@ -726,6 +726,11 @@ function buildCooldownHtml(cooldown) {
     </div>`;
 }
 
+// セット間の休憩の表示。0秒は「休憩なし」(2026-11-04〜、以前は「休憩0秒」と出ていた)
+function setRestText(sec) {
+  return Number(sec) > 0 ? `休憩${sec}秒` : '休憩なし';
+}
+
 // メニュー確認画面の種目1つ分の「何セット×何回」。
 function menuItemMetaText(item, isCircuit) {
   if (item.type === 'cardio') {
@@ -736,7 +741,7 @@ function menuItemMetaText(item, isCircuit) {
     : item.fixedTarget ? `${item.repsMin}回` : `${item.repsMin}〜${item.repsMax}回`;
   if (isCircuit) return valueText;
   const warmupText = item.warmupSets > 0 && loadWarmupSetsEnabled() ? `ウォームアップ${item.warmupSets}セット＋` : '';
-  return `${warmupText}${item.sets}セット × ${valueText}　休憩${item.restSec}秒`;
+  return `${warmupText}${item.sets}セット × ${valueText}　${setRestText(item.restSec)}`;
 }
 
 // サーキットの「今日の周回数」「1周ごとの休憩」。周回数は日によって変える前提なので、組み合わせには
@@ -746,7 +751,7 @@ function buildCircuitStartHtml(circuit, hasCardio) {
   return `
     <div class="menu-block circuit-start-block">
       <h3>サーキット</h3>
-      <p class="ex-meta">上から順に1セットずつ行い、最後の種目までで1周です。種目の間は休まず次へ進みます。${hasCardio ? '有酸素種目は周回に入れず、全部の周が終わった後に1回だけ行います。' : ''}</p>
+      <p class="ex-meta">上から順に1セットずつ行い、最後の種目までで1周です。種目の間は休まず次へ進み、周と周の間で下の「1周ごとの休憩」をとります（最後の周の後は休憩なし）。${hasCardio ? '有酸素種目は周回に入れず、全部の周が終わった後に1回だけ行います。' : ''}</p>
       <div class="sheet-field-head"><span class="sheet-field-label">今日の周回数</span></div>
       <div class="choice-chips" role="radiogroup" aria-label="今日の周回数">
         ${CIRCUIT_ROUNDS_OPTIONS.map((n) => `<button type="button" class="choice-chip" role="radio" aria-checked="${circuit.rounds === n}" data-circuit-rounds="${n}">${n}周</button>`).join('')}
@@ -914,7 +919,11 @@ function sliderFieldLabelRowHtml(field, label, exIndex, setIndex, value, holdBas
   const rpeReserveHtml = field === 'rpe'
     ? `<span class="rpe-reserve-hint" data-rpe-reserve="${exIndex}:${setIndex}">${rpeReserveText(value)}</span>`
     : '';
-  return `<div class="slider-label">${labelHtml}${rpeReserveHtml}<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span></div>`;
+  // 保持時間系(プランク等)の秒数は、押すと数字で入力できる(2026-11-04〜、js/app.jsのopenDirectInput)
+  const valueHtml = field === 'reps' && holdBased
+    ? `<button type="button" class="slider-value slider-value-editable" data-direct-input="hold" data-direct-ex="${exIndex}" data-direct-set="${setIndex}" aria-label="秒数を数字で入力">${formatSliderValue(field, value, holdBased)}</button>`
+    : `<span class="slider-value">${formatSliderValue(field, value, holdBased)}</span>`;
+  return `<div class="slider-label">${labelHtml}${rpeReserveHtml}${valueHtml}</div>`;
 }
 
 // 回数・RPEの入力を、ドラッグして目的の数字に合わせるスライダーではなく、横に並んだ数字を
@@ -1037,7 +1046,7 @@ function customTargetValueText(target) {
 
 function customTargetSummaryText(target, format, restSec) {
   if (format === 'circuit') return customTargetValueText(target);
-  return `${target.sets}セット × ${customTargetValueText(target)}・休憩${restSec}秒`;
+  return `${target.sets}セット × ${customTargetValueText(target)}・${setRestText(restSec)}`;
 }
 
 // 一覧の各行は「何回・何セットか」の要約だけを出し、行の下半分(要約ボタン)をタップすると
@@ -1095,19 +1104,20 @@ function renderCustomExerciseList(customExercises, customRestSec, customTargets 
 // 編集した値はその場で反映し(js/app.jsのwireCustomTargetSheet)、「完了」で閉じる。
 const CUSTOM_REPS_PRESETS = [10, 15, 20, 30, 50];
 const CUSTOM_SEC_PRESETS = [20, 30, 45, 60, 90];
-const CUSTOM_REST_PRESETS = [30, 60, 90, 120];
+// 0は「なし」と表示する(2026-11-04〜、休憩をつけない選択をボタン1つでできるように)
+const CUSTOM_REST_PRESETS = [0, 30, 60, 90, 120];
 const CUSTOM_SETS_CHIPS = [1, 2, 3, 4, 5];
 
-function wheelPresetButtonsHtml(presets, value, unit) {
+function wheelPresetButtonsHtml(presets, value, unit, zeroLabel = null) {
   return `
       <div class="wheel-presets" role="group" aria-label="よく使う値">
-        ${presets.map((n) => `<button type="button" class="wheel-preset-btn${Number(value) === n ? ' is-current' : ''}" data-wheel-preset="${n}">${n}${unit}</button>`).join('')}
+        ${presets.map((n) => `<button type="button" class="wheel-preset-btn${Number(value) === n ? ' is-current' : ''}" data-wheel-preset="${n}">${n === 0 && zeroLabel ? zeroLabel : `${n}${unit}`}</button>`).join('')}
       </div>`;
 }
 
 // 編集画面の中の、ホイール1つ分(大きな現在値＋ホイール＋よく使う値)。
 // field: 'value'(回数/秒数) | 'rest'(休憩) | 'sets'(6以上のセット数)。値は非表示の<input>に入る。
-function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, presets, inputAttr = 'data-custom-target-field' }) {
+function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, presets, zeroLabel = null, inputAttr = 'data-custom-target-field' }) {
   return `
       <div class="slider-field sheet-wheel-field" data-sheet-field="${field}">
         <div class="sheet-field-head">
@@ -1116,7 +1126,7 @@ function sheetWheelFieldHtml({ field, label, unit, min, max, step, value, preset
         </div>
         ${numberWheelTrackHtml(min, max, step, { label, unit })}
         <input type="range" min="${min}" max="${max}" step="${step}" value="${value}" ${inputAttr}="${field}" hidden>
-        ${presets ? wheelPresetButtonsHtml(presets, value, unit) : ''}
+        ${presets ? wheelPresetButtonsHtml(presets, value, unit, zeroLabel) : ''}
       </div>`;
 }
 
@@ -1149,7 +1159,7 @@ function renderCustomTargetSheet(ex, target, restSec, format) {
         </div>
         ${many ? sheetWheelFieldHtml({ field: 'sets', label: 'セット数', unit: 'セット', min: 6, max: CUSTOM_SETS_MAX, step: 1, value: target.sets }) : ''}
       </div>
-      ${sheetWheelFieldHtml({ field: 'rest', label: 'セット間の休憩', unit: '秒', min: 0, max: 300, step: 15, value: restSec, presets: CUSTOM_REST_PRESETS })}`;
+      ${sheetWheelFieldHtml({ field: 'rest', label: 'セット間の休憩', unit: '秒', min: 0, max: 300, step: 15, value: restSec, presets: CUSTOM_REST_PRESETS, zeroLabel: 'なし' })}`;
 
   body.innerHTML = `
       ${modeHtml}
@@ -1591,7 +1601,7 @@ function renderLog(session) {
           ${ex.demoMedia ? `<button type="button" class="icon-btn" data-demo="${ex.demoMedia}" aria-label="動きを見る">▶</button>` : ''}
         </div>
       </div>
-      ${ex.holdBased ? buildHoldTargetMetaHtml(ex, exIndex) : `<div class="ex-meta">目標 ${ex.fixedTarget ? ex.repsMin : `${ex.repsMin}〜${ex.repsMax}`}回　休憩${ex.restSec}秒</div>`}
+      ${ex.holdBased ? buildHoldTargetMetaHtml(ex, exIndex) : `<div class="ex-meta">目標 ${ex.fixedTarget ? ex.repsMin : `${ex.repsMin}〜${ex.repsMax}`}回　${setRestText(ex.restSec)}</div>`}
       ${ex.description ? `<div class="ex-info-panel" hidden><p>${ex.description}</p></div>` : ''}
       <div class="ex-note">${ex.suggestion.text}</div>
       ${buildPrefatigueNoteHtml(session, exIndex)}
@@ -1651,13 +1661,13 @@ function buildHoldTargetMetaHtml(ex, exIndex) {
   // ここで種目共通の目標を書き換える「変更」は出さない(同じ目標を決める場所が2つあると食い違うため)。
   if (ex.fixedTarget) {
     return `
-      <div class="ex-meta">目標 ${sec}秒　休憩${ex.restSec}秒</div>`;
+      <div class="ex-meta">目標 ${sec}秒　${setRestText(ex.restSec)}</div>`;
   }
   return `
       <div class="ex-meta hold-target-meta" data-hold-target-meta="${exIndex}">
         <span>目標 ${sec}秒</span>
         <button type="button" class="ghost-pill-btn hold-target-edit-btn" data-hold-target-edit="${exIndex}">変更</button>
-        <span>休憩${ex.restSec}秒</span>
+        <span>${setRestText(ex.restSec)}</span>
       </div>
       <div class="hold-target-form-wrap" data-hold-target-form="${exIndex}" hidden>
         <div class="hold-target-form">
@@ -1731,13 +1741,16 @@ function buildCardioExerciseCardHtml(ex, exIndex) {
       ${cardioTargetButtonHtml(ex.targetSec ? Math.round(ex.targetSec / 60) : null, `data-cardio-target-log="${exIndex}"`, ex.name)}
       ${sparklineHtml}
       <div class="slider-field">
-        <div class="slider-label"><span>時間</span><span class="slider-value">${formatMinSec(ex.duration)}</span></div>
+        <div class="slider-label"><span>時間</span><button type="button" class="slider-value slider-value-editable" data-direct-input="cardio" data-direct-ex="${exIndex}" aria-label="時間を数字で入力">${formatMinSec(ex.duration)}</button></div>
         <div class="slider-track-row">
           <span class="slider-bound-label slider-bound-min">0分</span>
           <input type="range" min="0" max="${cardioDurationSliderMax}" step="1" value="${ex.duration}" data-cardio-ex="${exIndex}" data-cardio-field="duration">
           <span class="slider-bound-label slider-bound-max">${cardioDurationSliderMax / 60}分</span>
         </div>
-        <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">▶ 計測</button>
+        <div class="cardio-timer-actions">
+          <button type="button" class="cardio-timer-btn" data-cardio-timer="${exIndex}">${cardioTimerIdleLabel(ex.duration)}</button>
+          <button type="button" class="cardio-timer-restart-btn" data-cardio-timer-restart="${exIndex}" ${Number(ex.duration) > 0 ? '' : 'hidden'}>0から測り直す</button>
+        </div>
       </div>
       ${ex.hasDistance ? `
       <div class="slider-field">

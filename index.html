@@ -500,6 +500,31 @@ try {
     </div>
   </div>
 
+  <!-- 有酸素の時間・プランク等の秒数を、押して数字で入力する小窓(2026-11-04〜、js/app.jsのopenDirectInput)。 -->
+  <div id="direct-input-modal" class="demo-modal">
+    <div class="demo-modal-backdrop" data-direct-input-close></div>
+    <div class="demo-modal-content">
+      <h3 id="direct-input-title" style="margin:0 0 12px;">時間を入力</h3>
+      <form id="direct-input-form" class="direct-input-form" novalidate>
+        <div class="direct-input-fields">
+          <label class="direct-input-field" id="direct-input-min-wrap">
+            <input type="number" id="direct-input-min" inputmode="numeric" pattern="[0-9]*" min="0" step="1" aria-label="分">
+            <span>分</span>
+          </label>
+          <label class="direct-input-field">
+            <input type="number" id="direct-input-sec" inputmode="numeric" pattern="[0-9]*" min="0" step="1" aria-label="秒">
+            <span>秒</span>
+          </label>
+        </div>
+        <p id="direct-input-error" class="direct-input-error" role="alert"></p>
+        <div class="reset-history-actions">
+          <button type="button" class="secondary-btn" data-direct-input-close>やめる</button>
+          <button type="submit" class="primary-btn">決定</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- 記録中のトレーニングがあるのに別のメニューで「開始」した時の確認(以前は黙って上書きしていた)。 -->
   <div id="start-overwrite-modal" class="demo-modal">
     <div class="demo-modal-backdrop" data-start-overwrite-close></div>

@@ -171,33 +171,59 @@ function setCardioTimerPhaseUi(phase) {
   if (restRow) restRow.hidden = !dualMode;
 }
 
-function toggleCardioTimer(button) {
-  const exIndex = Number(button.dataset.cardioTimer);
+// 止まっている時の計測ボタンの文言。時間が入っていれば「続きから」(2026-11-04〜、ユーザー要望
+// 「計測を終わった後も続きから始められるようにしたい」)。0から測り直すのは隣の小さいボタン。
+function cardioTimerIdleLabel(durationSec) {
+  return Number(durationSec) > 0 ? '▶ 続きから測る' : '▶ 計測';
+}
 
-  if (activeCardioTimer && activeCardioTimer.exIndex === exIndex) {
+// 止まっている時の計測ボタン2つ(続きから／0から測り直す)を、今の時間に合わせる。
+// 計測を止めた時と、スライダー・数字入力で時間を変えた時に呼ぶ。
+function updateCardioTimerIdleButtons(exIndex) {
+  if (activeCardioTimer && activeCardioTimer.exIndex === exIndex) return;
+  const ex = currentSession && currentSession.exercises[exIndex];
+  const durationSec = ex ? Number(ex.duration) || 0 : 0;
+  const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
+  if (button) button.textContent = cardioTimerIdleLabel(durationSec);
+  const restartBtn = document.querySelector(`[data-cardio-timer-restart="${exIndex}"]`);
+  if (restartBtn) restartBtn.hidden = durationSec <= 0;
+}
+
+// fromZero=true(「0から測り直す」)なら時間・休憩の記録を空にして0から。それ以外は、記録に入っている
+// 時間と休憩の続きから測る(時間が0なら0から)。
+function toggleCardioTimer(button, fromZero = false) {
+  const exIndex = Number(button.dataset.cardioTimer ?? button.dataset.cardioTimerRestart);
+
+  if (!fromZero && activeCardioTimer && activeCardioTimer.exIndex === exIndex) {
     stopCardioTimer();
     return;
   }
   stopCardioTimer();
 
+  const exercise = currentSession && currentSession.exercises[exIndex];
+  const resumeSec = !fromZero && exercise ? Math.max(0, Math.floor(Number(exercise.duration) || 0)) : 0;
+  const resumeRestLog = resumeSec > 0 && Array.isArray(exercise.restLog) ? exercise.restLog.slice() : [];
+  const targetSec = cardioTargetSecOf(exIndex);
   activeCardioTimer = {
     exIndex,
     phase: 'running',
-    accumulatedActiveMs: 0,
+    accumulatedActiveMs: resumeSec * 1000,
     segmentStartedAt: Date.now(),
-    restLog: [],
-    // 計測は0秒から始まるので、目標時間が既にあっても最初は「まだ知らせていない」
-    targetNotified: false,
+    restLog: resumeRestLog,
+    // 続きから測る時、既に目標を過ぎていれば知らせ済みにする(再開した途端に鳴らさない)
+    targetNotified: !!targetSec && resumeSec >= targetSec,
     intervalId: null,
   };
   // iPhoneは操作(タップ)の中で音の準備をしておかないと後で鳴らせないため、開始ボタンを押した時に用意する
   if (typeof ensureHoldTimerAudioCtx === 'function') ensureHoldTimerAudioCtx();
-  button.classList.add('active');
-  updateCardioTimerRestHistory([]); // 前回このモーダルを使った時の休憩履歴が一瞬見えないようにリセット
-  // 計測し直す時は、記録側の休憩履歴も空にする(時間は0から測り直すのに、休憩しないで終えると前の計測の
+  const timerBtn = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
+  if (timerBtn) timerBtn.classList.add('active');
+  const restartBtn = document.querySelector(`[data-cardio-timer-restart="${exIndex}"]`);
+  if (restartBtn) restartBtn.hidden = true;
+  updateCardioTimerRestHistory(resumeRestLog); // 前回このモーダルを使った時の休憩履歴が一瞬見えないようにする
+  // 0から測り直す時は、記録側の休憩履歴も空にする(時間は0から測り直すのに、休憩しないで終えると前の計測の
   // 休憩が残ったまま記録されていた。2026-10-08 Codexレビュー指摘)
-  const exercise = currentSession && currentSession.exercises[exIndex];
-  if (exercise && exercise.restLog) {
+  if (resumeSec === 0 && exercise && exercise.restLog) {
     exercise.restLog = [];
     updateCardioRestSummaryDisplay(exIndex, []);
   }
@@ -337,10 +363,7 @@ function stopCardioTimer() {
 
   clearInterval(activeCardioTimer.intervalId);
   const button = document.querySelector(`[data-cardio-timer="${exIndex}"]`);
-  if (button) {
-    button.textContent = '▶ 計測';
-    button.classList.remove('active');
-  }
+  if (button) button.classList.remove('active');
   const modal = document.getElementById('cardio-timer-modal');
   if (modal) {
     modal.hidden = true;
@@ -350,6 +373,7 @@ function stopCardioTimer() {
   if (targetEl) targetEl.hidden = true;
   unlockBodyScroll();
   activeCardioTimer = null;
+  updateCardioTimerIdleButtons(exIndex);
   syncCardioTargetPush(); // サーバー側の通知の予定も消す
   // タイマーを止めたことをスナップショットにも反映する(消し忘れると、次回起動時に
   // 既に終わったタイマーのモーダルが誤って復元されてしまう)。
