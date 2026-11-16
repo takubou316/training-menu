@@ -34,7 +34,7 @@ function wireThemePicker() {
 // 今動いている画面のプログラムのバージョン。**service-worker.jsのCACHE_NAME(training-menu-vN)を上げる時は必ず一緒に上げる**。
 // 「その他の設定」に、これとオフライン用キャッシュの番号・読み込んだ時刻を出し、引っぱって更新で本当に新しくなったかを確かめられるようにする
 // (2026-10-07 ユーザー要望「本当に更新できてる？」)。
-const APP_VERSION = 78;
+const APP_VERSION = 79;
 const APP_LOADED_AT = new Date();
 
 async function renderAppVersion() {
@@ -90,15 +90,24 @@ const PULL_REFRESH_MIN_SPIN_MS = 500;
 // 他のアプリから戻った後に、固定表示の位置が古い画面の高さのまま残ることがある(iOS側の既知の挙動)。
 // 原因の場面はPCで再現できていないため、起こりやすいきっかけ(入力欄から離れた・画面に戻った・表示領域の高さが
 // 変わった)のたびに、固定表示の位置を計算し直させる。
+// 2026-11-16追記: 有酸素の計測中に他のアプリへ行って戻ると、ボタンが反応せず画面も動かず、アプリを閉じるまで直らない
+// 実機報告(PCでは再現できず)。全画面タイマーも同じ固定表示なので、見た目と「押せる位置」がずれたまま残っていると推定。
+// 以前はナビだけ直し、全画面タイマー等でロック中は何もしていなかったので、表示中の固定表示の部品すべてを計算し直させる。
+const FIXED_LAYER_SELECTOR = '.bottom-nav, .rest-timer-modal:not([hidden]), .exercise-picker-modal:not([hidden]), .demo-modal.open';
+
 function nudgeFixedLayout() {
-  const nav = document.querySelector('.bottom-nav');
-  if (nav) {
-    nav.style.transform = 'translateX(-50%) translateZ(0)';
-    void nav.offsetHeight; // ここで一度レイアウトを確定させる
-    requestAnimationFrame(() => { nav.style.transform = ''; });
-  }
-  // スクロール位置を同じ値で入れ直すと、iOSが表示領域を測り直す(シート等でロック中は触らない)
-  if (!document.body.classList.contains('modal-open')) window.scrollTo(window.scrollX, window.scrollY);
+  const layers = [...document.querySelectorAll(FIXED_LAYER_SELECTOR)];
+  layers.forEach((el) => {
+    // 元のtransform(ナビのtranslateX(-50%)等)に重ねて、一度だけ別の描画レイヤーとして作り直させる
+    const base = getComputedStyle(el).transform;
+    el.style.transform = `${base && base !== 'none' ? base : ''} translateZ(0)`.trim();
+  });
+  void document.body.offsetHeight; // ここで一度レイアウトを確定させる
+  requestAnimationFrame(() => layers.forEach((el) => { el.style.transform = ''; }));
+  // スクロール位置を入れ直すと、iOSが表示領域を測り直す。全画面タイマー等でロック中(bodyがposition:fixed)は
+  // ページ自体はスクロールしない(scrollYは0)ので、0へ入れ直す(覚えている元の位置は解除時に戻す)
+  if (document.body.classList.contains('modal-open')) window.scrollTo(0, 0);
+  else window.scrollTo(window.scrollX, window.scrollY);
 }
 
 function wireFixedLayoutRecovery() {
